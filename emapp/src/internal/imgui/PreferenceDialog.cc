@@ -351,6 +351,8 @@ PreferenceDialog::selectedLanguageString(ITranslator::LanguageType value) const 
         return translator->translate("nanoem.gui.window.preference.project.language.english");
     case ITranslator::kLanguageTypeJapanese:
         return translator->translate("nanoem.gui.window.preference.project.language.japanese");
+    case ITranslator::kLanguageTypeChineseSimplified:
+        return translator->translate("nanoem.gui.window.preference.project.language.chinese_simplified");
     default:
         return "(Unknown)";
     }
