@@ -34,7 +34,7 @@
 #import <QTKit/QTKit.h>
 #endif /* MAC_OS_X_VERSION_MAX_ALLOWED */
 #else
-#define nanoem_objc_domain(name) @"com.github.nanoem." #name
+#define nanoem_objc_domain(name) @"com.github.nanoemr." #name
 #endif /* TARGET_OS_MAC */
 
 namespace {

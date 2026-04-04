@@ -119,7 +119,7 @@ LoadPMMExecutor::start()
     m_thread.init(
         [](bx::Thread *thread, void *userData) {
             LoadPMMExecutor *self = static_cast<LoadPMMExecutor *>(userData);
-            thread->setThreadName("com.github.nanoem.macos.test.LoadPMMExecutor");
+            thread->setThreadName("com.github.nanoemr.macos.test.LoadPMMExecutor");
             return self->run();
         },
         this);
@@ -827,7 +827,7 @@ LoadAllEffectsExecutor::start()
     m_thread.init(
         [](bx::Thread *thread, void *userData) {
             LoadAllEffectsExecutor *self = static_cast<LoadAllEffectsExecutor *>(userData);
-            thread->setThreadName("com.github.nanoem.macos.test.LoadAllAccessoriesExecutor");
+            thread->setThreadName("com.github.nanoemr.macos.test.LoadAllAccessoriesExecutor");
             return self->run();
         },
         this);
@@ -938,7 +938,7 @@ LoadAllModelsExecutor::start()
     m_thread.init(
         [](bx::Thread *thread, void *userData) {
             LoadAllModelsExecutor *self = static_cast<LoadAllModelsExecutor *>(userData);
-            thread->setThreadName("com.github.nanoem.macos.test.LoadAllModelsExecutor");
+            thread->setThreadName("com.github.nanoemr.macos.test.LoadAllModelsExecutor");
             return self->run();
         },
         this);

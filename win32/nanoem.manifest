@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
-  <assemblyIdentity type="win32" name="com.github.nanoem" version="${NANOEM_WIN32_VERSION_MAJOR}.${NANOEM_WIN32_VERSION_MINOR}.0.0" processorArchitecture="${NANOEM_WIN32_ARCHITECTURE}" />
+  <assemblyIdentity type="win32" name="com.github.nanoemr" version="${NANOEM_WIN32_VERSION_MAJOR}.${NANOEM_WIN32_VERSION_MINOR}.0.0" processorArchitecture="${NANOEM_WIN32_ARCHITECTURE}" />
   <description>nanoem is an application that is compatible with MikuMikuDance.</description>
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">

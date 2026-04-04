@@ -249,7 +249,7 @@ struct StubRendererCapability : Project::IRendererCapability {
 
 } /* namespace anonymous */
 
-const char *const BaseApplicationService::kOrganizationDomain = "com.github.nanoem";
+const char *const BaseApplicationService::kOrganizationDomain = "com.github.nanoemr";
 const char *const BaseApplicationService::kRendererOpenGL = "OpenGL";
 const char *const BaseApplicationService::kRendererDirectX = "DirectX";
 const char *const BaseApplicationService::kRendererMetal = "Metal";

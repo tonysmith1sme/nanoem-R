@@ -162,9 +162,9 @@ struct AVFoundationEncoder {
         m_audioFrameQueue = [[NSMutableArray alloc] init];
         m_videoFrameQueue = [[NSMutableArray alloc] init];
         m_audioEncoderQueue =
-            dispatch_queue_create("com.github.nanoem.plugin.encoder.AVFoundation.AudioEncoderQueue", nullptr);
+            dispatch_queue_create("com.github.nanoemr.plugin.encoder.AVFoundation.AudioEncoderQueue", nullptr);
         m_videoEncoderQueue =
-            dispatch_queue_create("com.github.nanoem.plugin.encoder.AVFoundation.VideoEncoderQueue", nullptr);
+            dispatch_queue_create("com.github.nanoemr.plugin.encoder.AVFoundation.VideoEncoderQueue", nullptr);
         m_audioQueueSema = dispatch_semaphore_create(0);
         m_videoQueueSema = dispatch_semaphore_create(0);
         m_audioCompletionSema = dispatch_semaphore_create(0);
