@@ -12,7 +12,7 @@
 #define nanoem_objc_log(...)
 #endif
 
-#define nanoem_objc_domain(name) @"com.github.nanoem." #name
+#define nanoem_objc_domain(name) @"com.github.nanoemr." #name
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED < 1100
 

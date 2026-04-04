@@ -1,7 +1,7 @@
 # Doxyfile 1.9.1
 
 DOXYFILE_ENCODING      = UTF-8
-PROJECT_NAME           = "nanoem"
+PROJECT_NAME           = "nanoem-R"
 OUTPUT_LANGUAGE        = English
 ABBREVIATE_BRIEF       = "The $name class" \
                          "The $name widget" \

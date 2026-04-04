@@ -4836,8 +4836,8 @@
 - key: nanoem.menu.help.about
   phrase:
     en_US: '&About'
-    ja_JP: 'nanoem について(&A)'
-    zh_CN: '关于 nanoem(&A)'
+    ja_JP: 'nanoem-R について(&A)'
+    zh_CN: '关于 nanoem-R(&A)'
   description: ''
 - key: nanoem.menu.help.title
   phrase:
@@ -4943,9 +4943,9 @@
   description: ''
 - key: nanoem.menu.macos.about
   phrase:
-    en_US: 'About nanoem'
-    ja_JP: 'nanoem について'
-    zh_CN: '关于 nanoem'
+    en_US: 'About nanoem-R'
+    ja_JP: 'nanoem-R について'
+    zh_CN: '关于 nanoem-R'
   description: ''
 - key: nanoem.menu.macos.preferences
   phrase:
@@ -5054,9 +5054,9 @@
     zh_CN: '不支持转换为 "nmm" 格式'
 - key: nanoem.error.convert-to-nmm.recovery-suggestion
   phrase:
-    en_US: 'See "Application Menu" > "Save" in "nanoem Online Manual" from Help Menu'
-    ja_JP: 'メニューの「ヘルプ」にある「nanoem Online Manual」から「アプリケーションのメニュー」の「保存」の項目を参照してください'
-    zh_CN: '请参阅帮助菜单中 "nanoem 在线手册" 下的 "应用程序菜单" > "保存"'
+    en_US: 'See "Application Menu" > "Save" in "nanoem-R Online Manual" from Help Menu'
+    ja_JP: 'メニューの「ヘルプ」にある「nanoem-R Online Manual」から「アプリケーションのメニュー」の「保存」の項目を参照してください'
+    zh_CN: '请参阅帮助菜单中 "nanoem-R 在线手册" 下的 "应用程序菜单" > "保存"'
 - key: nanoem.error.project.load.reason
   phrase:
     en_US: 'Failed to load the project due to data corruption'

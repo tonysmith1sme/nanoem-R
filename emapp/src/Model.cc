@@ -1381,7 +1381,7 @@ Model::upload()
         dispatch_release(queue);
     }
     m_dispatchParallelTaskQueue =
-        dispatch_queue_create(GCD_LABEL("com.github.nanoem.gcd.model"), DISPATCH_QUEUE_CONCURRENT);
+        dispatch_queue_create(GCD_LABEL("com.github.nanoemr.gcd.model"), DISPATCH_QUEUE_CONCURRENT);
 #undef GCD_LABEL
 #endif /* __APPLE__ */
     EnumUtils::setEnabled(kPrivateStateUploaded, m_states, true);

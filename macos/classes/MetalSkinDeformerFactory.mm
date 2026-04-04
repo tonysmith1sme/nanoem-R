@@ -164,7 +164,7 @@ MetalSkinDeformerFactory::create(Model *model)
 #define GCD_LABEL(a) a
 #endif
             m_globalDeformerQueue = dispatch_queue_create(
-                GCD_LABEL("com.github.nanoem.macos.MetalSkinDeformerFactory.m_globalDeformerQueue"), nullptr);
+                GCD_LABEL("com.github.nanoemr.macos.MetalSkinDeformerFactory.m_globalDeformerQueue"), nullptr);
             m_globalDeformerSema = dispatch_semaphore_create(0);
             dispatch_semaphore_signal(m_globalDeformerSema);
 #undef GCD_LABEL

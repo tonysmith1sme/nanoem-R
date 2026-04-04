@@ -727,7 +727,7 @@ struct MetalRendererData {
 
 } /* namespace anonymous */
 
-NSString *CocoaThreadedApplicationService::kDefaultWindowTitle = @"nanoem";
+NSString *CocoaThreadedApplicationService::kDefaultWindowTitle = @"nanoem-R";
 
 NSApplication *
 CocoaThreadedApplicationService::createApplication()

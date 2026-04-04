@@ -21,7 +21,7 @@ string(REGEX MATCH "^v([0-9]+\\.[0-9]+\\.[0-9]+)" VERSION_MATCH ${NANOEM_BUNDLE_
 set_target_properties(${NANOEM_EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}
                       MACOSX_BUNDLE_INFO_STRING "${PROJECT_NAME}"
                       MACOSX_BUNDLE_ICON_FILE "${PROJECT_NAME}.icns"
-                      MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.nanoem"
+                      MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.nanoemr"
                       MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_NAME} ${NANOEM_BUNDLE_VERSION}"
                       MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}"
                       MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_MATCH_1}"

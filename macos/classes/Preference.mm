@@ -189,7 +189,7 @@ Preference::load()
                                             create:YES
                                              error:&error];
     if (!error) {
-        NSURL *effectCacheURL = [cacheURL URLByAppendingPathComponent:@"com.github.nanoem/effects"];
+        NSURL *effectCacheURL = [cacheURL URLByAppendingPathComponent:@"com.github.nanoemr/effects"];
         [fileManager createDirectoryAtURL:effectCacheURL withIntermediateDirectories:YES attributes:nil error:&error];
         if (!error) {
             json_object_dotset_string(root, "plugin.effect.cache.path", effectCacheURL.path.UTF8String);
