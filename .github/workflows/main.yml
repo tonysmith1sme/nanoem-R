@@ -146,7 +146,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
       - name: build all dependencies of nanoem
-        run: cmake -DCONFIG=release -P ${{ github.workspace }}/scripts/build.cmake
+        run: cmake -DCONFIG=release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -P ${{ github.workspace }}/scripts/build.cmake
         env:
           NANOEM_TARGET_ARCHITECTURES: x86_64
           NANOEM_TARGET_CONFIGURATIONS: "debug;release"
@@ -159,6 +159,7 @@ jobs:
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           cmake `
             -DCMAKE_INSTALL_PREFIX="${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/install-root" `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL `
             -DFX9_ENABLE_OPTIMIZER=OFF `
             -DNANOEM_ENABLE_BULLET=ON `
             -DNANOEM_ENABLE_MIMALLOC=ON `
