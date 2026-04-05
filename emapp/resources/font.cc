@@ -11,9 +11,25 @@
 
 #include "emapp/private/resources/font_awesome.h"
 #include "emapp/private/resources/genei_gothic_p_semi_bold.h"
+#include "emapp/private/resources/noto_sans_sc_regular.h"
 
 namespace nanoem {
 namespace resources {
+
+static void
+mergeSimplifiedChineseFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize)
+{
+    char *bytes = static_cast<char *>(ImGui::MemAlloc(noto_sans_sc_regular_otf_inflated_size));
+    LZ4_decompress_safe(reinterpret_cast<const char *>(noto_sans_sc_regular_otf_data), bytes,
+        noto_sans_sc_regular_otf_deflated_size, noto_sans_sc_regular_otf_inflated_size);
+    ImFontConfig config;
+    config.MergeMode = true;
+    config.FontData = bytes;
+    config.FontDataSize = noto_sans_sc_regular_otf_inflated_size;
+    config.SizePixels = pointSize;
+    config.GlyphRanges = fontAtlas->GetGlyphRangesChineseSimplifiedCommon();
+    fontAtlas->AddFont(&config);
+}
 
 ImFont *
 initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, void *ranges)
@@ -471,7 +487,9 @@ initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, void *ranges)
     config.FontDataSize = genei_gothic_p_semi_bold_otf_inflated_size;
     config.SizePixels = pointSize;
     config.GlyphRanges = rangesPtr->Data;
-    return fontAtlas->AddFont(&config);
+    ImFont *font = fontAtlas->AddFont(&config);
+    mergeSimplifiedChineseFont(fontAtlas, pointSize);
+    return font;
 }
 
 ImFont *
