@@ -74,10 +74,11 @@ main(int argc, char *argv[])
         YAML::Node rootNode = YAML::LoadFile(input);
         Nanoem__Translation__Bundle *bundle = new Nanoem__Translation__Bundle;
         nanoem__translation__bundle__init(bundle);
-        bundle->n_units = 2;
-        bundle->units = new Nanoem__Translation__Unit *[2];
+        bundle->n_units = 3;
+        bundle->units = new Nanoem__Translation__Unit *[3];
         bundle->units[0] = packUnit(rootNode, NANOEM__COMMON__LANGUAGE__LC_JAPANESE, "ja_JP");
         bundle->units[1] = packUnit(rootNode, NANOEM__COMMON__LANGUAGE__LC_ENGLISH, "en_US");
+        bundle->units[2] = packUnit(rootNode, NANOEM__COMMON__LANGUAGE__LC_SIMPLIFIED_CHINESE, "zh_CN");
         size_t size = nanoem__translation__bundle__get_packed_size(bundle);
         uint8_t *buffer = new uint8_t[size];
         nanoem__translation__bundle__pack(bundle, buffer);

@@ -1528,6 +1528,11 @@
     en_US: Japanse
     ja_JP: 日本語
     zh_CN: 日语 (日本語)
+- key: nanoem.gui.window.preference.project.language.chinese_simplified
+  phrase:
+    en_US: Simplified Chinese
+    ja_JP: 簡体字中国語
+    zh_CN: 简体中文
 - key: nanoem.gui.window.preference.grid.size.cell
   phrase:
     en_US: Cell Size
