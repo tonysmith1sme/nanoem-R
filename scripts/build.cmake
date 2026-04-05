@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15...3.28)
 
 include(ProcessorCount)
 ProcessorCount(numCPUs)
@@ -75,13 +75,29 @@ function(compile_zlib _cmake_build_type _generator _toolset_option _arch_option 
   set(_source_path ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/zlib)
   set(_build_path ${base_build_path}/zlib/out/${_triple_path})
   file(MAKE_DIRECTORY ${_build_path})
-  execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
-                                           ${CMAKE_COMMAND}
-                                           ${global_cmake_flags}
-                                           -DCMAKE_BUILD_TYPE=${_cmake_build_type}
-                                           -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
-                                           -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+  # Fix zutil.h fdopen macro conflict with modern macOS system headers
+  if(APPLE AND EXISTS "${_source_path}/zutil.h")
+    file(READ "${_source_path}/zutil.h" _zutil_content)
+    # Comment out the problematic fdopen macro definition on Darwin
+    string(REPLACE "#        define fdopen(fd,mode) NULL /* No fdopen() */"
+                   "/*#        define fdopen(fd,mode) NULL*/ /* PATCHED: disabled for macOS compatibility */"
+                   _zutil_content "${_zutil_content}")
+    file(WRITE "${_source_path}/zutil.h" "${_zutil_content}")
+  endif()
+  set(_cmake_args "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+                  "${global_cmake_flags}"
+                  "-DCMAKE_BUILD_TYPE=${_cmake_build_type}"
+                  "-DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}"
+                  "-DCMAKE_INSTALL_PREFIX=${_build_path}/install-root"
+                  "-G" "${_generator}")
+  if(NOT "${_arch_option}" STREQUAL "")
+    list(APPEND _cmake_args "${_arch_option}")
+  endif()
+  if(NOT "${_toolset_option}" STREQUAL "")
+    list(APPEND _cmake_args "${_toolset_option}")
+  endif()
+  list(APPEND _cmake_args "${_source_path}")
+  execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path} ${CMAKE_COMMAND} ${_cmake_args})
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
   # delete dynamic librarires not to select shared library at linking
@@ -119,6 +135,7 @@ function(compile_minizip _cmake_build_type _generator _toolset_option _arch_opti
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
@@ -130,7 +147,10 @@ function(compile_minizip _cmake_build_type _generator _toolset_option _arch_opti
                                            -DMZ_WZAES=OFF
                                            -DSKIP_INSTALL_FILES=ON
                                            -DZLIB_ROOT=${base_build_path}/zlib/out/${_triple_path}/install-root
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+                                           -G "${_generator}"
+                                           ${_arch_option}
+                                           ${_toolset_option}
+                                           "${_source_path}")
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
 endfunction()
@@ -141,6 +161,7 @@ function(compile_bullet _cmake_build_type _generator _toolset_option _arch_optio
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DBUILD_DEMOS=OFF
                                            -DBUILD_EXTRAS=OFF
@@ -154,7 +175,10 @@ function(compile_bullet _cmake_build_type _generator _toolset_option _arch_optio
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+                                           -G "${_generator}"
+                                           ${_arch_option}
+                                           ${_toolset_option}
+                                           "${_source_path}")
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
 endfunction()
@@ -166,6 +190,7 @@ function(compile_glslang _cmake_build_type _generator _toolset_option _arch_opti
   set(_extra_options "")
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DLLVM_USE_CRT_DEBUG=MTd
                                            -DLLVM_USE_CRT_MINSIZEREL=MT
@@ -182,7 +207,10 @@ function(compile_glslang _cmake_build_type _generator _toolset_option _arch_opti
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
                                            ${_extra_options}
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+                                           -G "${_generator}"
+                                           ${_arch_option}
+                                           ${_toolset_option}
+                                           "${_source_path}")
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
 endfunction()
@@ -193,6 +221,7 @@ function(compile_nanomsg _cmake_build_type _generator _toolset_option _arch_opti
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DNN_STATIC_LIB=ON
                                            -DNN_ENABLE_GETADDRINFO_A=OFF
@@ -203,7 +232,10 @@ function(compile_nanomsg _cmake_build_type _generator _toolset_option _arch_opti
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_LIBDIR=lib
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+                                           -G "${_generator}"
+                                           ${_arch_option}
+                                           ${_toolset_option}
+                                           "${_source_path}")
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
 endfunction()
@@ -214,6 +246,7 @@ function(compile_tbb _cmake_build_type _generator _toolset_option _arch_option _
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DTBB_TEST=OFF
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
@@ -223,7 +256,10 @@ function(compile_tbb _cmake_build_type _generator _toolset_option _arch_option _
                                            -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON
                                            -DCMAKE_MACOS_RPATH=ON
                                            -DCMAKE_INSTALL_NAME_DIR=${_build_path}/install-root/lib
-                                           -G "${_generator}" ${_arch_option} ${_toolset_option} ${_source_path})
+                                           -G "${_generator}"
+                                           ${_arch_option}
+                                           ${_toolset_option}
+                                           "${_source_path}")
   rewrite_cmake_cache(${_build_path})
   execute_build(${_build_path})
 endfunction()
@@ -234,6 +270,7 @@ function(compile_spirv_cross _cmake_build_type _generator _toolset_option _arch_
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DSPIRV_CROSS_ENABLE_C_API=OFF
                                            -DSPIRV_CROSS_ENABLE_REFLECT=ON
@@ -259,6 +296,7 @@ function(compile_spirv_tools _cmake_build_type _generator _toolset_option _arch_
   execute_process(COMMAND ${GIT_EXECUTABLE} checkout ${_revision} WORKING_DIRECTORY ${_source_path}/external/spirv-headers)
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DSPIRV_COLOR_TERMINAL=OFF
                                            -DSPIRV_SKIP_TESTS=ON
@@ -581,7 +619,7 @@ function(compile_all_repositories _generator _toolset_option _compiler _arch _co
     set(_platform "linux")
   endif()
   set(_triple_path ${_platform}/${_compiler}/${_arch}/${_config})
-  set(_arch_option " ")
+  set(_arch_option "")
   if("${target_generator}" STREQUAL "Visual Studio 17 2022")
     if(${arch_item} STREQUAL "arm64")
       set(_arch_option "-AARM64")
@@ -591,41 +629,41 @@ function(compile_all_repositories _generator _toolset_option _compiler _arch _co
       set(_arch_option "-AWin32")
     endif()
   endif()
-  compile_zlib(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
-  compile_minizip(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
-  compile_bullet(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
-  compile_glslang(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
-  compile_spirv_cross(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+  compile_zlib("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
+  compile_minizip("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
+  compile_bullet("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
+  compile_glslang("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
+  compile_spirv_cross("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")  
   if(NOT DEFINED ENV{NANOEM_DISABLE_BUILD_NANOMSG})
-    compile_nanomsg(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_nanomsg("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(NOT DEFINED ENV{NANOEM_DISABLE_BUILD_TBB})
-    compile_tbb(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_tbb("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   # optional dependencies
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_ICU4C})
-    compile_icu4c(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_icu4c("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_MIMALLOC})
-    compile_mimalloc(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_mimalloc("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_SPIRV_TOOLS})
-    compile_spirv_tools(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_spirv_tools("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_SENTRY_NATIVE})
-    compile_sentry_native(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_sentry_native("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_LIBSOUNDIO})
-    compile_libsoundio(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_libsoundio("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_GLFW})
-    compile_glfw(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_glfw("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_FFMPEG})
-    compile_ffmpeg(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_ffmpeg("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if(DEFINED ENV{NANOEM_ENABLE_BUILD_YAMLCPP})
-    compile_yamlcpp(${_cmake_build_type} ${_generator} ${_toolset_option} ${_arch_option} ${_triple_path})
+    compile_yamlcpp("${_cmake_build_type}" "${_generator}" "${_toolset_option}" "${_arch_option}" "${_triple_path}")
   endif()
   if("${_arch}" STREQUAL "ub")
     file(GLOB _libraries ${base_build_path}/*)
@@ -714,7 +752,7 @@ foreach(arch_item ${ARCH_LIST})
       elseif("${target_compiler}" STREQUAL "vs2015")
         set(target_toolset "-Tv140")
       else()
-        set(target_toolset " ")
+        set(target_toolset "")
       endif()
     endif()
     # MinGW
@@ -748,11 +786,11 @@ foreach(arch_item ${ARCH_LIST})
       endif()
     endif()
     if(NOT target_toolset)
-      set(target_toolset " ")
+      set(target_toolset "")
     endif()
   endif()
   foreach(config_item ${CONFIG_LIST})
-    compile_all_repositories(${target_generator} ${target_toolset} ${target_compiler} ${arch_item} ${config_item})
+    compile_all_repositories("${target_generator}" "${target_toolset}" "${target_compiler}" "${arch_item}" "${config_item}")
   endforeach()
 endforeach()
 cleanup_all_repositories()
