@@ -270,7 +270,6 @@ function(compile_spirv_cross _cmake_build_type _generator _toolset_option _arch_
   file(MAKE_DIRECTORY ${_build_path})
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
-                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DSPIRV_CROSS_ENABLE_C_API=OFF
                                            -DSPIRV_CROSS_ENABLE_REFLECT=ON
@@ -296,7 +295,6 @@ function(compile_spirv_tools _cmake_build_type _generator _toolset_option _arch_
   execute_process(COMMAND ${GIT_EXECUTABLE} checkout ${_revision} WORKING_DIRECTORY ${_source_path}/external/spirv-headers)
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
-                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
                                            -DSPIRV_COLOR_TERMINAL=OFF
                                            -DSPIRV_SKIP_TESTS=ON
