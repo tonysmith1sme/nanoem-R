@@ -7,6 +7,10 @@ on:
         description: Release version shown in the application
         required: true
         type: string
+      copyright_year:
+        description: Copyright last year shown in the About dialog
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -18,6 +22,7 @@ env:
   ICU_VERSION_TAG: release-71-1
   NANOEM_BUILD_DEPENDENCIES_DIRECTORY: ${{ github.workspace }}/out/dependencies
   NANOEM_BUILD_ARTIFACT_DIRECTORY: ${{ github.workspace }}/out/core
+  NANOEM_COPYRIGHT_YEAR: ${{ inputs.copyright_year || '' }}
   NANOEM_RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
   NANOEM_RUST_DIRECTORY: ${{ github.workspace }}/rust
 

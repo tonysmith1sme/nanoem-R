@@ -409,6 +409,14 @@ NANOEM_DECL_API const char *APIENTRY
 nanoemGetVersionString(void);
 
 /**
+ * \brief Get nanoem's copyright last year string
+ *
+ * \return nanoem's copyright last year string
+ */
+NANOEM_DECL_API const char *APIENTRY
+nanoemGetCopyrightYearString(void);
+
+/**
  * \defgroup nanoem_custom_allocator Custom Allocator
  * @{
  */

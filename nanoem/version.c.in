@@ -7,3 +7,9 @@ nanoemGetVersionString(void)
 {
     return "@NANOEM_VERSION_GIT@";
 }
+
+const char *APIENTRY
+nanoemGetCopyrightYearString(void)
+{
+    return "@NANOEM_COPYRIGHT_YEAR@";
+}
