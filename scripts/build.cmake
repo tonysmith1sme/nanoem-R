@@ -271,6 +271,7 @@ function(compile_spirv_cross _cmake_build_type _generator _toolset_option _arch_
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DSPIRV_CROSS_ENABLE_C_API=OFF
                                            -DSPIRV_CROSS_ENABLE_REFLECT=ON
                                            -DSPIRV_CROSS_ENABLE_TESTS=OFF
@@ -296,6 +297,7 @@ function(compile_spirv_tools _cmake_build_type _generator _toolset_option _arch_
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DSPIRV_COLOR_TERMINAL=OFF
                                            -DSPIRV_SKIP_TESTS=ON
                                            -DSPIRV_WARN_EVERYTHING=OFF
@@ -316,6 +318,7 @@ function(compile_yamlcpp _cmake_build_type _generator _toolset_option _arch_opti
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DAPPLE_UNIVERSAL_BIN=OFF
                                            -DBUILD_SHARED_LIBS=OFF
                                            -DBUILD_TESTING=OFF
@@ -337,6 +340,7 @@ function(compile_glfw _cmake_build_type _generator _toolset_option _arch_option 
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -355,6 +359,7 @@ function(compile_mimalloc _cmake_build_type _generator _toolset_option _arch_opt
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -395,6 +400,7 @@ function(compile_sentry_native _cmake_build_type _generator _toolset_option _arc
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${_global_cmake_flags}
+                                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
