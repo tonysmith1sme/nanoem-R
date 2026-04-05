@@ -1,4 +1,4 @@
 [toolchain]
-channel = "nightly"
+channel = "1.90.0"
 targets = ["wasm32-wasip1"]
 components = ["rustfmt"]
