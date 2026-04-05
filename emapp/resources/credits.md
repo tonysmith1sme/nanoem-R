@@ -18,6 +18,8 @@ This software uses below libraries.
     - [SIL OFL 1.1](https://okoneya.jp/font/)
   - [Noto Sans SC](https://github.com/notofonts/noto-cjk)
     - [SIL OFL 1.1](https://openfontlicense.org/open-font-license-official-text/)
+  - [Noto Sans TC](https://github.com/notofonts/noto-cjk)
+    - [SIL OFL 1.1](https://openfontlicense.org/open-font-license-official-text/)
   - [glslang](https://github.com/KhronosGroup/glslang/)
     - [BSDL](https://www.khronos.org/opengles/sdk/tools/Reference-Compiler/)
   - [ICU](http://site.icu-project.org/)

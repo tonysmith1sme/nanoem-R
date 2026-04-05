@@ -1,6 +1,7 @@
 #ifndef NANOEM_EMAPP_RESOURCE_H_
 #define NANOEM_EMAPP_RESOURCE_H_
 
+#include "emapp/ITranslator.h"
 #include "emapp/Forward.h"
 
 struct ImFont;
@@ -16,7 +17,8 @@ namespace resources {
 
 void initializeSharedToonTextures(Image **textures, ByteArray *bytes);
 void initializeSharedToonColors(Vector4 *colors);
-ImFont *initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, void *ranges);
+ImFont *initializeTextFont(
+	ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::LanguageType language, void *ranges);
 ImFont *initializeIconFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize);
 void getCredits(const nanoem_u8_t *&text, size_t &size);
 

@@ -12,27 +12,45 @@
 #include "emapp/private/resources/font_awesome.h"
 #include "emapp/private/resources/genei_gothic_p_semi_bold.h"
 #include "emapp/private/resources/noto_sans_sc_regular.h"
+#include "emapp/private/resources/noto_sans_tc_regular.h"
 
 namespace nanoem {
 namespace resources {
 
 static void
-mergeSimplifiedChineseFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize)
+mergeNotoFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, const unsigned char *data, int deflatedSize, int inflatedSize)
 {
-    char *bytes = static_cast<char *>(ImGui::MemAlloc(noto_sans_sc_regular_otf_inflated_size));
-    LZ4_decompress_safe(reinterpret_cast<const char *>(noto_sans_sc_regular_otf_data), bytes,
-        noto_sans_sc_regular_otf_deflated_size, noto_sans_sc_regular_otf_inflated_size);
+    char *bytes = static_cast<char *>(ImGui::MemAlloc(inflatedSize));
+    LZ4_decompress_safe(reinterpret_cast<const char *>(data), bytes, deflatedSize, inflatedSize);
     ImFontConfig config;
     config.MergeMode = true;
     config.FontData = bytes;
-    config.FontDataSize = noto_sans_sc_regular_otf_inflated_size;
+    config.FontDataSize = inflatedSize;
     config.SizePixels = pointSize;
     config.GlyphRanges = fontAtlas->GetGlyphRangesChineseSimplifiedCommon();
     fontAtlas->AddFont(&config);
 }
 
+static void
+mergeChineseFonts(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::LanguageType language)
+{
+    const bool isTraditionalPreferred = language == ITranslator::kLanguageTypeChineseTraditional;
+    if (isTraditionalPreferred) {
+        mergeNotoFont(fontAtlas, pointSize, noto_sans_tc_regular_otf_data, noto_sans_tc_regular_otf_deflated_size,
+            noto_sans_tc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, noto_sans_sc_regular_otf_data, noto_sans_sc_regular_otf_deflated_size,
+            noto_sans_sc_regular_otf_inflated_size);
+    }
+    else {
+        mergeNotoFont(fontAtlas, pointSize, noto_sans_sc_regular_otf_data, noto_sans_sc_regular_otf_deflated_size,
+            noto_sans_sc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, noto_sans_tc_regular_otf_data, noto_sans_tc_regular_otf_deflated_size,
+            noto_sans_tc_regular_otf_inflated_size);
+    }
+}
+
 ImFont *
-initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, void *ranges)
+initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::LanguageType language, void *ranges)
 {
     // 7037 glyphs
     static const ImWchar glyphs[] = {
@@ -488,7 +506,7 @@ initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, void *ranges)
     config.SizePixels = pointSize;
     config.GlyphRanges = rangesPtr->Data;
     ImFont *font = fontAtlas->AddFont(&config);
-    mergeSimplifiedChineseFont(fontAtlas, pointSize);
+    mergeChineseFonts(fontAtlas, pointSize, language);
     return font;
 }
 

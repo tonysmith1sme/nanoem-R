@@ -1509,7 +1509,11 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
     m_atlas.Clear();
     nanoem_u8_t *pixels;
     int width, height;
-    resources::initializeTextFont(&m_atlas, pointSize, &m_textFontRanges);
+    ITranslator::LanguageType language = ITranslator::kLanguageTypeEnglish;
+    if (const ITranslator *translator = m_applicationPtr->translator()) {
+        language = translator->language();
+    }
+    resources::initializeTextFont(&m_atlas, pointSize, language, &m_textFontRanges);
     resources::initializeIconFont(&m_atlas, pointSize);
     ApplicationPreference preference(m_applicationPtr);
     if (const char *fontPath = preference.extraFontPath()) {
@@ -1530,7 +1534,7 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
         const sg_limits limits = sg::query_limits();
         if (width >= limits.max_image_size_2d || height >= limits.max_image_size_2d) {
             m_atlas.Clear();
-            resources::initializeTextFont(&m_atlas, pointSize, &m_textFontRanges);
+            resources::initializeTextFont(&m_atlas, pointSize, language, &m_textFontRanges);
             resources::initializeIconFont(&m_atlas, pointSize);
         }
     }
