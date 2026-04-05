@@ -119,6 +119,7 @@ jobs:
         env:
           NANOEM_TARGET_CONFIGURATIONS: "debug;release"
           NANOEM_TARGET_COMPILER: clang
+          NANOEM_DISABLE_BUILD_TBB: 1
           NANOEM_ENABLE_BUILD_FFMPEG: 1
           NANOEM_ENABLE_BUILD_ICU4C: 1
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
@@ -133,6 +134,7 @@ jobs:
             -DNANOEM_ENABLE_ICU=ON \
             -DNANOEM_ENABLE_MIMALLOC=ON \
             -DNANOEM_ENABLE_NMD=ON \
+            -DNANOEM_ENABLE_TBB=OFF \
             -DNANOEM_ENABLE_TEST=ON \
             -DNANOEM_INSTALL_EFFECT_PLUGIN=ON \
             -DNANOEM_INSTALL_FFMPEG_PLUGIN=ON \
