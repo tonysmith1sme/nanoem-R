@@ -34,7 +34,7 @@ nanoem_emapp_link_executable(${NANOEM_EXECUTABLE_NAME})
 
 find_program(SW_VERS_PATH sw_vers)
 mark_as_advanced(SW_VERS_PATH)
-exec_program(${SW_VERS_PATH} ARGS -productVersion OUTPUT_VARIABLE MACOSX_VERSION_STRING)
+execute_process(COMMAND ${SW_VERS_PATH} -productVersion OUTPUT_VARIABLE MACOSX_VERSION_STRING)
 string(REGEX REPLACE "(10\\.[0-9]+)(\\.[0-9]+)?" "\\1" MACOSX_VERSION "${MACOSX_VERSION_STRING}")
 if(MACOSX_VERSION VERSION_GREATER "10.6")
   target_link_libraries(${NANOEM_EXECUTABLE_NAME} "-framework AVFoundation -framework CoreMedia -weak_framework MetalKit")
