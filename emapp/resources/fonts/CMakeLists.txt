@@ -17,7 +17,15 @@ function(nanoem_emapp_build_emarb_font)
                              > ${output_path_prefix}/genei_gothic_p_semi_bold.h
                      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/genei_gothic_p_semi_bold.otf
                      VERBATIM)
-  add_custom_target(emarb_fonts DEPENDS ${output_path_prefix}/font_awesome.h ${output_path_prefix}/genei_gothic_p_semi_bold.h)
+  # noto_sans_sc_regular (Google Noto Sans SC)
+  add_custom_command(OUTPUT ${output_path_prefix}/noto_sans_sc_regular.h
+                     COMMAND ${CMAKE_COMMAND} ARGS -E copy ${CMAKE_CURRENT_SOURCE_DIR}/noto_sans_sc_regular.otf ${intermediate_path_prefix}/noto_sans_sc_regular.otf
+                     COMMAND ${CMAKE_COMMAND} -E env ASAN_OPTIONS="detect_leaks=0"
+                             $<TARGET_FILE:emarb_bin2c> --input=${intermediate_path_prefix}/noto_sans_sc_regular.otf --symbol=noto_sans_sc_regular_otf --compressed=true
+                             > ${output_path_prefix}/noto_sans_sc_regular.h
+                     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/noto_sans_sc_regular.otf
+                     VERBATIM)
+  add_custom_target(emarb_fonts DEPENDS ${output_path_prefix}/font_awesome.h ${output_path_prefix}/genei_gothic_p_semi_bold.h ${output_path_prefix}/noto_sans_sc_regular.h)
   set_property(TARGET emarb_fonts PROPERTY FOLDER nanoem/resources)
   add_dependencies(emarb_fonts emarb_bin2c)
   message(STATUS "[emapp/resources] setup emarb font")

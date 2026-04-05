@@ -16,6 +16,8 @@ This software uses below libraries.
     - [MIT](https://github.com/g-truc/glm/blob/bf71a834948186f4097caa076cd2663c69a10e1e/copying.txt)
   - [GenEi Font](https://okoneya.jp/font/genei-gothic.html)
     - [SIL OFL 1.1](https://okoneya.jp/font/)
+  - [Noto Sans SC](https://github.com/notofonts/noto-cjk)
+    - [SIL OFL 1.1](https://openfontlicense.org/open-font-license-official-text/)
   - [glslang](https://github.com/KhronosGroup/glslang/)
     - [BSDL](https://www.khronos.org/opengles/sdk/tools/Reference-Compiler/)
   - [ICU](http://site.icu-project.org/)
