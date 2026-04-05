@@ -31,11 +31,6 @@ endfunction()
 
 function(rewrite_cmake_cache_for_win32 _build_path)
   if(WIN32)
-    file(STRINGS ${_build_path}/CMakeCache.txt input_cmake_cache NEWLINE_CONSUME)
-    # quote input_cmake_cache to prevent trailing semicolons
-    string(REPLACE "/MD" "/MT" interm_cmake_cache "${input_cmake_cache}")
-    string(REPLACE "-D_DLL" "" output_cmake_cache "${interm_cmake_cache}")
-    file(WRITE ${_build_path}/CMakeCache.txt ${output_cmake_cache})
     execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path} ${CMAKE_COMMAND} ${_source_path})
   endif()
 endfunction()
@@ -86,6 +81,7 @@ function(compile_zlib _cmake_build_type _generator _toolset_option _arch_option 
   endif()
   set(_cmake_args "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
                   "${global_cmake_flags}"
+                  "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL"
                   "-DCMAKE_BUILD_TYPE=${_cmake_build_type}"
                   "-DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}"
                   "-DCMAKE_INSTALL_PREFIX=${_build_path}/install-root"
@@ -118,6 +114,7 @@ function(compile_libsoundio _cmake_build_type _generator _toolset_option _arch_o
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -137,6 +134,7 @@ function(compile_minizip _cmake_build_type _generator _toolset_option _arch_opti
                                            ${CMAKE_COMMAND}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -163,6 +161,7 @@ function(compile_bullet _cmake_build_type _generator _toolset_option _arch_optio
                                            ${CMAKE_COMMAND}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DBUILD_DEMOS=OFF
                                            -DBUILD_EXTRAS=OFF
                                            -DINSTALL_EXTRA_LIBS=OFF
@@ -171,7 +170,7 @@ function(compile_bullet _cmake_build_type _generator _toolset_option _arch_optio
                                            -DUSE_GLUT=OFF
                                            -DUSE_GRAPHICAL_BENCHMARK=OFF
                                            -DUSE_MSVC_INCREMENTAL_LINKING=OFF
-                                           -DUSE_MSVC_RUNTIME_LIBRARY_DLL=OFF
+                                           -DUSE_MSVC_RUNTIME_LIBRARY_DLL=ON
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -188,14 +187,19 @@ function(compile_glslang _cmake_build_type _generator _toolset_option _arch_opti
   set(_build_path ${base_build_path}/glslang/out/${_triple_path})
   file(MAKE_DIRECTORY ${_build_path})
   set(_extra_options "")
+  if(WIN32)
+    # Force /MD (dynamic) runtime library on Windows
+    list(APPEND _extra_options "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
+    list(APPEND _extra_options "-DLLVM_USE_CRT_DEBUG=MDd")
+    list(APPEND _extra_options "-DLLVM_USE_CRT_MINSIZEREL=MD") 
+    list(APPEND _extra_options "-DLLVM_USE_CRT_RELEASE=MD")
+    list(APPEND _extra_options "-DLLVM_USE_CRT_RELWITHDEBINFO=MD")
+  endif()
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
-                                           -DLLVM_USE_CRT_DEBUG=MTd
-                                           -DLLVM_USE_CRT_MINSIZEREL=MT
-                                           -DLLVM_USE_CRT_RELEASE=MT
-                                           -DLLVM_USE_CRT_RELWITHDEBINFO=MT
+                                           ${_extra_options}
                                            -DBUILD_TESTING=OFF
                                            -DENABLE_AMD_EXTENSIONS=OFF
                                            -DENABLE_GLSLANG_BINARIES=ON
@@ -206,7 +210,6 @@ function(compile_glslang _cmake_build_type _generator _toolset_option _arch_opti
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
-                                           ${_extra_options}
                                            -G "${_generator}"
                                            ${_arch_option}
                                            ${_toolset_option}
@@ -223,6 +226,7 @@ function(compile_nanomsg _cmake_build_type _generator _toolset_option _arch_opti
                                            ${CMAKE_COMMAND}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DNN_STATIC_LIB=ON
                                            -DNN_ENABLE_GETADDRINFO_A=OFF
                                            -DNN_ENABLE_DOC=OFF
@@ -248,6 +252,7 @@ function(compile_tbb _cmake_build_type _generator _toolset_option _arch_option _
                                            ${CMAKE_COMMAND}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            ${global_cmake_flags}
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DTBB_TEST=OFF
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
@@ -272,6 +277,7 @@ function(compile_spirv_cross _cmake_build_type _generator _toolset_option _arch_
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DSPIRV_CROSS_ENABLE_C_API=OFF
                                            -DSPIRV_CROSS_ENABLE_REFLECT=ON
                                            -DSPIRV_CROSS_ENABLE_TESTS=OFF
@@ -289,6 +295,11 @@ function(compile_spirv_tools _cmake_build_type _generator _toolset_option _arch_
   set(_source_path ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/spirv-tools)
   set(_build_path ${base_build_path}/spirv-tools/out/${_triple_path})
   file(MAKE_DIRECTORY ${_build_path})
+  set(_extra_options "")
+  if(WIN32)
+    # Force /MD (dynamic) runtime library on Windows
+    list(APPEND _extra_options "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
+  endif()
   # checkout spirv-headers
   set(_branch "master")
   set(_revision "87d5b782bec60822aa878941e6b13c0a9a954c9b")
@@ -297,6 +308,7 @@ function(compile_spirv_tools _cmake_build_type _generator _toolset_option _arch_
   execute_process(COMMAND ${CMAKE_COMMAND} -E chdir ${_build_path}
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
+                                           ${_extra_options}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                                            -DSPIRV_COLOR_TERMINAL=OFF
                                            -DSPIRV_SKIP_TESTS=ON
@@ -319,6 +331,7 @@ function(compile_yamlcpp _cmake_build_type _generator _toolset_option _arch_opti
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DAPPLE_UNIVERSAL_BIN=OFF
                                            -DBUILD_SHARED_LIBS=OFF
                                            -DBUILD_TESTING=OFF
@@ -341,6 +354,7 @@ function(compile_glfw _cmake_build_type _generator _toolset_option _arch_option 
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -360,6 +374,7 @@ function(compile_mimalloc _cmake_build_type _generator _toolset_option _arch_opt
                                            ${CMAKE_COMMAND}
                                            ${global_cmake_flags}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -401,6 +416,7 @@ function(compile_sentry_native _cmake_build_type _generator _toolset_option _arc
                                            ${CMAKE_COMMAND}
                                            ${_global_cmake_flags}
                                            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                                           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
                                            -DCMAKE_BUILD_TYPE=${_cmake_build_type}
                                            -DCMAKE_CONFIGURATION_TYPES=${_cmake_build_type}
                                            -DCMAKE_INSTALL_PREFIX=${_build_path}/install-root
@@ -740,7 +756,11 @@ foreach(arch_item ${ARCH_LIST})
   if(WIN32)
     # https://docs.microsoft.com/en-us/cpp/build/reference/utf-8-set-source-and-executable-character-sets-to-utf-8
     if(NOT "${arch_item}" STREQUAL "arm64" AND NOT "${target_compiler}" STREQUAL "clang")
-      set(global_cmake_flags "-DCMAKE_CXX_FLAGS='-utf-8'")
+      # For Visual Studio generator on Windows, use configuration-specific flags
+      # Visual Studio doesn't use CMAKE_CXX_FLAGS directly, but uses CMAKE_CXX_FLAGS_<CONFIG>
+      set(global_cmake_flags "-DCMAKE_CXX_FLAGS_DEBUG=/MDd -utf-8;-DCMAKE_CXX_FLAGS_RELEASE=/MD -utf-8;-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=/MD -utf-8;-DCMAKE_CXX_FLAGS_MINSIZEREL=/MD -utf-8;-DCMAKE_C_FLAGS_DEBUG=/MDd;-DCMAKE_C_FLAGS_RELEASE=/MD;-DCMAKE_C_FLAGS_RELWITHDEBINFO=/MD;-DCMAKE_C_FLAGS_MINSIZEREL=/MD;-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
+    else()
+      set(global_cmake_flags "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
     endif()
     if(NOT target_compiler)
       set(target_compiler "vs2022")

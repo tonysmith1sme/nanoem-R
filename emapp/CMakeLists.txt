@@ -111,7 +111,7 @@ function(nanoem_emapp_link_executable item)
     endif()
   endif()
   if(MSVC)
-    set_property(TARGET ${item} APPEND PROPERTY LINK_FLAGS "/NODEFAULTLIB:vcruntime")
+    # No special linker flags needed - CMAKE_MSVC_RUNTIME_LIBRARY handles the MSVC runtime
   endif()
   nanoem_cmake_enable_lto(${item})
   message(STATUS "[emapp] setup linkage of \"${item}\"")
