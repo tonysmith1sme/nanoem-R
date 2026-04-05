@@ -90,6 +90,12 @@ jobs:
         run: |
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           ctest
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-linux-x86_64
+          if-no-files-found: error
+          path: ${{ github.workspace }}/out
   build-macos:
     runs-on: macos-latest
     timeout-minutes: 30
@@ -136,6 +142,12 @@ jobs:
         run: |
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           ctest
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-macos
+          if-no-files-found: error
+          path: ${{ github.workspace }}/out
   build-windows:
     runs-on: windows-2022
     timeout-minutes: 30
@@ -178,6 +190,12 @@ jobs:
         run: |
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           ctest
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-windows-x86_64
+          if-no-files-found: error
+          path: ${{ github.workspace }}/out
   build-rust:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -222,6 +240,18 @@ jobs:
           done
           cargo check --profile release-lto
           cargo test --profile release-lto
+      - name: stage rust artifacts into out
+        run: |
+          mkdir -p "${{ github.workspace }}/out/rust/dev"
+          mkdir -p "${{ github.workspace }}/out/rust/release-lto"
+          find "${{ env.NANOEM_RUST_DIRECTORY }}/target/wasm32-wasip1/dev" -maxdepth 1 -name '*.wasm' -exec cp {} "${{ github.workspace }}/out/rust/dev/" \;
+          find "${{ env.NANOEM_RUST_DIRECTORY }}/target/wasm32-wasip1/release-lto" -maxdepth 1 -name '*.wasm' -exec cp {} "${{ github.workspace }}/out/rust/release-lto/" \;
+      - name: upload rust wasm artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-rust-wasm
+          if-no-files-found: error
+          path: ${{ github.workspace }}/out
   codeql:
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
