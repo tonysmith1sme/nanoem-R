@@ -1,0 +1,278 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version shown in the application
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FFMPEG_VERSION_TAG: n4.4.1
+  FX9_BUILD_DEPENDENCIES_DIRECTORY: ${{ github.workspace }}/out/dependencies
+  GLFW_VERSION_TAG: 3.3.8
+  ICU_VERSION_TAG: release-71-1
+  NANOEM_BUILD_DEPENDENCIES_DIRECTORY: ${{ github.workspace }}/out/dependencies
+  NANOEM_BUILD_ARTIFACT_DIRECTORY: ${{ github.workspace }}/out/core
+  NANOEM_RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+  NANOEM_RUST_DIRECTORY: ${{ github.workspace }}/rust
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CC: clang
+      CXX: clang++
+      CXXFLAGS: -stdlib=libc++
+      GIT_CLONE_PROTECTION_ACTIVE: false
+      LDFLAGS: -lc++abi
+    steps:
+      - name: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: setup prerequisite packages
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libasound-dev \
+            libc++-dev \
+            libc++abi-dev \
+            libgtk-3-dev \
+            libglu1-mesa-dev \
+            ninja-build \
+            xorg-dev \
+            libxi-dev \
+            libxcursor-dev
+      - name: checkout ffmpeg
+        run: git clone --depth=1 --branch=${{ env.FFMPEG_VERSION_TAG }} https://github.com/ffmpeg/ffmpeg.git dependencies/ffmpeg
+      - name: checkout glfw
+        run: git clone --depth=1 --branch=${{ env.GLFW_VERSION_TAG }} https://github.com/glfw/glfw.git dependencies/glfw
+      - name: checkout ICU
+        run: git clone --depth=1 --branch=${{ env.ICU_VERSION_TAG }} https://github.com/unicode-org/icu.git dependencies/icu
+      - name: build all dependencies of nanoem
+        run: cmake -DCONFIG=release -P ${{ github.workspace }}/scripts/build.cmake
+        env:
+          NANOEM_ENABLE_BUILD_FFMPEG: 1
+          NANOEM_ENABLE_BUILD_GLFW: 1
+          NANOEM_ENABLE_BUILD_ICU4C: 1
+          NANOEM_ENABLE_BUILD_MIMALLOC: 1
+          NANOEM_TARGET_ARCHITECTURES: x86_64
+          NANOEM_TARGET_COMPILER: clang
+          NANOEM_TARGET_CONFIGURATIONS: release
+      - name: build nanoem itself
+        run: |
+          mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/install-root \
+            -DFX9_ENABLE_OPTIMIZER=OFF \
+            -DNANOEM_ENABLE_BULLET=ON \
+            -DNANOEM_ENABLE_GLFW=ON \
+            -DNANOEM_ENABLE_ICU=ON \
+            -DNANOEM_ENABLE_IMGUI_FILE_DIALOG=ON \
+            -DNANOEM_ENABLE_MIMALLOC=ON \
+            -DNANOEM_ENABLE_NMD=ON \
+            -DNANOEM_ENABLE_TBB=OFF \
+            -DNANOEM_ENABLE_TEST=ON \
+            -DNANOEM_INSTALL_EFFECT_PLUGIN=ON \
+            -DNANOEM_INSTALL_FFMPEG_PLUGIN=ON \
+            -DNANOEM_INSTALL_GIF_PLUGIN=OFF \
+            -DNANOEM_INSTALL_LSMASH_PLUGIN=ON \
+            -DNANOEM_TARGET_COMPILER=clang \
+            -GNinja \
+            ../..
+          cmake --build . --config release
+      - name: test nanoem's unit tests
+        run: |
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          ctest --build-config release --output-on-failure
+      - name: archive out directory
+        run: |
+          cd ${{ github.workspace }}
+          tar -czf nanoem-${{ env.NANOEM_RELEASE_VERSION }}-linux-x86_64-out.tar.gz out
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-${{ env.NANOEM_RELEASE_VERSION }}-linux-x86_64
+          if-no-files-found: error
+          path: ${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-linux-x86_64-out.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: checkout ffmpeg
+        run: git clone --depth=1 --branch=${{ env.FFMPEG_VERSION_TAG }} https://github.com/ffmpeg/ffmpeg.git dependencies/ffmpeg
+      - name: checkout ICU
+        run: git clone --depth=1 --branch=${{ env.ICU_VERSION_TAG }} https://github.com/unicode-org/icu.git dependencies/icu
+      - name: setup prerequisite packages
+        run: brew install ninja
+      - name: build all dependencies of nanoem
+        run: cmake -DCONFIG=release -P ${{ github.workspace }}/scripts/build.cmake
+        env:
+          NANOEM_DISABLE_BUILD_TBB: 1
+          NANOEM_ENABLE_BUILD_FFMPEG: 1
+          NANOEM_ENABLE_BUILD_ICU4C: 1
+          NANOEM_ENABLE_BUILD_MIMALLOC: 1
+          NANOEM_TARGET_COMPILER: clang
+          NANOEM_TARGET_CONFIGURATIONS: release
+      - name: build nanoem itself
+        run: |
+          mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/install-root \
+            -DFX9_ENABLE_OPTIMIZER=OFF \
+            -DNANOEM_ENABLE_BULLET=ON \
+            -DNANOEM_ENABLE_ICU=ON \
+            -DNANOEM_ENABLE_MIMALLOC=ON \
+            -DNANOEM_ENABLE_NMD=ON \
+            -DNANOEM_ENABLE_TBB=OFF \
+            -DNANOEM_ENABLE_TEST=ON \
+            -DNANOEM_INSTALL_EFFECT_PLUGIN=ON \
+            -DNANOEM_INSTALL_FFMPEG_PLUGIN=ON \
+            -DNANOEM_INSTALL_GIF_PLUGIN=OFF \
+            -DNANOEM_INSTALL_LSMASH_PLUGIN=ON \
+            -DNANOEM_TARGET_COMPILER=clang \
+            -GNinja \
+            ../..
+          cmake --build . --config release
+      - name: test nanoem's unit tests
+        run: |
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          ctest --build-config release --output-on-failure
+      - name: archive out directory
+        run: |
+          cd ${{ github.workspace }}
+          tar -czf nanoem-${{ env.NANOEM_RELEASE_VERSION }}-macos-out.tar.gz out
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-${{ env.NANOEM_RELEASE_VERSION }}-macos
+          if-no-files-found: error
+          path: ${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-macos-out.tar.gz
+
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: build all dependencies of nanoem
+        run: cmake -DCONFIG=release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -P ${{ github.workspace }}/scripts/build.cmake
+        env:
+          NANOEM_ENABLE_BUILD_MIMALLOC: 1
+          NANOEM_TARGET_ARCHITECTURES: x86_64
+          NANOEM_TARGET_COMPILER: vs2019
+          NANOEM_TARGET_CONFIGURATIONS: release
+          NANOEM_TARGET_TOOLSET: v142
+      - name: build nanoem itself
+        run: |
+          mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cmake `
+            -DCMAKE_INSTALL_PREFIX="${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/install-root" `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL `
+            -DFX9_ENABLE_OPTIMIZER=OFF `
+            -DNANOEM_ENABLE_BULLET=ON `
+            -DNANOEM_ENABLE_MIMALLOC=ON `
+            -DNANOEM_ENABLE_NMD=ON `
+            -DNANOEM_ENABLE_TEST=ON `
+            -DNANOEM_INSTALL_EFFECT_PLUGIN=ON `
+            -DNANOEM_INSTALL_FFMPEG_PLUGIN=OFF `
+            -DNANOEM_INSTALL_GIF_PLUGIN=OFF `
+            -DNANOEM_INSTALL_LSMASH_PLUGIN=ON `
+            -DNANOEM_TARGET_COMPILER=vs2019 `
+            -G"Visual Studio 17 2022" `
+            -Tv142 `
+            ../..
+          cmake --build . --config release
+      - name: test nanoem's unit tests
+        run: |
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          ctest -C release --output-on-failure
+      - name: archive out directory
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ github.workspace }}/out" -DestinationPath "${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-windows-x86_64-out.zip" -Force
+      - name: upload nanoem artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-${{ env.NANOEM_RELEASE_VERSION }}-windows-x86_64
+          if-no-files-found: error
+          path: ${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-windows-x86_64-out.zip
+
+  build-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ env.NANOEM_RUST_DIRECTORY }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: setup cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2.0.15
+        with:
+          manifest-path: ./rust/Cargo.toml
+      - name: setup rust toolchain (stable and wasm32-wasip1)
+        uses: actions-rust-lang/setup-rust-toolchain@1fbea72663f6d4c03efaab13560c8a24cfd2a7cc # v1.9.0
+        with:
+          cache-workspaces: ${{ env.NANOEM_RUST_DIRECTORY }}
+          components: rustfmt
+          target: wasm32-wasip1
+          toolchain: 1.90.0
+      - name: run rustfmt for check
+        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1.1.1
+        with:
+          manifest-path: ${{ env.NANOEM_RUST_DIRECTORY }}/Cargo.toml
+      - name: setup prerequisite packages
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            protobuf-compiler
+      - name: build plugin_wasm and its test WASMs
+        run: |
+          packages=(
+            'plugin_wasm_test_model_minimum'
+            'plugin_wasm_test_motion_minimum'
+            'plugin_wasm_test_model_full'
+            'plugin_wasm_test_motion_full'
+          )
+          for package in "${packages[@]}"; do
+            cargo build --profile release-lto --package "${package}" --target wasm32-wasip1
+          done
+          cargo check --profile release-lto
+          cargo test --profile release-lto
+      - name: stage rust artifacts into out
+        run: |
+          mkdir -p "${{ github.workspace }}/out/rust/release-lto"
+          find "${{ env.NANOEM_RUST_DIRECTORY }}/target/wasm32-wasip1/release-lto" -maxdepth 1 -type f -name '*.wasm' -exec cp {} "${{ github.workspace }}/out/rust/release-lto/" \;
+      - name: archive out directory
+        run: |
+          cd ${{ github.workspace }}
+          tar -czf nanoem-${{ env.NANOEM_RELEASE_VERSION }}-rust-wasm-out.tar.gz out
+      - name: upload rust wasm artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: nanoem-${{ env.NANOEM_RELEASE_VERSION }}-rust-wasm
+          if-no-files-found: error
+          path: ${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-rust-wasm-out.tar.gz
