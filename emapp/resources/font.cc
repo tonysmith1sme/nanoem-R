@@ -17,8 +17,12 @@
 namespace nanoem {
 namespace resources {
 
+static const char kSimplifiedChineseTranslationGlyphs[] =
+    u8"由于未实现，当前不可用相机复制剪切结束粘贴反转删除缩放选 择列开始特效重新加载附件无地面入透明度旋注册率移动显示外 部父节点骨骼模式物理全框跟随视野角初化插值曲线自轴距离性 照颜色方向阴影型算表情眼睛眉毛嘴唇其他权播循环暂停恢音量 图背底左右上操作创建连接目标绘顶材质基本几何体圆锥立柱球 周分割数高内径形矩类坐局笔刷础画喷枪半差归一做时间撤销口 （）关键帧位置计平衡近优先输补正设出尺寸宽从预景启顺序变 演速步长系噪声添项边缘渲染屏参默认纹调试保存测统刚软组翻 冲应程器更改后需要格编辑限终禁验功能访问析踪的崩溃报告以 生负均信息网语言英日語简中文单元大小路绝对批身厘米为所得 比例名称释说字符码法及响属境光漫射镜强任意户区域卡通共享 剔双投三乘子原层级见约根链下迭代次赋予固定别留知扭力混合 殊象状衰减摩擦弹碰撞掩映有果仅受与联盒胶囊绳索空气学总修 阻尼升压积守恒姿态匹配触硬锚裂弯集群求解漂取消在末尾之副 遮罩隐藏按包含已心将到个并清「」多段指势两版弃吗？打退导 片频确阅读该使条款横纵会但辨致请勾“低”再进行过则止容超幕 如被此。是否换您尝况或失败另种题因回发错误具决志了产至工 处抗锯齿同持防掉像素范围命稍候等待运完毕烘焙执达源窗首话 着蒙皮最较普界监展轨道折叠据证帮助偏支菜手损坏整断检查常 者跳来找然成警缺少似非越引缓串签兼";
+
 static void
-mergeNotoFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, const unsigned char *data, int deflatedSize, int inflatedSize)
+mergeNotoFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, const ImWchar *ranges, const unsigned char *data,
+    int deflatedSize, int inflatedSize)
 {
     char *bytes = static_cast<char *>(ImGui::MemAlloc(inflatedSize));
     LZ4_decompress_safe(reinterpret_cast<const char *>(data), bytes, deflatedSize, inflatedSize);
@@ -27,25 +31,25 @@ mergeNotoFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, const unsigned cha
     config.FontData = bytes;
     config.FontDataSize = inflatedSize;
     config.SizePixels = pointSize;
-    config.GlyphRanges = fontAtlas->GetGlyphRangesChineseSimplifiedCommon();
+    config.GlyphRanges = ranges;
     fontAtlas->AddFont(&config);
 }
 
 static void
-mergeChineseFonts(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::LanguageType language)
+mergeChineseFonts(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::LanguageType language, const ImWchar *ranges)
 {
     const bool isTraditionalPreferred = language == ITranslator::kLanguageTypeChineseTraditional;
     if (isTraditionalPreferred) {
-        mergeNotoFont(fontAtlas, pointSize, noto_sans_tc_regular_otf_data, noto_sans_tc_regular_otf_deflated_size,
-            noto_sans_tc_regular_otf_inflated_size);
-        mergeNotoFont(fontAtlas, pointSize, noto_sans_sc_regular_otf_data, noto_sans_sc_regular_otf_deflated_size,
-            noto_sans_sc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, ranges, noto_sans_tc_regular_otf_data,
+            noto_sans_tc_regular_otf_deflated_size, noto_sans_tc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, ranges, noto_sans_sc_regular_otf_data,
+            noto_sans_sc_regular_otf_deflated_size, noto_sans_sc_regular_otf_inflated_size);
     }
     else {
-        mergeNotoFont(fontAtlas, pointSize, noto_sans_sc_regular_otf_data, noto_sans_sc_regular_otf_deflated_size,
-            noto_sans_sc_regular_otf_inflated_size);
-        mergeNotoFont(fontAtlas, pointSize, noto_sans_tc_regular_otf_data, noto_sans_tc_regular_otf_deflated_size,
-            noto_sans_tc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, ranges, noto_sans_sc_regular_otf_data,
+            noto_sans_sc_regular_otf_deflated_size, noto_sans_sc_regular_otf_inflated_size);
+        mergeNotoFont(fontAtlas, pointSize, ranges, noto_sans_tc_regular_otf_data,
+            noto_sans_tc_regular_otf_deflated_size, noto_sans_tc_regular_otf_inflated_size);
     }
 }
 
@@ -495,6 +499,7 @@ initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::
     for (int i = 0; i < IM_ARRAYSIZE(glyphs); i++) {
         builder.AddChar(glyphs[i]);
     }
+    builder.AddText(kSimplifiedChineseTranslationGlyphs);
     ImVector<ImWchar> *rangesPtr = static_cast<ImVector<ImWchar> *>(ranges);
     builder.BuildRanges(rangesPtr);
     char *bytes = static_cast<char *>(ImGui::MemAlloc(genei_gothic_p_semi_bold_otf_inflated_size));
@@ -506,7 +511,7 @@ initializeTextFont(ImFontAtlas *fontAtlas, nanoem_f32_t pointSize, ITranslator::
     config.SizePixels = pointSize;
     config.GlyphRanges = rangesPtr->Data;
     ImFont *font = fontAtlas->AddFont(&config);
-    mergeChineseFonts(fontAtlas, pointSize, language);
+    mergeChineseFonts(fontAtlas, pointSize, language, rangesPtr->Data);
     return font;
 }
 
