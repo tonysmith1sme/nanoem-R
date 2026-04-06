@@ -1,0 +1,71 @@
+name: Generate Translation Glyphs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-glyphs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: setup python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.x'
+
+      - name: install PyYAML
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: generate translation glyph header
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          root = Path.cwd()
+          input_path = root / 'emapp/resources/translations/translations.yml'
+          output_dir = root / 'out/translation-glyphs'
+          output_dir.mkdir(parents=True, exist_ok=True)
+          output_path = output_dir / 'translation_glyphs.h'
+
+          with input_path.open('r', encoding='utf-8') as f:
+              nodes = yaml.safe_load(f)
+
+          glyphs = set()
+          for node in nodes:
+              phrase = (node or {}).get('phrase') or {}
+              text = phrase.get('zh_CN')
+              if not isinstance(text, str):
+                  continue
+              for ch in text:
+                  codepoint = ord(ch)
+                  if 0x20 <= codepoint <= 0x7E:
+                      continue
+                  glyphs.add(ch)
+
+          glyph_string = ''.join(sorted(glyphs))
+          output_path.write_text(
+              '#ifndef NANOEM_EMAPP_PRIVATE_RESOURCES_TRANSLATION_GLYPHS_H_\n'
+              '#define NANOEM_EMAPP_PRIVATE_RESOURCES_TRANSLATION_GLYPHS_H_\n\n'
+              'static const char kSimplifiedChineseTranslationGlyphs[] =\n'
+              f'    u8"{glyph_string}";\n\n'
+              '#endif /* NANOEM_EMAPP_PRIVATE_RESOURCES_TRANSLATION_GLYPHS_H_ */\n',
+              encoding='utf-8'
+          )
+          print(f'Generated: {output_path}')
+          print(f'Glyph count: {len(glyph_string)}')
+          PY
+
+      - name: upload glyph artifact
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: translation-glyphs
+          if-no-files-found: error
+          path: out/translation-glyphs/translation_glyphs.h
