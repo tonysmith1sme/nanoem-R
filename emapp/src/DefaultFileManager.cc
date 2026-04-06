@@ -47,218 +47,40 @@
 namespace nanoem {
 namespace {
 
-static bool
-containsLegIKName(const String &value) NANOEM_DECL_NOEXCEPT
-{
-    const char *text = value.c_str();
-    return strstr(text, "足ＩＫ") != nullptr || strstr(text, "足IK") != nullptr || strstr(text, "つま先ＩＫ") != nullptr ||
-        strstr(text, "つま先IK") != nullptr;
-}
-
-static bool
-isLegIKConstraint(const nanoem_model_constraint_t *constraintPtr, nanoem_unicode_string_factory_t *factory)
-{
-    String targetBoneName, effectorBoneName;
-    const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
-    const nanoem_model_bone_t *effectorBonePtr = nanoemModelConstraintGetEffectorBoneObject(constraintPtr);
-    StringUtils::getUtf8String(nanoemModelBoneGetName(targetBonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM), factory,
-        targetBoneName);
-    StringUtils::getUtf8String(nanoemModelBoneGetName(effectorBonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM), factory,
-        effectorBoneName);
-    return containsLegIKName(targetBoneName) || containsLegIKName(effectorBoneName);
-}
-
-static bool
-isTargetConstraintStateBone(const nanoem_unicode_string_t *name, const nanoem_model_constraint_t *const *constraints,
-    nanoem_rsize_t numConstraints, nanoem_unicode_string_factory_t *factory) NANOEM_DECL_NOEXCEPT
-{
-    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraints[i]);
-        if (nanoemUnicodeStringFactoryCompareString(
-                factory, name, nanoemModelBoneGetName(targetBonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM)) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void
-collectLegIKConstraintBoneSet(const Model *model, const nanoem_model_constraint_t *const *constraints,
-    nanoem_rsize_t numConstraints, model::Bone::Set &constraintBoneSet)
+applyInitialConstraintStatesFromMotion(Motion *motion, Model *model)
 {
-    typedef tinystl::unordered_map<const nanoem_model_bone_t *, const nanoem_model_bone_t *, TinySTLAllocator>
-        ResolveInherentParentBoneMap;
-    ResolveInherentParentBoneMap resolveInherentParentBones;
-    nanoem_rsize_t numBones;
-    nanoem_model_bone_t *const *bones = nanoemModelGetAllBoneObjects(model->data(), &numBones);
-    for (nanoem_rsize_t i = 0; i < numBones; i++) {
-        const nanoem_model_bone_t *bonePtr = bones[i];
-        if (const nanoem_model_bone_t *inherentParentBonePtr = nanoemModelBoneGetInherentParentBoneObject(bonePtr)) {
-            while (const nanoem_model_bone_t *upperInherentParentBonePtr =
-                       nanoemModelBoneGetInherentParentBoneObject(inherentParentBonePtr)) {
-                inherentParentBonePtr = upperInherentParentBonePtr;
-            }
-            resolveInherentParentBones.insert(tinystl::make_pair(inherentParentBonePtr, bonePtr));
+    nanoem_rsize_t numKeyframes;
+    nanoem_motion_model_keyframe_t *const *keyframes =
+        nanoemMotionGetAllModelKeyframeObjects(motion->data(), &numKeyframes);
+    if (numKeyframes == 0) {
+        return;
+    }
+    const nanoem_motion_model_keyframe_t *firstKeyframe = nullptr;
+    nanoem_frame_index_t firstFrameIndex = std::numeric_limits<nanoem_frame_index_t>::max();
+    for (nanoem_rsize_t i = 0; i < numKeyframes; i++) {
+        const nanoem_motion_model_keyframe_t *keyframe = keyframes[i];
+        const nanoem_frame_index_t frameIndex =
+            nanoemMotionKeyframeObjectGetFrameIndex(nanoemMotionModelKeyframeGetKeyframeObject(keyframe));
+        if (frameIndex <= firstFrameIndex) {
+            firstFrameIndex = frameIndex;
+            firstKeyframe = keyframe;
         }
     }
-    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        const nanoem_model_constraint_t *constraintPtr = constraints[i];
-        nanoem_rsize_t numJoints;
-        nanoem_model_constraint_joint_t *const *joints =
-            nanoemModelConstraintGetAllJointObjects(constraintPtr, &numJoints);
-        for (nanoem_rsize_t j = 0; j < numJoints; j++) {
-            const nanoem_model_bone_t *jointBonePtr = nanoemModelConstraintJointGetBoneObject(joints[j]);
-            ResolveInherentParentBoneMap::const_iterator it = resolveInherentParentBones.find(jointBonePtr);
-            constraintBoneSet.insert(it != resolveInherentParentBones.end() ? it->second : jointBonePtr);
-        }
-        const nanoem_model_bone_t *effectorBonePtr = nanoemModelConstraintGetEffectorBoneObject(constraintPtr);
-        ResolveInherentParentBoneMap::const_iterator it = resolveInherentParentBones.find(effectorBonePtr);
-        constraintBoneSet.insert(it != resolveInherentParentBones.end() ? it->second : effectorBonePtr);
-        const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
-        constraintBoneSet.insert(targetBonePtr);
+    if (!firstKeyframe) {
+        return;
     }
-}
-
-static void
-removeAndDisableLegIKConstraintStates(nanoem_mutable_motion_model_keyframe_t *mutableKeyframe,
-    const nanoem_model_constraint_t *const *constraints, nanoem_rsize_t numConstraints,
-    nanoem_unicode_string_factory_t *factory, nanoem_status_t &status)
-{
-    nanoem_motion_model_keyframe_t *keyframe = nanoemMutableMotionModelKeyframeGetOriginObject(mutableKeyframe);
     nanoem_rsize_t numStates;
     nanoem_motion_model_keyframe_constraint_state_t *const *states =
-        nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
+        nanoemMotionModelKeyframeGetAllConstraintStateObjects(firstKeyframe, &numStates);
     for (nanoem_rsize_t i = 0; i < numStates; i++) {
-        nanoem_motion_model_keyframe_constraint_state_t *state = states[numStates - i - 1];
-        if (isTargetConstraintStateBone(
-                nanoemMotionModelKeyframeConstraintStateGetBoneName(state), constraints, numConstraints, factory)) {
-            nanoem_mutable_motion_model_keyframe_constraint_state_t *item =
-                nanoemMutableMotionModelKeyframeConstraintStateCreateAsReference(state, &status);
-            nanoemMutableMotionModelKeyframeRemoveConstraintState(mutableKeyframe, item, &status);
-            nanoemMutableMotionModelKeyframeConstraintStateDestroy(item);
+        const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
+        const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
+        const nanoem_model_constraint_t *constraintPtr = model->findConstraint(model->findBone(name));
+        if (model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
+            constraint->setEnabled(nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0);
         }
     }
-    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraints[i]);
-        nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
-            nanoemMutableMotionModelKeyframeConstraintStateCreateMutable(mutableKeyframe, &status);
-        nanoemMutableMotionModelKeyframeConstraintStateSetBoneName(
-            state, nanoemModelBoneGetName(targetBonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM), &status);
-        nanoemMutableMotionModelKeyframeConstraintStateSetEnabled(state, false);
-        nanoemMutableMotionModelKeyframeAddConstraintState(mutableKeyframe, state, &status);
-        nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
-    }
-}
-
-static void
-overwriteBoneKeyframeFromCurrentPose(nanoem_mutable_motion_t *mutableMotion, nanoem_motion_t *motion,
-    const nanoem_model_bone_t *bonePtr, const model::Bone *bone, nanoem_frame_index_t frameIndex, nanoem_status_t &status)
-{
-    const nanoem_unicode_string_t *name = nanoemModelBoneGetName(bonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
-    nanoem_mutable_motion_bone_keyframe_t *keyframe =
-        nanoemMutableMotionBoneKeyframeCreateByFound(motion, name, frameIndex, &status);
-    const bool exists = keyframe != nullptr;
-    if (!exists) {
-        status = NANOEM_STATUS_SUCCESS;
-        keyframe = nanoemMutableMotionBoneKeyframeCreate(motion, &status);
-    }
-    if (keyframe) {
-        const Matrix4x4 transform(bone->localTransform());
-        nanoemMutableMotionBoneKeyframeSetTranslation(keyframe, glm::value_ptr(transform[3]));
-        nanoemMutableMotionBoneKeyframeSetOrientation(keyframe, glm::value_ptr(glm::quat_cast(transform)));
-        nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(keyframe, false);
-        if (!exists) {
-            nanoemMutableMotionAddBoneKeyframe(mutableMotion, keyframe, name, frameIndex, &status);
-        }
-        nanoemMutableMotionBoneKeyframeDestroy(keyframe);
-    }
-}
-
-static void
-autoBakeImportedLegIKMotion(Motion *motion, Model *model, Project *project, Error &error)
-{
-    nanoem_unicode_string_factory_t *factory = project->unicodeStringFactory();
-    nanoem_rsize_t numAllConstraints;
-    nanoem_model_constraint_t *const *allConstraints =
-        nanoemModelGetAllConstraintObjects(model->data(), &numAllConstraints);
-    tinystl::vector<const nanoem_model_constraint_t *, TinySTLAllocator> legIKConstraints;
-    for (nanoem_rsize_t i = 0; i < numAllConstraints; i++) {
-        const nanoem_model_constraint_t *constraintPtr = allConstraints[i];
-        if (isLegIKConstraint(constraintPtr, factory)) {
-            legIKConstraints.push_back(constraintPtr);
-        }
-    }
-    if (legIKConstraints.empty()) {
-        return;
-    }
-    model::Bone::Set constraintBoneSet;
-    collectLegIKConstraintBoneSet(model, allConstraints, numAllConstraints, constraintBoneSet);
-    if (constraintBoneSet.empty()) {
-        return;
-    }
-    const nanoem_frame_index_t lastLocalFrameIndex = project->currentLocalFrameIndex();
-    const PhysicsEngine::SimulationModeType lastSimulationMode = project->physicsEngine()->simulationMode();
-    Motion *bakedMotion = project->createMotion();
-    ByteArray bytes;
-    motion->save(bytes, model, NANOEM_MUTABLE_MOTION_KEYFRAME_TYPE_ALL, error);
-    if (!error.hasReason()) {
-        bakedMotion->setFormat(NANOEM_MOTION_FORMAT_TYPE_NMD);
-        bakedMotion->load(bytes, 0, error);
-    }
-    if (!error.hasReason()) {
-        bakedMotion->initialize(model);
-        project->seek(0, true);
-        project->setPhysicsSimulationMode(PhysicsEngine::kSimulationModeEnableTracing);
-        nanoem_status_t status = NANOEM_STATUS_SUCCESS;
-        const nanoem_frame_index_t duration = motion->duration();
-        for (nanoem_frame_index_t frameIndex = 0; frameIndex <= duration && !error.hasReason(); frameIndex++) {
-            project->seek(frameIndex, true);
-            nanoem_mutable_motion_t *mutableMotion = nanoemMutableMotionCreateAsReference(bakedMotion->data(), &status);
-            for (model::Bone::Set::const_iterator it = constraintBoneSet.begin(), end = constraintBoneSet.end();
-                 it != end; ++it) {
-                const nanoem_model_bone_t *bonePtr = *it;
-                if (const model::Bone *bone = model::Bone::cast(bonePtr)) {
-                    overwriteBoneKeyframeFromCurrentPose(mutableMotion, bakedMotion->data(), bonePtr, bone, frameIndex,
-                        status);
-                }
-            }
-            nanoem_mutable_motion_model_keyframe_t *mutableModelKeyframe =
-                nanoemMutableMotionModelKeyframeCreateByFound(bakedMotion->data(), frameIndex, &status);
-            const bool exists = mutableModelKeyframe != nullptr;
-            if (!exists && frameIndex == 0) {
-                status = NANOEM_STATUS_SUCCESS;
-                mutableModelKeyframe = nanoemMutableMotionModelKeyframeCreate(bakedMotion->data(), &status);
-            }
-            if (mutableModelKeyframe) {
-                removeAndDisableLegIKConstraintStates(
-                    mutableModelKeyframe, legIKConstraints.data(), legIKConstraints.size(), factory, status);
-                if (!exists) {
-                    nanoemMutableMotionAddModelKeyframe(mutableMotion, mutableModelKeyframe, frameIndex, &status);
-                }
-                nanoemMutableMotionModelKeyframeDestroy(mutableModelKeyframe);
-            }
-            nanoemMutableMotionSortAllKeyframes(mutableMotion);
-            nanoemMutableMotionDestroy(mutableMotion);
-            if (status != NANOEM_STATUS_SUCCESS) {
-                char message[Error::kMaxReasonLength];
-                StringUtils::format(message, sizeof(message), "Cannot bake imported leg IK motion: %s",
-                    Error::convertStatusToMessage(status, project->translator()));
-                error = Error(message, status, Error::kDomainTypeNanoem);
-            }
-        }
-    }
-    if (!error.hasReason()) {
-        bytes.clear();
-        bakedMotion->save(bytes, model, NANOEM_MUTABLE_MOTION_KEYFRAME_TYPE_ALL, error);
-        if (!error.hasReason()) {
-            motion->setFormat(NANOEM_MOTION_FORMAT_TYPE_NMD);
-            motion->clearAllKeyframes();
-            motion->load(bytes, 0, error);
-        }
-    }
-    project->setPhysicsSimulationMode(lastSimulationMode);
-    project->seek(lastLocalFrameIndex, true);
-    project->destroyMotion(bakedMotion);
 }
 
 struct VACData {
@@ -1289,10 +1111,7 @@ DefaultFileManager::loadModelMotion(const URI &fileURI, Project *project, Error 
                 }
                 motion->selectAllModelObjectKeyframes(model);
                 lastMotionPtr = project->addModelMotion(motion, model);
-                ApplicationPreference preference(m_applicationPtr);
-                if (preference.isModelMotionImportingWithAutoBoneBindingEnabled()) {
-                    autoBakeImportedLegIKMotion(motion, model, project, error);
-                }
+                applyInitialConstraintStatesFromMotion(motion, model);
                 project->restart();
             }
             project->destroyMotion(lastMotionPtr);
