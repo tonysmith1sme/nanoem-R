@@ -117,35 +117,6 @@ collectLegIKConstraintBoneSet(const Model *model, const nanoem_model_constraint_
         const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
         constraintBoneSet.insert(targetBonePtr);
     }
-    model::Bone::Set expandedBoneSet(constraintBoneSet);
-    for (model::Bone::Set::const_iterator it = constraintBoneSet.begin(), end = constraintBoneSet.end(); it != end;
-         ++it) {
-        const nanoem_model_bone_t *bonePtr = *it;
-        while ((bonePtr = nanoemModelBoneGetParentBoneObject(bonePtr)) != nullptr) {
-            expandedBoneSet.insert(bonePtr);
-        }
-    }
-    const model::Bone::ListTree parentBoneTree(model->parentBoneTree());
-    model::Bone::List stack;
-    for (model::Bone::Set::const_iterator it = expandedBoneSet.begin(), end = expandedBoneSet.end(); it != end; ++it) {
-        stack.push_back(*it);
-    }
-    while (!stack.empty()) {
-        const nanoem_model_bone_t *bonePtr = stack.back();
-        stack.pop_back();
-        model::Bone::ListTree::const_iterator it = parentBoneTree.find(bonePtr);
-        if (it != parentBoneTree.end()) {
-            const model::Bone::List &children = it->second;
-            for (model::Bone::List::const_iterator childIt = children.begin(), childEnd = children.end();
-                 childIt != childEnd; ++childIt) {
-                const nanoem_model_bone_t *childBonePtr = *childIt;
-                if (expandedBoneSet.insert(childBonePtr).second) {
-                    stack.push_back(childBonePtr);
-                }
-            }
-        }
-    }
-    constraintBoneSet = expandedBoneSet;
 }
 
 static void
@@ -221,7 +192,7 @@ autoBakeImportedLegIKMotion(Motion *motion, Model *model, Project *project, Erro
         return;
     }
     model::Bone::Set constraintBoneSet;
-    collectLegIKConstraintBoneSet(model, legIKConstraints.data(), legIKConstraints.size(), constraintBoneSet);
+    collectLegIKConstraintBoneSet(model, allConstraints, numAllConstraints, constraintBoneSet);
     if (constraintBoneSet.empty()) {
         return;
     }
