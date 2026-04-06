@@ -1666,6 +1666,40 @@ Model::resolveStateKeyframe(
     keyframe = motion->findModelKeyframe(frameIndex);
     if (keyframe) {
         stateKeyframe = keyframe;
+        synchronizeInterpolatedModelKeyframe(keyframe, nullptr, frameIndex);
+    }
+    else {
+        nanoem_motion_model_keyframe_t *prevKeyframe, *nextKeyframe;
+        nanoemMotionSearchClosestModelKeyframes(motion->data(), frameIndex, &prevKeyframe, &nextKeyframe);
+        stateKeyframe = prevKeyframe;
+        if (prevKeyframe && nextKeyframe) {
+            keyframe = prevKeyframe;
+            synchronizeInterpolatedModelKeyframe(prevKeyframe, nextKeyframe, frameIndex);
+        }
+    }
+    return stateKeyframe;
+}
+
+void
+Model::synchronizeInterpolatedModelKeyframe(const nanoem_motion_model_keyframe_t *keyframe,
+    const nanoem_motion_model_keyframe_t *nextKeyframe, nanoem_frame_index_t frameIndex)
+{
+    if (keyframe && nextKeyframe) {
+        const nanoem_f32_t &coef = Motion::coefficient(keyframe, nextKeyframe, frameIndex);
+        setEdgeColor(glm::mix(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(keyframe)),
+            glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(nextKeyframe)), coef));
+        setEdgeSizeScaleFactor(glm::mix(nanoemMotionModelKeyframeGetEdgeScaleFactor(keyframe),
+            nanoemMotionModelKeyframeGetEdgeScaleFactor(nextKeyframe), coef));
+        if (IEffect *effect = activeEffect()) {
+            nanoem_rsize_t numFromParameters, numToParameters;
+            nanoem_motion_effect_parameter_t *const *fromParameters =
+                nanoemMotionModelKeyframeGetAllEffectParameterObjects(keyframe, &numFromParameters);
+            nanoem_motion_effect_parameter_t *const *toParameters =
+                nanoemMotionModelKeyframeGetAllEffectParameterObjects(nextKeyframe, &numToParameters);
+            effect->setAllParameterObjects(fromParameters, numFromParameters, toParameters, numToParameters, coef);
+        }
+    }
+    else if (keyframe) {
         setEdgeColor(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(keyframe)));
         setEdgeSizeScaleFactor(nanoemMotionModelKeyframeGetEdgeScaleFactor(keyframe));
         if (IEffect *effect = activeEffect()) {
@@ -1675,28 +1709,6 @@ Model::resolveStateKeyframe(
             effect->setAllParameterObjects(parameters, numParameters);
         }
     }
-    else {
-        nanoem_motion_model_keyframe_t *prevKeyframe, *nextKeyframe;
-        nanoemMotionSearchClosestModelKeyframes(motion->data(), frameIndex, &prevKeyframe, &nextKeyframe);
-        stateKeyframe = prevKeyframe;
-        if (prevKeyframe && nextKeyframe) {
-            keyframe = prevKeyframe;
-            const nanoem_f32_t &coef = Motion::coefficient(prevKeyframe, nextKeyframe, frameIndex);
-            setEdgeColor(glm::mix(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(prevKeyframe)),
-                glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(nextKeyframe)), coef));
-            setEdgeSizeScaleFactor(glm::mix(nanoemMotionModelKeyframeGetEdgeScaleFactor(prevKeyframe),
-                nanoemMotionModelKeyframeGetEdgeScaleFactor(nextKeyframe), coef));
-            if (IEffect *effect = activeEffect()) {
-                nanoem_rsize_t numFromParameters, numToParameters;
-                nanoem_motion_effect_parameter_t *const *fromParameters =
-                    nanoemMotionModelKeyframeGetAllEffectParameterObjects(prevKeyframe, &numFromParameters);
-                nanoem_motion_effect_parameter_t *const *toParameters =
-                    nanoemMotionModelKeyframeGetAllEffectParameterObjects(nextKeyframe, &numToParameters);
-                effect->setAllParameterObjects(fromParameters, numFromParameters, toParameters, numToParameters, coef);
-            }
-        }
-    }
-    return stateKeyframe;
 }
 
 void
@@ -1731,12 +1743,13 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
         if (timing == PhysicsEngine::kSimulationTimingBefore) {
             performPrePhysicsMotion(motion, frameIndex, amount);
             solveAllConstraints();
-            performPostConstraintTransform();
+            performPostConstraintTransform(PhysicsEngine::kSimulationTimingBefore);
             synchronizeAllRigidBodyKinematics(motion, frameIndex);
             synchronizeAllRigidBodiesTransformFeedbackToSimulation();
         }
         else if (timing == PhysicsEngine::kSimulationTimingAfter) {
             synchronizeBoneMotion(motion, frameIndex, amount, timing);
+            performPostConstraintTransform(PhysicsEngine::kSimulationTimingAfter);
         }
     }
 }
@@ -1877,7 +1890,7 @@ Model::performAllBonesTransform()
 {
     applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
     solveAllConstraints();
-    performPostConstraintTransform();
+    performPostConstraintTransform(PhysicsEngine::kSimulationTimingBefore);
     PhysicsEngine *engine = m_project->physicsEngine();
     if (engine->simulationMode() == PhysicsEngine::kSimulationModeEnableAnytime) {
         synchronizeAllRigidBodiesTransformFeedbackToSimulation();
@@ -3944,9 +3957,9 @@ Model::performPrePhysicsMotion(const Motion *motion, nanoem_frame_index_t frameI
 }
 
 void
-Model::performPostConstraintTransform()
+Model::performPostConstraintTransform(PhysicsEngine::SimulationTimingType timing)
 {
-    applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
+    applyAllBonesTransform(timing);
 }
 
 void
