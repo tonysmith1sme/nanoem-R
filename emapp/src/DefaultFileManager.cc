@@ -69,15 +69,6 @@ isLegIKConstraint(const nanoem_model_constraint_t *constraintPtr, nanoem_unicode
 }
 
 static bool
-shouldAutoBakeLegIKMotion(const Motion *motion, const Model *model, Project *project) NANOEM_DECL_NOEXCEPT
-{
-    nanoem_unicode_string_factory_t *factory = project->unicodeStringFactory();
-    const nanoem_unicode_string_t *targetModelName = nanoemMotionGetTargetModelName(motion->data());
-    const nanoem_unicode_string_t *modelName = nanoemModelGetName(model->data(), NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
-    return targetModelName && modelName && nanoemUnicodeStringFactoryCompareString(factory, targetModelName, modelName) != 0;
-}
-
-static bool
 isTargetConstraintStateBone(const nanoem_unicode_string_t *name, const nanoem_model_constraint_t *const *constraints,
     nanoem_rsize_t numConstraints, nanoem_unicode_string_factory_t *factory) NANOEM_DECL_NOEXCEPT
 {
@@ -186,9 +177,6 @@ overwriteBoneKeyframeFromCurrentPose(nanoem_mutable_motion_t *mutableMotion, nan
 static void
 autoBakeImportedLegIKMotion(Motion *motion, Model *model, Project *project, Error &error)
 {
-    if (!shouldAutoBakeLegIKMotion(motion, model, project)) {
-        return;
-    }
     nanoem_unicode_string_factory_t *factory = project->unicodeStringFactory();
     nanoem_rsize_t numAllConstraints;
     nanoem_model_constraint_t *const *allConstraints =
