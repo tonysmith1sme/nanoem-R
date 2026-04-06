@@ -376,17 +376,21 @@ LoadWeightFileCallback::handleAccept(const URI &fileURI, Project *project, Error
                 ptr = p + 1;
             }
             qsort(weightRows.data(), weightRows.size(), sizeof(weightRows[0]), compareWeightRow);
-            const model::Vertex::Set *vertexSet = activeModel->selection()->allVertexSet();
+            const IModelObjectSelection *selection = activeModel->selection();
+            const model::Vertex::Set *vertexSet = selection->allVertexSet();
             nanoem_rsize_t numVertices, appliedNumVertices = 0;
             if (!vertexSet->empty()) {
                 numVertices = vertexSet->size();
-                for (model::Vertex::Set::const_iterator it = vertexSet->begin(), end = vertexSet->end(); it != end;
-                     ++it) {
-                    nanoem_model_vertex_t *vertexPtr = const_cast<nanoem_model_vertex_t *>(*it);
-                    if (applyVertex(weightRows, vertexPtr)) {
+                nanoem_model_vertex_t *const *vertices =
+                    nanoemModelGetAllVertexObjects(activeModel->data(), &numVertices);
+                appliedNumVertices = 0;
+                for (nanoem_rsize_t i = 0; i < numVertices; i++) {
+                    nanoem_model_vertex_t *vertexPtr = vertices[i];
+                    if (selection->containsVertex(vertexPtr) && applyVertex(weightRows, vertexPtr)) {
                         appliedNumVertices++;
                     }
                 }
+                numVertices = vertexSet->size();
             }
             else {
                 nanoem_model_vertex_t *const *vertices =
@@ -3173,8 +3177,7 @@ void
 ModelParameterDialog::layoutBoneConstraintPanel(nanoem_model_bone_t *bonePtr, Project *project)
 {
     char buffer[Inline::kNameStackBufferSize];
-    nanoem_model_constraint_t *constraintPtr =
-        const_cast<nanoem_model_constraint_t *>(nanoemModelBoneGetConstraintObject(bonePtr));
+    nanoem_model_constraint_t *constraintPtr = nanoemModelBoneGetConstraintObjectMutable(bonePtr);
     StringUtils::format(
         buffer, sizeof(buffer), "%s##properties.constraint", tr("nanoem.gui.model.edit.bone.inverse-kinematics"));
     if (constraintPtr && ImGui::CollapsingHeader(buffer)) {
