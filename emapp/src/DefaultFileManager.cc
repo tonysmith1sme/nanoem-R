@@ -117,6 +117,15 @@ collectLegIKConstraintBoneSet(const Model *model, const nanoem_model_constraint_
         const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
         constraintBoneSet.insert(targetBonePtr);
     }
+    model::Bone::Set expandedBoneSet(constraintBoneSet);
+    for (model::Bone::Set::const_iterator it = constraintBoneSet.begin(), end = constraintBoneSet.end(); it != end;
+         ++it) {
+        const nanoem_model_bone_t *bonePtr = *it;
+        while ((bonePtr = nanoemModelBoneGetParentBoneObject(bonePtr)) != nullptr) {
+            expandedBoneSet.insert(bonePtr);
+        }
+    }
+    constraintBoneSet = expandedBoneSet;
 }
 
 static void
