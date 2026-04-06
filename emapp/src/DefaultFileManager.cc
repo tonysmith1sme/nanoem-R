@@ -74,20 +74,7 @@ findEarliestConstraintStateKeyframe(const Motion *motion, nanoem_frame_index_t &
 static void
 applyConstraintStatesFromKeyframe(const nanoem_motion_model_keyframe_t *keyframe, Model *model)
 {
-    if (!keyframe) {
-        return;
-    }
-    nanoem_rsize_t numStates;
-    nanoem_motion_model_keyframe_constraint_state_t *const *states =
-        nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
-    for (nanoem_rsize_t i = 0; i < numStates; i++) {
-        const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
-        const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
-        const nanoem_model_constraint_t *constraintPtr = model->findConstraint(model->findBone(name));
-        if (model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
-            constraint->setEnabled(nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0);
-        }
-    }
+    model->applyConstraintStates(keyframe);
 }
 
 static void

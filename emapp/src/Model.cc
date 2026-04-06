@@ -1645,6 +1645,13 @@ Model::destroy()
 }
 
 void
+Model::applyConstraintStates(const nanoem_motion_model_keyframe_t *keyframe)
+{
+    synchronizeAllConstraintStates(keyframe);
+    applyConstraintStateChannel();
+}
+
+void
 Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount,
     PhysicsEngine::SimulationTimingType timing)
 {
