@@ -45,6 +45,7 @@
 
 #include "glm/gtx/dual_quaternion.hpp"
 #include "glm/gtx/norm.hpp"
+#include "glm/gtx/vector_query.hpp"
 
 #include "./CommandMessage.inl"
 #include "nanoem/ext/converter.h"
@@ -1761,7 +1762,8 @@ Model::resetConstraintStateChannel(bool value)
     nanoem_rsize_t numConstraints;
     nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints);
     for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        m_constraintStateChannel.insert(tinystl::make_pair(constraints[i], value));
+        m_constraintStateChannel.insert(
+            tinystl::make_pair(static_cast<const nanoem_model_constraint_t *>(constraints[i]), value));
     }
 }
 
@@ -3839,7 +3841,11 @@ Model::solveConstraint(
                     mixedOrientation = jointBone->constraintJointOrientation() * orientation;
                 }
                 BX_UNUSED_1(hasUnitXConstraint);
-                model::Bone::constrainOrientation(joint, mixedOrientation);
+                if (nanoemModelConstraintJointHasAngleLimit(joint)) {
+                    const Vector3 upperLimit(glm::make_vec3(nanoemModelConstraintJointGetUpperLimit(joint)));
+                    const Vector3 lowerLimit(glm::make_vec3(nanoemModelConstraintJointGetLowerLimit(joint)));
+                    model::Bone::constrainOrientation(upperLimit, lowerLimit, mixedOrientation);
+                }
                 jointBone->setConstraintJointOrientation(glm::normalize(mixedOrientation));
                 for (int k = Inline::saturateInt32(j); k >= 0; k--) {
                     const nanoem_model_constraint_joint_t *upperJoint = joints[k];
