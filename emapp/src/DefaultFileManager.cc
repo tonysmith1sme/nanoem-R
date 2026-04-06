@@ -129,14 +129,25 @@ copyInitialConstraintStatesToFrameZero(Motion *motion)
     if (!sourceKeyframe || firstFrameIndex == 0) {
         return;
     }
-    if (const nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
-        nanoem_status_t status = NANOEM_STATUS_SUCCESS;
-        nanoem_mutable_motion_model_keyframe_t *mutableKeyframe =
-            nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
-        if (!mutableKeyframe || status != NANOEM_STATUS_SUCCESS) {
-            nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
-            return;
+    nanoem_status_t status = NANOEM_STATUS_SUCCESS;
+    nanoem_mutable_motion_t *mutableMotion = nullptr;
+    nanoem_mutable_motion_model_keyframe_t *mutableKeyframe = nullptr;
+    const nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0);
+    if (destinationKeyframe) {
+        mutableKeyframe = nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
+    }
+    else {
+        mutableMotion = nanoemMutableMotionCreateAsReference(motion->data(), &status);
+        if (status == NANOEM_STATUS_SUCCESS) {
+            mutableKeyframe = nanoemMutableMotionModelKeyframeCreate(motion->data(), &status);
         }
+    }
+    if (!mutableKeyframe || status != NANOEM_STATUS_SUCCESS) {
+        nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
+        nanoemMutableMotionDestroy(mutableMotion);
+        return;
+    }
+    if (destinationKeyframe) {
         nanoem_rsize_t numStates;
         nanoem_motion_model_keyframe_constraint_state_t *const *states =
             nanoemMotionModelKeyframeGetAllConstraintStateObjects(destinationKeyframe, &numStates);
@@ -146,20 +157,26 @@ copyInitialConstraintStatesToFrameZero(Motion *motion)
             nanoemMutableMotionModelKeyframeRemoveConstraintState(mutableKeyframe, state, &status);
             nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
         }
-        states = nanoemMotionModelKeyframeGetAllConstraintStateObjects(sourceKeyframe, &numStates);
-        for (nanoem_rsize_t i = 0; i < numStates; i++) {
-            const nanoem_motion_model_keyframe_constraint_state_t *sourceState = states[i];
-            nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
-                nanoemMutableMotionModelKeyframeConstraintStateCreateMutable(mutableKeyframe, &status);
-            nanoemMutableMotionModelKeyframeConstraintStateSetBoneName(
-                state, nanoemMotionModelKeyframeConstraintStateGetBoneName(sourceState), &status);
-            nanoemMutableMotionModelKeyframeConstraintStateSetEnabled(
-                state, nanoemMotionModelKeyframeConstraintStateIsEnabled(sourceState));
-            nanoemMutableMotionModelKeyframeAddConstraintState(mutableKeyframe, state, &status);
-            nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
-        }
-        nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
     }
+    nanoem_rsize_t numStates;
+    nanoem_motion_model_keyframe_constraint_state_t *const *states =
+        nanoemMotionModelKeyframeGetAllConstraintStateObjects(sourceKeyframe, &numStates);
+    for (nanoem_rsize_t i = 0; i < numStates; i++) {
+        const nanoem_motion_model_keyframe_constraint_state_t *sourceState = states[i];
+        nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
+            nanoemMutableMotionModelKeyframeConstraintStateCreateMutable(mutableKeyframe, &status);
+        nanoemMutableMotionModelKeyframeConstraintStateSetBoneName(
+            state, nanoemMotionModelKeyframeConstraintStateGetBoneName(sourceState), &status);
+        nanoemMutableMotionModelKeyframeConstraintStateSetEnabled(
+            state, nanoemMotionModelKeyframeConstraintStateIsEnabled(sourceState));
+        nanoemMutableMotionModelKeyframeAddConstraintState(mutableKeyframe, state, &status);
+        nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
+    }
+    if (!destinationKeyframe && status == NANOEM_STATUS_SUCCESS) {
+        nanoemMutableMotionAddModelKeyframe(mutableMotion, mutableKeyframe, 0, &status);
+    }
+    nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
+    nanoemMutableMotionDestroy(mutableMotion);
 }
 
 static void
