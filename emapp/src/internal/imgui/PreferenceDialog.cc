@@ -93,11 +93,6 @@ PreferenceDialog::draw(Project *project)
             if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.sda.enable"), &enableSkinDeformerAccelerator)) {
                 preference.setSkinDeformAcceleratorEnabled(enableSkinDeformerAccelerator);
             }
-            bool enableModelMotionAutoBoneBinding = preference.isModelMotionImportingWithAutoBoneBindingEnabled();
-            if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.import.motion.model.bone.autobind.enable"),
-                    &enableModelMotionAutoBoneBinding)) {
-                preference.setModelMotionImportingWithAutoBoneBindingEnabled(enableModelMotionAutoBoneBinding);
-            }
             addSeparator();
             bool enableCrashReport = preference.isCrashReportEnabled();
             if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.crash-report.enable"), &enableCrashReport)) {

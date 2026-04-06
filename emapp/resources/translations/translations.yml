@@ -1503,11 +1503,6 @@
     en_US: Enable Load Balancing of Drawing Model
     ja_JP: モデル描画の負荷分散を有効にする
     zh_CN: 启用模型绘制的负载均衡
-- key: nanoem.gui.window.preference.global.import.motion.model.bone.autobind.enable
-  phrase:
-    en_US: Auto Bake Leg IK When Importing Motions for Different Models
-    ja_JP: 異なるモデル向けモーション読込時に足IKを自動ベイクする
-    zh_CN: 导入不同模型的动作时自动烘焙腿部IK
 - key: nanoem.gui.window.preference.global.system-information
   phrase:
     en_US: System Information
