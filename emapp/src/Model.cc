@@ -898,6 +898,7 @@ Model::Model(Project *project, nanoem_u16_t handle)
     m_opaque = nanoemModelCreate(project->unicodeStringFactory(), nullptr);
     m_camera->update();
     setShadowMapEnabled(true);
+    resetConstraintStateChannel(true);
 }
 
 Model::~Model() NANOEM_DECL_NOEXCEPT
@@ -1703,12 +1704,35 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
             resetAllBoneLocalTransform();
             synchronizeMorphMotion(motion, frameIndex, amount);
             synchronizeBoneMotion(motion, frameIndex, amount, timing);
+            applyConstraintStateChannel();
             solveAllConstraints();
             synchronizeAllRigidBodyKinematics(motion, frameIndex);
             synchronizeAllRigidBodiesTransformFeedbackToSimulation();
         }
         else if (timing == PhysicsEngine::kSimulationTimingAfter) {
             synchronizeBoneMotion(motion, frameIndex, amount, timing);
+        }
+    }
+}
+
+void
+Model::resetConstraintStateChannel(bool value)
+{
+    m_constraintStateChannel.clear();
+    nanoem_rsize_t numConstraints;
+    nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints);
+    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
+        m_constraintStateChannel.insert(tinystl::make_pair(constraints[i], value));
+    }
+}
+
+void
+Model::applyConstraintStateChannel()
+{
+    for (ConstraintStateChannel::const_iterator it = m_constraintStateChannel.begin(), end = m_constraintStateChannel.end();
+         it != end; ++it) {
+        if (model::Constraint *constraint = model::Constraint::cast(it->first)) {
+            constraint->setEnabled(it->second);
         }
     }
 }
@@ -3805,6 +3829,7 @@ Model::synchronizeMorphMotion(const Motion *motion, nanoem_frame_index_t frameIn
 void
 Model::synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyframe)
 {
+    resetConstraintStateChannel(true);
     nanoem_rsize_t numStates;
     nanoem_motion_model_keyframe_constraint_state_t *const *states =
         nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
@@ -3812,9 +3837,9 @@ Model::synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyf
         const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
         const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
         const nanoem_model_constraint_t *constraintPtr = findConstraint(findBone(name));
-        if (model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
+        if (constraintPtr) {
             const bool enabled = nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0;
-            constraint->setEnabled(enabled);
+            m_constraintStateChannel[constraintPtr] = enabled;
         }
     }
 }
