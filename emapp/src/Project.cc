@@ -3417,12 +3417,12 @@ Project::copyAllSelectedKeyframes(Model *model, Error &error)
         selection->getAll(boneKeyframes, &boneKeyframeStartOffset);
         selection->getAll(modelKeyframes, &modelKeyframeStartOffset);
         selection->getAll(morphKeyframes, &morphKeyframeStartOffset);
-        Motion::copyAllBoneKeyframes(const_cast<nanoem_motion_bone_keyframe_t *const *>(boneKeyframes.data()),
-            boneKeyframes.size(), selection, model, motion, boneKeyframeStartOffset * -1, status);
-        Motion::copyAllModelKeyframes(const_cast<nanoem_motion_model_keyframe_t *const *>(modelKeyframes.data()),
-            modelKeyframes.size(), selection, motion, modelKeyframeStartOffset * -1, status);
-        Motion::copyAllMorphKeyframes(const_cast<nanoem_motion_morph_keyframe_t *const *>(morphKeyframes.data()),
-            morphKeyframes.size(), selection, model, motion, morphKeyframeStartOffset * -1, status);
+        Motion::copyAllBoneKeyframes(
+            boneKeyframes.data(), boneKeyframes.size(), selection, model, motion, boneKeyframeStartOffset * -1, status);
+        Motion::copyAllModelKeyframes(
+            modelKeyframes.data(), modelKeyframes.size(), selection, motion, modelKeyframeStartOffset * -1, status);
+        Motion::copyAllMorphKeyframes(
+            morphKeyframes.data(), morphKeyframes.size(), selection, model, motion, morphKeyframeStartOffset * -1, status);
         const nanoem_unicode_string_t *name = nanoemModelGetName(model->data(), NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
         nanoemMutableMotionSetTargetModelName(motion, name, &status);
     }
@@ -3445,13 +3445,12 @@ Project::copyAllSelectedKeyframes(Model *model, Error &error)
             const IMotionKeyframeSelection *selection = selfShadowMotionPtr->selection();
             selection->getAll(selfShadowKeyframes, &selfShadowKeyframeStartOffset);
         }
-        Motion::copyAllCameraKeyframes(const_cast<nanoem_motion_camera_keyframe_t *const *>(cameraKeyframes.data()),
-            cameraKeyframes.size(), motion, cameraKeyframeStartOffset * -1, status);
-        Motion::copyAllLightKeyframes(const_cast<nanoem_motion_light_keyframe_t *const *>(lightKeyframes.data()),
-            lightKeyframes.size(), motion, lightKeyframeStartOffset * -1, status);
+        Motion::copyAllCameraKeyframes(
+            cameraKeyframes.data(), cameraKeyframes.size(), motion, cameraKeyframeStartOffset * -1, status);
+        Motion::copyAllLightKeyframes(
+            lightKeyframes.data(), lightKeyframes.size(), motion, lightKeyframeStartOffset * -1, status);
         Motion::copyAllSelfShadowKeyframes(
-            const_cast<nanoem_motion_self_shadow_keyframe_t *const *>(selfShadowKeyframes.data()),
-            selfShadowKeyframes.size(), motion, selfShadowKeyframeStartOffset * -1, status);
+            selfShadowKeyframes.data(), selfShadowKeyframes.size(), motion, selfShadowKeyframeStartOffset * -1, status);
         for (Project::AccessoryList::const_iterator it = m_allAccessoryPtrs.begin(), end = m_allAccessoryPtrs.end();
              it != end; ++it) {
             const Accessory *accessory = *it;
@@ -3460,8 +3459,7 @@ Project::copyAllSelectedKeyframes(Model *model, Error &error)
                 const IMotionKeyframeSelection *selection = accessoryMotionPtr->selection();
                 selection->getAll(accessoryKeyframes, &accessoryKeyframeStartOffset);
                 Motion::copyAllAccessoryKeyframes(
-                    const_cast<nanoem_motion_accessory_keyframe_t *const *>(accessoryKeyframes.data()),
-                    accessoryKeyframes.size(), motion, accessoryKeyframeStartOffset * -1, status);
+                    accessoryKeyframes.data(), accessoryKeyframes.size(), motion, accessoryKeyframeStartOffset * -1, status);
             }
         }
     }
