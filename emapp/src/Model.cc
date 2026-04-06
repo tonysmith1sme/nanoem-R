@@ -1648,10 +1648,12 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
     PhysicsEngine::SimulationTimingType timing)
 {
     const nanoem_motion_model_keyframe_t *keyframe = nullptr;
+    const nanoem_motion_model_keyframe_t *stateKeyframe = nullptr;
     bool visible = true;
     if (motion && timing == PhysicsEngine::kSimulationTimingBefore) {
         keyframe = motion->findModelKeyframe(frameIndex);
         if (keyframe) {
+            stateKeyframe = keyframe;
             setEdgeColor(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(keyframe)));
             setEdgeSizeScaleFactor(nanoemMotionModelKeyframeGetEdgeScaleFactor(keyframe));
             if (IEffect *effect = activeEffect()) {
@@ -1664,6 +1666,7 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
         else {
             nanoem_motion_model_keyframe_t *prevKeyframe, *nextKeyframe;
             nanoemMotionSearchClosestModelKeyframes(motion->data(), frameIndex, &prevKeyframe, &nextKeyframe);
+            stateKeyframe = prevKeyframe;
             if (prevKeyframe && nextKeyframe) {
                 keyframe = prevKeyframe;
                 const nanoem_f32_t &coef = Motion::coefficient(prevKeyframe, nextKeyframe, frameIndex);
@@ -1682,12 +1685,12 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
                 }
             }
         }
-        if (keyframe) {
-            visible = nanoemMotionModelKeyframeIsVisible(keyframe) != 0;
-            setPhysicsSimulationEnabled(nanoemMotionModelKeyframeIsPhysicsSimulationEnabled(keyframe) != 0);
+        if (stateKeyframe) {
+            visible = nanoemMotionModelKeyframeIsVisible(stateKeyframe) != 0;
+            setPhysicsSimulationEnabled(nanoemMotionModelKeyframeIsPhysicsSimulationEnabled(stateKeyframe) != 0);
             setVisible(visible);
-            synchronizeAllConstraintStates(keyframe);
-            synchronizeAllOutsideParents(keyframe);
+            synchronizeAllConstraintStates(stateKeyframe);
+            synchronizeAllOutsideParents(stateKeyframe);
         }
         else {
             visible = isVisible();
