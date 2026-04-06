@@ -188,10 +188,11 @@ copyInitialOutsideParentStatesToFrameZero(Motion *motion)
             nanoemMutableMotionOutsideParentDestroy(outsideParent);
         }
         outsideParents = nanoemMotionModelKeyframeGetAllOutsideParentObjects(sourceKeyframe, &numOutsideParents);
+        nanoem_motion_model_keyframe_t *originObject = nanoemMutableMotionModelKeyframeGetOriginObject(mutableKeyframe);
         for (nanoem_rsize_t i = 0; i < numOutsideParents; i++) {
             const nanoem_motion_outside_parent_t *sourceOutsideParent = outsideParents[i];
             nanoem_mutable_motion_outside_parent_t *outsideParent =
-                nanoemMutableMotionOutsideParentCreateFromModelKeyframe(destinationKeyframe, &status);
+                nanoemMutableMotionOutsideParentCreateFromModelKeyframe(originObject, &status);
             nanoemMutableMotionOutsideParentSetSubjectBoneName(
                 outsideParent, nanoemMotionOutsideParentGetSubjectBoneName(sourceOutsideParent), &status);
             nanoemMutableMotionOutsideParentSetTargetObjectName(
