@@ -3804,10 +3804,30 @@ Model::solveConstraint(
             const Vector4 effectorBonePosition(effectorBone->worldTransformOrigin(), 1);
             if (!model::Constraint::solveAxisAngle(
                     jointBone->worldTransform(), effectorBonePosition, targetBonePosition, jointResult)) {
+                if (nanoemModelBoneHasFixedAxis(jointBonePtr)) {
+                    const Vector3 axis(glm::make_vec3(nanoemModelBoneGetFixedAxis(jointBonePtr)));
+                    if (!glm::isNull(axis, Constants::kEpsilon)) {
+                        jointResult->setAxis(glm::normalize(axis));
+                    }
+                }
                 nanoem_f32_t newAngleLimit = angleLimit * (j + 1);
                 const bool hasUnitXConstraint = model::Constraint::hasUnitXConstraint(jointBonePtr, factory);
-                if (firstIteration && hasUnitXConstraint) {
-                    jointResult->setAxis(Constants::kUnitX);
+                if (!nanoemModelBoneHasFixedAxis(jointBonePtr) && firstIteration &&
+                    nanoemModelConstraintJointHasAngleLimit(joint)) {
+                    static const Vector3 kEpsilon(Constants::kEpsilonVec3);
+                    const glm::bvec3 hasUpperLimit(glm::lessThanEqual(
+                        glm::abs(glm::make_vec3(nanoemModelConstraintJointGetUpperLimit(joint))), kEpsilon));
+                    const glm::bvec3 hasLowerLimit(glm::lessThanEqual(
+                        glm::abs(glm::make_vec3(nanoemModelConstraintJointGetLowerLimit(joint))), kEpsilon));
+                    if (hasLowerLimit.y && hasUpperLimit.y && hasLowerLimit.z && hasUpperLimit.z) {
+                        jointResult->setAxis(Constants::kUnitX);
+                    }
+                    else if (hasLowerLimit.x && hasUpperLimit.x && hasLowerLimit.z && hasUpperLimit.z) {
+                        jointResult->setAxis(Constants::kUnitY);
+                    }
+                    else if (hasLowerLimit.x && hasUpperLimit.x && hasLowerLimit.y && hasUpperLimit.y) {
+                        jointResult->setAxis(Constants::kUnitZ);
+                    }
                 }
                 const Quaternion orientation(
                     glm::angleAxis(glm::min(jointResult->m_angle, newAngleLimit), jointResult->m_axis));
@@ -3818,11 +3838,8 @@ Model::solveConstraint(
                 else {
                     mixedOrientation = jointBone->constraintJointOrientation() * orientation;
                 }
-                if (hasUnitXConstraint) {
-                    static const Vector3 kLowerLimit(glm::radians(0.5f), 0.0f, 0.0f);
-                    static const Vector3 kUpperLimit(glm::radians(180.0f), 0.0f, 0.0f);
-                    model::Bone::constrainOrientation(kUpperLimit, kLowerLimit, mixedOrientation);
-                }
+                BX_UNUSED_1(hasUnitXConstraint);
+                model::Bone::constrainOrientation(joint, mixedOrientation);
                 jointBone->setConstraintJointOrientation(glm::normalize(mixedOrientation));
                 for (int k = Inline::saturateInt32(j); k >= 0; k--) {
                     const nanoem_model_constraint_joint_t *upperJoint = joints[k];
