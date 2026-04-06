@@ -3928,7 +3928,27 @@ Model::synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyf
     for (nanoem_rsize_t i = 0; i < numStates; i++) {
         const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
         const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
-        const nanoem_model_constraint_t *constraintPtr = findConstraint(findBone(name));
+        const nanoem_model_constraint_t *constraintPtr = findConstraint(name);
+        if (!constraintPtr) {
+            const nanoem_model_bone_t *bonePtr = findBone(name);
+            constraintPtr = bonePtr ? findConstraint(bonePtr) : nullptr;
+        }
+        if (!constraintPtr) {
+            nanoem_rsize_t numConstraints;
+            nanoem_unicode_string_factory_t *factory = m_project->unicodeStringFactory();
+            if (nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints)) {
+                for (nanoem_rsize_t j = 0; j < numConstraints; j++) {
+                    const nanoem_model_constraint_t *candidate = constraints[j];
+                    const nanoem_model_bone_t *effectorBone = nanoemModelConstraintGetEffectorBoneObject(candidate);
+                    if (effectorBone &&
+                        nanoemUnicodeStringFactoryCompareString(factory,
+                            nanoemModelBoneGetName(effectorBone, NANOEM_LANGUAGE_TYPE_FIRST_ENUM), name) == 0) {
+                        constraintPtr = candidate;
+                        break;
+                    }
+                }
+            }
+        }
         if (constraintPtr) {
             const bool enabled = nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0;
             m_constraintStateChannel[constraintPtr] = enabled;

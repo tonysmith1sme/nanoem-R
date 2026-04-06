@@ -1,6 +1,7 @@
 #macOS Cache
 .DS_Store
 /build/
+.diff
 
 # build artifact
 /compile_commands.json
