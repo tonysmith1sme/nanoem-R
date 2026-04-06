@@ -3993,8 +3993,9 @@ Model::performPrePhysicsMotion(const Motion *motion, nanoem_frame_index_t frameI
     resetAllMaterials();
     resetAllBoneLocalTransform();
     synchronizeMorphMotion(motion, frameIndex, amount);
+    applyConstraintStateChannel();
     synchronizeBoneMotion(motion, frameIndex, amount, PhysicsEngine::kSimulationTimingBefore);
-    applyAllStateChannels();
+    applyOutsideParentStateChannel();
 }
 
 void
