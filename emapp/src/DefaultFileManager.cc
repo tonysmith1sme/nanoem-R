@@ -47,32 +47,39 @@
 namespace nanoem {
 namespace {
 
-static void
-applyInitialConstraintStatesFromMotion(Motion *motion, Model *model)
+static const nanoem_motion_model_keyframe_t *
+findEarliestConstraintStateKeyframe(const Motion *motion, nanoem_frame_index_t &firstFrameIndex)
 {
     nanoem_rsize_t numKeyframes;
     nanoem_motion_model_keyframe_t *const *keyframes =
         nanoemMotionGetAllModelKeyframeObjects(motion->data(), &numKeyframes);
-    if (numKeyframes == 0) {
-        return;
-    }
     const nanoem_motion_model_keyframe_t *firstKeyframe = nullptr;
-    nanoem_frame_index_t firstFrameIndex = std::numeric_limits<nanoem_frame_index_t>::max();
+    firstFrameIndex = std::numeric_limits<nanoem_frame_index_t>::max();
     for (nanoem_rsize_t i = 0; i < numKeyframes; i++) {
         const nanoem_motion_model_keyframe_t *keyframe = keyframes[i];
-        const nanoem_frame_index_t frameIndex =
-            nanoemMotionKeyframeObjectGetFrameIndex(nanoemMotionModelKeyframeGetKeyframeObject(keyframe));
-        if (frameIndex <= firstFrameIndex) {
-            firstFrameIndex = frameIndex;
-            firstKeyframe = keyframe;
+        nanoem_rsize_t numStates;
+        nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
+        if (numStates > 0) {
+            const nanoem_frame_index_t frameIndex =
+                nanoemMotionKeyframeObjectGetFrameIndex(nanoemMotionModelKeyframeGetKeyframeObject(keyframe));
+            if (frameIndex <= firstFrameIndex) {
+                firstFrameIndex = frameIndex;
+                firstKeyframe = keyframe;
+            }
         }
     }
-    if (!firstKeyframe) {
+    return firstKeyframe;
+}
+
+static void
+applyConstraintStatesFromKeyframe(const nanoem_motion_model_keyframe_t *keyframe, Model *model)
+{
+    if (!keyframe) {
         return;
     }
     nanoem_rsize_t numStates;
     nanoem_motion_model_keyframe_constraint_state_t *const *states =
-        nanoemMotionModelKeyframeGetAllConstraintStateObjects(firstKeyframe, &numStates);
+        nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
     for (nanoem_rsize_t i = 0; i < numStates; i++) {
         const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
         const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
@@ -80,6 +87,54 @@ applyInitialConstraintStatesFromMotion(Motion *motion, Model *model)
         if (model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
             constraint->setEnabled(nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0);
         }
+    }
+}
+
+static void
+applyInitialConstraintStatesFromMotion(Motion *motion, Model *model)
+{
+    nanoem_frame_index_t firstFrameIndex;
+    applyConstraintStatesFromKeyframe(findEarliestConstraintStateKeyframe(motion, firstFrameIndex), model);
+}
+
+static void
+copyInitialConstraintStatesToFrameZero(Motion *motion)
+{
+    nanoem_frame_index_t firstFrameIndex;
+    const nanoem_motion_model_keyframe_t *sourceKeyframe = findEarliestConstraintStateKeyframe(motion, firstFrameIndex);
+    if (!sourceKeyframe || firstFrameIndex == 0) {
+        return;
+    }
+    if (nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
+        nanoem_status_t status = NANOEM_STATUS_SUCCESS;
+        nanoem_mutable_motion_model_keyframe_t *mutableKeyframe =
+            nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
+        if (!mutableKeyframe || status != NANOEM_STATUS_SUCCESS) {
+            nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
+            return;
+        }
+        nanoem_rsize_t numStates;
+        nanoem_motion_model_keyframe_constraint_state_t *const *states =
+            nanoemMotionModelKeyframeGetAllConstraintStateObjects(destinationKeyframe, &numStates);
+        for (nanoem_rsize_t i = 0; i < numStates; i++) {
+            nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
+                nanoemMutableMotionModelKeyframeConstraintStateCreateAsReference(states[i], &status);
+            nanoemMutableMotionModelKeyframeRemoveConstraintState(mutableKeyframe, state, &status);
+            nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
+        }
+        states = nanoemMotionModelKeyframeGetAllConstraintStateObjects(sourceKeyframe, &numStates);
+        for (nanoem_rsize_t i = 0; i < numStates; i++) {
+            const nanoem_motion_model_keyframe_constraint_state_t *sourceState = states[i];
+            nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
+                nanoemMutableMotionModelKeyframeConstraintStateCreateMutable(mutableKeyframe, &status);
+            nanoemMutableMotionModelKeyframeConstraintStateSetBoneName(
+                state, nanoemMotionModelKeyframeConstraintStateGetBoneName(sourceState), &status);
+            nanoemMutableMotionModelKeyframeConstraintStateSetEnabled(
+                state, nanoemMotionModelKeyframeConstraintStateIsEnabled(sourceState));
+            nanoemMutableMotionModelKeyframeAddConstraintState(mutableKeyframe, state, &status);
+            nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
+        }
+        nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
     }
 }
 
@@ -1111,6 +1166,7 @@ DefaultFileManager::loadModelMotion(const URI &fileURI, Project *project, Error 
                 }
                 motion->selectAllModelObjectKeyframes(model);
                 lastMotionPtr = project->addModelMotion(motion, model);
+                copyInitialConstraintStatesToFrameZero(motion);
                 applyInitialConstraintStatesFromMotion(motion, model);
                 project->restart();
             }
