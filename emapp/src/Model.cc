@@ -3864,7 +3864,6 @@ Model::synchronizeBoneMotion(const Motion *motion, nanoem_frame_index_t frameInd
         if ((nanoemModelBoneIsAffectedByPhysicsSimulation(bonePtr) != 0) == timing) {
             if (model::Bone *bone = model::Bone::cast(bonePtr)) {
                 bone->applyAllLocalTransform(bonePtr, this);
-                bone->applyOutsideParentTransform(bonePtr, this);
                 m_boundingBox.set(bone->worldTransformOrigin());
             }
         }
