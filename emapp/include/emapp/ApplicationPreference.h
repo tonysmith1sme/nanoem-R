@@ -73,6 +73,8 @@ public:
     void setEffectEnabled(bool value);
     bool isEffectCacheEnabled() const NANOEM_DECL_NOEXCEPT;
     void setEffectCacheEnabled(bool value);
+    bool isModelMotionImportingWithAutoBoneBindingEnabled() const NANOEM_DECL_NOEXCEPT;
+    void setModelMotionImportingWithAutoBoneBindingEnabled(bool value);
 
 private:
     const char *readString(const char *key, const char *defaultValue) const NANOEM_DECL_NOEXCEPT;

@@ -27,6 +27,7 @@ static const char kCrashReporterEnabled[] = "crashReporter.enabled";
 static const char kUndoSoftLimit[] = "undo.limit";
 static const char kEffectEnabled[] = "effect.enabled";
 static const char kEffectCacheEnabled[] = "effect.cached";
+static const char kModelMotionImportingWithAutoBoneBindingEnabled[] = "import.motion.model.bone.autobind.enabled";
 static const char kHighDPIViewportMode[] = "viewport.highDPI";
 static const char kGFXBufferPoolSize[] = "gfx.pool.buffer";
 static const char kGFXImagePoolSize[] = "gfx.pool.image";
@@ -320,6 +321,18 @@ void
 ApplicationPreference::setEffectCacheEnabled(bool value)
 {
     writeBool(kEffectCacheEnabled, value);
+}
+
+bool
+ApplicationPreference::isModelMotionImportingWithAutoBoneBindingEnabled() const NANOEM_DECL_NOEXCEPT
+{
+    return readBool(kModelMotionImportingWithAutoBoneBindingEnabled, false);
+}
+
+void
+ApplicationPreference::setModelMotionImportingWithAutoBoneBindingEnabled(bool value)
+{
+    writeBool(kModelMotionImportingWithAutoBoneBindingEnabled, value);
 }
 
 const char *
