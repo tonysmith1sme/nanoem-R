@@ -3813,7 +3813,7 @@ Model::solveConstraint(
                     glm::angleAxis(glm::min(jointResult->m_angle, newAngleLimit), jointResult->m_axis));
                 Quaternion mixedOrientation;
                 if (firstIteration) {
-                    mixedOrientation = orientation * jointBone->localOrientation();
+                    mixedOrientation = orientation * jointBone->localUserOrientation();
                 }
                 else {
                     mixedOrientation = jointBone->constraintJointOrientation() * orientation;
@@ -3823,7 +3823,7 @@ Model::solveConstraint(
                     static const Vector3 kUpperLimit(glm::radians(180.0f), 0.0f, 0.0f);
                     model::Bone::constrainOrientation(kUpperLimit, kLowerLimit, mixedOrientation);
                 }
-                jointBone->setConstraintJointOrientation(mixedOrientation);
+                jointBone->setConstraintJointOrientation(glm::normalize(mixedOrientation));
                 for (int k = Inline::saturateInt32(j); k >= 0; k--) {
                     const nanoem_model_constraint_joint_t *upperJoint = joints[k];
                     const nanoem_model_bone_t *upperJointBonePtr = nanoemModelConstraintJointGetBoneObject(upperJoint);
