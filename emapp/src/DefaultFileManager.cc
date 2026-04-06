@@ -50,8 +50,9 @@ namespace {
 static bool
 containsLegIKName(const String &value) NANOEM_DECL_NOEXCEPT
 {
-    return value.find("足ＩＫ") != String::npos || value.find("足IK") != String::npos ||
-        value.find("つま先ＩＫ") != String::npos || value.find("つま先IK") != String::npos;
+    const char *text = value.c_str();
+    return strstr(text, "足ＩＫ") != nullptr || strstr(text, "足IK") != nullptr || strstr(text, "つま先ＩＫ") != nullptr ||
+        strstr(text, "つま先IK") != nullptr;
 }
 
 static bool
@@ -137,7 +138,7 @@ removeAndDisableLegIKConstraintStates(nanoem_mutable_motion_model_keyframe_t *mu
     nanoem_motion_model_keyframe_constraint_state_t *const *states =
         nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
     for (nanoem_rsize_t i = 0; i < numStates; i++) {
-        const nanoem_motion_model_keyframe_constraint_state_t *state = states[numStates - i - 1];
+        nanoem_motion_model_keyframe_constraint_state_t *state = states[numStates - i - 1];
         if (isTargetConstraintStateBone(
                 nanoemMotionModelKeyframeConstraintStateGetBoneName(state), constraints, numConstraints, factory)) {
             nanoem_mutable_motion_model_keyframe_constraint_state_t *item =
