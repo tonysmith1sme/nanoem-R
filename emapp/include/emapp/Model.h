@@ -202,6 +202,7 @@ public:
     void clear();
     void destroy();
     void applyConstraintStates(const nanoem_motion_model_keyframe_t *keyframe);
+    void applyOutsideParentStates(const nanoem_motion_model_keyframe_t *keyframe);
     void synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount,
         PhysicsEngine::SimulationTimingType timing);
     void synchronizeAllRigidBodiesTransformFeedbackFromSimulation(PhysicsEngine::RigidBodyFollowBoneType followType);
@@ -443,6 +444,7 @@ private:
     typedef tinystl::unordered_map<const nanoem_model_bone_t *, const nanoem_model_constraint_t *, TinySTLAllocator>
         ConstraintMap;
     typedef tinystl::unordered_map<const nanoem_model_constraint_t *, bool, TinySTLAllocator> ConstraintStateChannel;
+    typedef StringPairMap OutsideParentStateChannel;
     typedef tinystl::unordered_map<nanoem_u32_t, Vector2UI16, TinySTLAllocator> ImageSizeMap;
     typedef tinystl::pair<int, model::Vertex::List> BoneVertexPair;
     struct ParallelSkinningTaskData {
@@ -530,6 +532,8 @@ private:
     void synchronizeMorphMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount);
     void resetConstraintStateChannel(bool value);
     void applyConstraintStateChannel();
+    void resetOutsideParentStateChannel();
+    void applyOutsideParentStateChannel();
     void synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyframe);
     void synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyframe);
     void synchronizeAllRigidBodyKinematics(const Motion *motion, nanoem_frame_index_t frameIndex);
@@ -594,6 +598,7 @@ private:
     MorphHashMap m_morphs;
     ConstraintMap m_constraints;
     ConstraintStateChannel m_constraintStateChannel;
+    OutsideParentStateChannel m_outsideParentStateChannel;
     StringList m_redoBoneNames;
     StringList m_redoMorphNames;
     model::Bone::OutsideParentMap m_outsideParents;

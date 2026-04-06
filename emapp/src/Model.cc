@@ -1652,6 +1652,13 @@ Model::applyConstraintStates(const nanoem_motion_model_keyframe_t *keyframe)
 }
 
 void
+Model::applyOutsideParentStates(const nanoem_motion_model_keyframe_t *keyframe)
+{
+    synchronizeAllOutsideParents(keyframe);
+    applyOutsideParentStateChannel();
+}
+
+void
 Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount,
     PhysicsEngine::SimulationTimingType timing)
 {
@@ -1712,6 +1719,7 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
             synchronizeMorphMotion(motion, frameIndex, amount);
             synchronizeBoneMotion(motion, frameIndex, amount, timing);
             applyConstraintStateChannel();
+            applyOutsideParentStateChannel();
             solveAllConstraints();
             synchronizeAllRigidBodyKinematics(motion, frameIndex);
             synchronizeAllRigidBodiesTransformFeedbackToSimulation();
@@ -1740,6 +1748,30 @@ Model::applyConstraintStateChannel()
          it != end; ++it) {
         if (model::Constraint *constraint = model::Constraint::cast(it->first)) {
             constraint->setEnabled(it->second);
+        }
+    }
+}
+
+void
+Model::resetOutsideParentStateChannel()
+{
+    m_outsideParentStateChannel.clear();
+}
+
+void
+Model::applyOutsideParentStateChannel()
+{
+    m_outsideParents.clear();
+    setActiveOutsideParentSubjectBone(nullptr);
+    for (OutsideParentStateChannel::const_iterator it = m_outsideParentStateChannel.begin(), end = m_outsideParentStateChannel.end();
+         it != end; ++it) {
+        if (const nanoem_model_bone_t *boundBone = findBone(it->first)) {
+            const StringPair &value = it->second;
+            if (const Model *opModel = m_project->findModelByName(value.first)) {
+                if (opModel->findBone(value.second)) {
+                    internalSetOutsideParent(boundBone, value);
+                }
+            }
         }
     }
 }
@@ -3858,8 +3890,7 @@ Model::synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyfra
     nanoem_rsize_t numOutsideParents;
     nanoem_motion_outside_parent_t *const *ops =
         nanoemMotionModelKeyframeGetAllOutsideParentObjects(keyframe, &numOutsideParents);
-    m_outsideParents.clear();
-    setActiveOutsideParentSubjectBone(nullptr);
+    resetOutsideParentStateChannel();
     for (nanoem_rsize_t i = 0; i < numOutsideParents; i++) {
         const nanoem_motion_outside_parent_t *op = ops[i];
         String boundBoneString;
@@ -3871,7 +3902,11 @@ Model::synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyfra
                 String opBoneString;
                 StringUtils::getUtf8String(nanoemMotionOutsideParentGetTargetBoneName(op), factory, opBoneString);
                 if (opModel->findBone(opBoneString)) {
-                    internalSetOutsideParent(boundBone, tinystl::make_pair(opModelString, opBoneString));
+                    const nanoem_unicode_string_t *name =
+                        nanoemModelBoneGetName(boundBone, NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
+                    String boundBoneKey;
+                    StringUtils::getUtf8String(name, factory, boundBoneKey);
+                    m_outsideParentStateChannel[boundBoneKey] = tinystl::make_pair(opModelString, opBoneString);
                 }
             }
         }
