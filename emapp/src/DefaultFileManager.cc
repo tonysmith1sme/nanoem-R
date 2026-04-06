@@ -129,7 +129,7 @@ copyInitialConstraintStatesToFrameZero(Motion *motion)
     if (!sourceKeyframe || firstFrameIndex == 0) {
         return;
     }
-    if (nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
+    if (const nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
         nanoem_status_t status = NANOEM_STATUS_SUCCESS;
         nanoem_mutable_motion_model_keyframe_t *mutableKeyframe =
             nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
@@ -170,7 +170,7 @@ copyInitialOutsideParentStatesToFrameZero(Motion *motion)
     if (!sourceKeyframe || firstFrameIndex == 0) {
         return;
     }
-    if (nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
+    if (const nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
         nanoem_status_t status = NANOEM_STATUS_SUCCESS;
         nanoem_mutable_motion_model_keyframe_t *mutableKeyframe =
             nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
