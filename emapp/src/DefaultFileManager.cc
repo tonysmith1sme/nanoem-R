@@ -234,22 +234,20 @@ autoBakeImportedLegIKMotion(Motion *motion, Model *model, Project *project, Erro
                         status);
                 }
             }
-            if (frameIndex == 0) {
-                nanoem_mutable_motion_model_keyframe_t *mutableModelKeyframe =
-                    nanoemMutableMotionModelKeyframeCreateByFound(bakedMotion->data(), 0, &status);
-                const bool exists = mutableModelKeyframe != nullptr;
+            nanoem_mutable_motion_model_keyframe_t *mutableModelKeyframe =
+                nanoemMutableMotionModelKeyframeCreateByFound(bakedMotion->data(), frameIndex, &status);
+            const bool exists = mutableModelKeyframe != nullptr;
+            if (!exists && frameIndex == 0) {
+                status = NANOEM_STATUS_SUCCESS;
+                mutableModelKeyframe = nanoemMutableMotionModelKeyframeCreate(bakedMotion->data(), &status);
+            }
+            if (mutableModelKeyframe) {
+                removeAndDisableLegIKConstraintStates(
+                    mutableModelKeyframe, legIKConstraints.data(), legIKConstraints.size(), factory, status);
                 if (!exists) {
-                    status = NANOEM_STATUS_SUCCESS;
-                    mutableModelKeyframe = nanoemMutableMotionModelKeyframeCreate(bakedMotion->data(), &status);
+                    nanoemMutableMotionAddModelKeyframe(mutableMotion, mutableModelKeyframe, frameIndex, &status);
                 }
-                if (mutableModelKeyframe) {
-                    removeAndDisableLegIKConstraintStates(
-                        mutableModelKeyframe, legIKConstraints.data(), legIKConstraints.size(), factory, status);
-                    if (!exists) {
-                        nanoemMutableMotionAddModelKeyframe(mutableMotion, mutableModelKeyframe, 0, &status);
-                    }
-                    nanoemMutableMotionModelKeyframeDestroy(mutableModelKeyframe);
-                }
+                nanoemMutableMotionModelKeyframeDestroy(mutableModelKeyframe);
             }
             nanoemMutableMotionSortAllKeyframes(mutableMotion);
             nanoemMutableMotionDestroy(mutableMotion);
