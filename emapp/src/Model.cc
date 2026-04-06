@@ -1721,6 +1721,7 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
             applyConstraintStateChannel();
             applyOutsideParentStateChannel();
             solveAllConstraints();
+            applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
             synchronizeAllRigidBodyKinematics(motion, frameIndex);
             synchronizeAllRigidBodiesTransformFeedbackToSimulation();
         }
@@ -1859,6 +1860,7 @@ Model::performAllBonesTransform()
 {
     applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
     solveAllConstraints();
+    applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
     PhysicsEngine *engine = m_project->physicsEngine();
     if (engine->simulationMode() == PhysicsEngine::kSimulationModeEnableAnytime) {
         synchronizeAllRigidBodiesTransformFeedbackToSimulation();
