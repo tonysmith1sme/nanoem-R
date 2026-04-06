@@ -1658,6 +1658,58 @@ Model::applyOutsideParentStates(const nanoem_motion_model_keyframe_t *keyframe)
     applyOutsideParentStateChannel();
 }
 
+const nanoem_motion_model_keyframe_t *
+Model::resolveStateKeyframe(
+    const Motion *motion, nanoem_frame_index_t frameIndex, const nanoem_motion_model_keyframe_t *&keyframe)
+{
+    const nanoem_motion_model_keyframe_t *stateKeyframe = nullptr;
+    keyframe = motion->findModelKeyframe(frameIndex);
+    if (keyframe) {
+        stateKeyframe = keyframe;
+        setEdgeColor(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(keyframe)));
+        setEdgeSizeScaleFactor(nanoemMotionModelKeyframeGetEdgeScaleFactor(keyframe));
+        if (IEffect *effect = activeEffect()) {
+            nanoem_rsize_t numParameters;
+            nanoem_motion_effect_parameter_t *const *parameters =
+                nanoemMotionModelKeyframeGetAllEffectParameterObjects(keyframe, &numParameters);
+            effect->setAllParameterObjects(parameters, numParameters);
+        }
+    }
+    else {
+        nanoem_motion_model_keyframe_t *prevKeyframe, *nextKeyframe;
+        nanoemMotionSearchClosestModelKeyframes(motion->data(), frameIndex, &prevKeyframe, &nextKeyframe);
+        stateKeyframe = prevKeyframe;
+        if (prevKeyframe && nextKeyframe) {
+            keyframe = prevKeyframe;
+            const nanoem_f32_t &coef = Motion::coefficient(prevKeyframe, nextKeyframe, frameIndex);
+            setEdgeColor(glm::mix(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(prevKeyframe)),
+                glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(nextKeyframe)), coef));
+            setEdgeSizeScaleFactor(glm::mix(nanoemMotionModelKeyframeGetEdgeScaleFactor(prevKeyframe),
+                nanoemMotionModelKeyframeGetEdgeScaleFactor(nextKeyframe), coef));
+            if (IEffect *effect = activeEffect()) {
+                nanoem_rsize_t numFromParameters, numToParameters;
+                nanoem_motion_effect_parameter_t *const *fromParameters =
+                    nanoemMotionModelKeyframeGetAllEffectParameterObjects(prevKeyframe, &numFromParameters);
+                nanoem_motion_effect_parameter_t *const *toParameters =
+                    nanoemMotionModelKeyframeGetAllEffectParameterObjects(nextKeyframe, &numToParameters);
+                effect->setAllParameterObjects(fromParameters, numFromParameters, toParameters, numToParameters, coef);
+            }
+        }
+    }
+    return stateKeyframe;
+}
+
+void
+Model::synchronizeModelKeyframeState(const nanoem_motion_model_keyframe_t *stateKeyframe)
+{
+    if (stateKeyframe) {
+        setPhysicsSimulationEnabled(nanoemMotionModelKeyframeIsPhysicsSimulationEnabled(stateKeyframe) != 0);
+        setVisible(nanoemMotionModelKeyframeIsVisible(stateKeyframe) != 0);
+        synchronizeAllConstraintStates(stateKeyframe);
+        synchronizeAllOutsideParents(stateKeyframe);
+    }
+}
+
 void
 Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount,
     PhysicsEngine::SimulationTimingType timing)
@@ -1666,46 +1718,10 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
     const nanoem_motion_model_keyframe_t *stateKeyframe = nullptr;
     bool visible = true;
     if (motion && timing == PhysicsEngine::kSimulationTimingBefore) {
-        keyframe = motion->findModelKeyframe(frameIndex);
-        if (keyframe) {
-            stateKeyframe = keyframe;
-            setEdgeColor(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(keyframe)));
-            setEdgeSizeScaleFactor(nanoemMotionModelKeyframeGetEdgeScaleFactor(keyframe));
-            if (IEffect *effect = activeEffect()) {
-                nanoem_rsize_t numParameters;
-                nanoem_motion_effect_parameter_t *const *parameters =
-                    nanoemMotionModelKeyframeGetAllEffectParameterObjects(keyframe, &numParameters);
-                effect->setAllParameterObjects(parameters, numParameters);
-            }
-        }
-        else {
-            nanoem_motion_model_keyframe_t *prevKeyframe, *nextKeyframe;
-            nanoemMotionSearchClosestModelKeyframes(motion->data(), frameIndex, &prevKeyframe, &nextKeyframe);
-            stateKeyframe = prevKeyframe;
-            if (prevKeyframe && nextKeyframe) {
-                keyframe = prevKeyframe;
-                const nanoem_f32_t &coef = Motion::coefficient(prevKeyframe, nextKeyframe, frameIndex);
-                setEdgeColor(glm::mix(glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(prevKeyframe)),
-                    glm::make_vec4(nanoemMotionModelKeyframeGetEdgeColor(nextKeyframe)), coef));
-                setEdgeSizeScaleFactor(glm::mix(nanoemMotionModelKeyframeGetEdgeScaleFactor(prevKeyframe),
-                    nanoemMotionModelKeyframeGetEdgeScaleFactor(nextKeyframe), coef));
-                if (IEffect *effect = activeEffect()) {
-                    nanoem_rsize_t numFromParameters, numToParameters;
-                    nanoem_motion_effect_parameter_t *const *fromParameters =
-                        nanoemMotionModelKeyframeGetAllEffectParameterObjects(prevKeyframe, &numFromParameters);
-                    nanoem_motion_effect_parameter_t *const *toParameters =
-                        nanoemMotionModelKeyframeGetAllEffectParameterObjects(nextKeyframe, &numToParameters);
-                    effect->setAllParameterObjects(
-                        fromParameters, numFromParameters, toParameters, numToParameters, coef);
-                }
-            }
-        }
+        stateKeyframe = resolveStateKeyframe(motion, frameIndex, keyframe);
         if (stateKeyframe) {
-            visible = nanoemMotionModelKeyframeIsVisible(stateKeyframe) != 0;
-            setPhysicsSimulationEnabled(nanoemMotionModelKeyframeIsPhysicsSimulationEnabled(stateKeyframe) != 0);
-            setVisible(visible);
-            synchronizeAllConstraintStates(stateKeyframe);
-            synchronizeAllOutsideParents(stateKeyframe);
+            synchronizeModelKeyframeState(stateKeyframe);
+            visible = isVisible();
         }
         else {
             visible = isVisible();
@@ -1713,15 +1729,9 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
     }
     if (motion && visible) {
         if (timing == PhysicsEngine::kSimulationTimingBefore) {
-            m_boundingBox.reset();
-            resetAllMaterials();
-            resetAllBoneLocalTransform();
-            synchronizeMorphMotion(motion, frameIndex, amount);
-            synchronizeBoneMotion(motion, frameIndex, amount, timing);
-            applyConstraintStateChannel();
-            applyOutsideParentStateChannel();
+            performPrePhysicsMotion(motion, frameIndex, amount);
             solveAllConstraints();
-            applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
+            performPostConstraintTransform();
             synchronizeAllRigidBodyKinematics(motion, frameIndex);
             synchronizeAllRigidBodiesTransformFeedbackToSimulation();
         }
@@ -1751,6 +1761,13 @@ Model::applyConstraintStateChannel()
             constraint->setEnabled(it->second);
         }
     }
+}
+
+void
+Model::applyAllStateChannels()
+{
+    applyConstraintStateChannel();
+    applyOutsideParentStateChannel();
 }
 
 void
@@ -1860,7 +1877,7 @@ Model::performAllBonesTransform()
 {
     applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
     solveAllConstraints();
-    applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
+    performPostConstraintTransform();
     PhysicsEngine *engine = m_project->physicsEngine();
     if (engine->simulationMode() == PhysicsEngine::kSimulationModeEnableAnytime) {
         synchronizeAllRigidBodiesTransformFeedbackToSimulation();
@@ -3913,6 +3930,23 @@ Model::synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyfra
             }
         }
     }
+}
+
+void
+Model::performPrePhysicsMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount)
+{
+    m_boundingBox.reset();
+    resetAllMaterials();
+    resetAllBoneLocalTransform();
+    synchronizeMorphMotion(motion, frameIndex, amount);
+    synchronizeBoneMotion(motion, frameIndex, amount, PhysicsEngine::kSimulationTimingBefore);
+    applyAllStateChannels();
+}
+
+void
+Model::performPostConstraintTransform()
+{
+    applyAllBonesTransform(PhysicsEngine::kSimulationTimingBefore);
 }
 
 void

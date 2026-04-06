@@ -530,12 +530,18 @@ private:
     void synchronizeBoneMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount,
         PhysicsEngine::SimulationTimingType timing);
     void synchronizeMorphMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount);
+    const nanoem_motion_model_keyframe_t *resolveStateKeyframe(const Motion *motion, nanoem_frame_index_t frameIndex,
+        const nanoem_motion_model_keyframe_t *&keyframe);
+    void synchronizeModelKeyframeState(const nanoem_motion_model_keyframe_t *stateKeyframe);
     void resetConstraintStateChannel(bool value);
+    void applyAllStateChannels();
     void applyConstraintStateChannel();
     void resetOutsideParentStateChannel();
     void applyOutsideParentStateChannel();
     void synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyframe);
     void synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyframe);
+    void performPrePhysicsMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount);
+    void performPostConstraintTransform();
     void synchronizeAllRigidBodyKinematics(const Motion *motion, nanoem_frame_index_t frameIndex);
     void dispatchParallelTasks(DispatchParallelTasksIterator iterator, void *opaque, size_t iterations);
     bool saveAllAttachments(
