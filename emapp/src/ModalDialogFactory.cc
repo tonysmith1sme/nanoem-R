@@ -832,8 +832,11 @@ AboutDialog::AboutDialog(BaseApplicationService *applicationPtr)
     : NoActionDialog(applicationPtr)
 {
     StringUtils::format(m_title, "About nanoem %s", nanoemGetVersionString());
+    String prefixText;
     StringUtils::format(
-        m_text, "Copyright (c) 2015-%s hkrn All rights reserved\n\n", nanoemGetCopyrightYearString());
+        prefixText, "Copyright (c) 2015-%s hkrn All rights reserved\n\n", nanoemGetCopyrightYearString());
+    m_text.assign(prefixText.c_str(), prefixText.c_str() + prefixText.size());
+    m_text.push_back(0);
     const nanoem_u8_t *data = nullptr;
     size_t length = 0;
     resources::getCredits(data, length);
