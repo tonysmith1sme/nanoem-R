@@ -659,7 +659,7 @@ Motion::subtractFrameIndexDelta(
 }
 
 void
-Motion::copyAllAccessoryKeyframes(nanoem_motion_accessory_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllAccessoryKeyframes(const nanoem_motion_accessory_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_motion_t *originMotion = nanoemMutableMotionGetOriginObject(motion);
@@ -689,13 +689,13 @@ Motion::copyAllAccessoryKeyframes(
 {
     nanoem_parameter_assert(motion, "must not be nullptr");
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_accessory_keyframe_t *const *keyframes =
+    const nanoem_motion_accessory_keyframe_t *const *keyframes =
         nanoemMotionGetAllAccessoryKeyframeObjects(source, &numKeyframes);
     copyAllAccessoryKeyframes(keyframes, numKeyframes, motion, offset, status);
 }
 
 void
-Motion::copyAllBoneKeyframes(nanoem_motion_bone_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllBoneKeyframes(const nanoem_motion_bone_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     const IMotionKeyframeSelection *selection, const Model *model, nanoem_mutable_motion_t *motion, int offset,
     nanoem_status_t &status)
 {
@@ -733,12 +733,12 @@ Motion::copyAllBoneKeyframes(const nanoem_motion_t *source, const IMotionKeyfram
     const Model *model, nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_bone_keyframe_t *const *keyframes = nanoemMotionGetAllBoneKeyframeObjects(source, &numKeyframes);
+    const nanoem_motion_bone_keyframe_t *const *keyframes = nanoemMotionGetAllBoneKeyframeObjects(source, &numKeyframes);
     copyAllBoneKeyframes(keyframes, numKeyframes, selection, model, motion, offset, status);
 }
 
 void
-Motion::copyAllCameraKeyframes(nanoem_motion_camera_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllCameraKeyframes(const nanoem_motion_camera_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_motion_t *originMotion = nanoemMutableMotionGetOriginObject(motion);
@@ -767,12 +767,12 @@ Motion::copyAllCameraKeyframes(
 {
     nanoem_parameter_assert(motion, "must not be nullptr");
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_camera_keyframe_t *const *keyframes = nanoemMotionGetAllCameraKeyframeObjects(source, &numKeyframes);
+    const nanoem_motion_camera_keyframe_t *const *keyframes = nanoemMotionGetAllCameraKeyframeObjects(source, &numKeyframes);
     copyAllCameraKeyframes(keyframes, numKeyframes, motion, offset, status);
 }
 
 void
-Motion::copyAllLightKeyframes(nanoem_motion_light_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllLightKeyframes(const nanoem_motion_light_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_motion_t *originMotion = nanoemMutableMotionGetOriginObject(motion);
@@ -801,12 +801,12 @@ Motion::copyAllLightKeyframes(
 {
     nanoem_parameter_assert(motion, "must not be nullptr");
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_light_keyframe_t *const *keyframes = nanoemMotionGetAllLightKeyframeObjects(source, &numKeyframes);
+    const nanoem_motion_light_keyframe_t *const *keyframes = nanoemMotionGetAllLightKeyframeObjects(source, &numKeyframes);
     copyAllLightKeyframes(keyframes, numKeyframes, motion, offset, status);
 }
 
 void
-Motion::copyAllModelKeyframes(nanoem_motion_model_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllModelKeyframes(const nanoem_motion_model_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     const IMotionKeyframeSelection *selection, nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_motion_t *originMotion = nanoemMutableMotionGetOriginObject(motion);
@@ -837,13 +837,13 @@ Motion::copyAllModelKeyframes(const nanoem_motion_t *source, const IMotionKeyfra
     nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_model_keyframe_t *const *modelKeyframes =
+    const nanoem_motion_model_keyframe_t *const *modelKeyframes =
         nanoemMotionGetAllModelKeyframeObjects(source, &numKeyframes);
     copyAllModelKeyframes(modelKeyframes, numKeyframes, selection, motion, offset, status);
 }
 
 void
-Motion::copyAllMorphKeyframes(nanoem_motion_morph_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllMorphKeyframes(const nanoem_motion_morph_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     const IMotionKeyframeSelection *selection, const Model *model, nanoem_mutable_motion_t *motion, int offset,
     nanoem_status_t &status)
 {
@@ -881,12 +881,12 @@ Motion::copyAllMorphKeyframes(const nanoem_motion_t *source, const IMotionKeyfra
     const Model *model, nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_morph_keyframe_t *const *keyframes = nanoemMotionGetAllMorphKeyframeObjects(source, &numKeyframes);
+    const nanoem_motion_morph_keyframe_t *const *keyframes = nanoemMotionGetAllMorphKeyframeObjects(source, &numKeyframes);
     copyAllMorphKeyframes(keyframes, numKeyframes, selection, model, motion, offset, status);
 }
 
 void
-Motion::copyAllSelfShadowKeyframes(nanoem_motion_self_shadow_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
+Motion::copyAllSelfShadowKeyframes(const nanoem_motion_self_shadow_keyframe_t *const *keyframes, nanoem_rsize_t numKeyframes,
     nanoem_mutable_motion_t *motion, int offset, nanoem_status_t &status)
 {
     nanoem_motion_t *originMotion = nanoemMutableMotionGetOriginObject(motion);
@@ -915,7 +915,7 @@ Motion::copyAllSelfShadowKeyframes(
 {
     nanoem_parameter_assert(motion, "must not be nullptr");
     nanoem_rsize_t numKeyframes;
-    nanoem_motion_self_shadow_keyframe_t *const *keyframes =
+    const nanoem_motion_self_shadow_keyframe_t *const *keyframes =
         nanoemMotionGetAllSelfShadowKeyframeObjects(source, &numKeyframes);
     copyAllSelfShadowKeyframes(keyframes, numKeyframes, motion, offset, status);
 }
