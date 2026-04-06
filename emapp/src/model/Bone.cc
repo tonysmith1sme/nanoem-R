@@ -132,6 +132,7 @@ void
 Bone::resetLocalTransform() NANOEM_DECL_NOEXCEPT
 {
     m_localOrientation = m_localInherentOrientation = Constants::kZeroQ;
+    m_constraintJointOrientation = Constants::kZeroQ;
     m_localTranslation = m_localInherentTranslation = Constants::kZeroV3;
     for (size_t i = 0; i < BX_COUNTOF(m_bezierControlPoints); i++) {
         nanoem_motion_bone_keyframe_interpolation_type_t type =
