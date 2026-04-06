@@ -3845,11 +3845,10 @@ Model::solveConstraint(
                     const nanoem_model_constraint_joint_t *upperJoint = joints[k];
                     const nanoem_model_bone_t *upperJointBonePtr = nanoemModelConstraintJointGetBoneObject(upperJoint);
                     model::Bone *upperJointBone = model::Bone::cast(upperJointBonePtr);
-                    upperJointBone->updateLocalTransform(upperJointBonePtr, upperJointBone->localTranslation(),
-                        upperJointBone->constraintJointOrientation());
+                    upperJointBone->applyAllLocalTransform(upperJointBonePtr, this);
                 }
                 jointResult->setTransform(jointBone->worldTransform());
-                effectorBone->updateLocalTransform(effectorBonePtr);
+                effectorBone->applyAllLocalTransform(effectorBonePtr, this);
                 model::Constraint::Joint *effectorResult = constraint->effectorIterationResult(joint, i);
                 effectorResult->setTransform(effectorBone->worldTransform());
             }
