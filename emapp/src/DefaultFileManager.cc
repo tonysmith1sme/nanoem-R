@@ -71,6 +71,30 @@ findEarliestConstraintStateKeyframe(const Motion *motion, nanoem_frame_index_t &
     return firstKeyframe;
 }
 
+static const nanoem_motion_model_keyframe_t *
+findEarliestOutsideParentKeyframe(const Motion *motion, nanoem_frame_index_t &firstFrameIndex)
+{
+    nanoem_rsize_t numKeyframes;
+    nanoem_motion_model_keyframe_t *const *keyframes =
+        nanoemMotionGetAllModelKeyframeObjects(motion->data(), &numKeyframes);
+    const nanoem_motion_model_keyframe_t *firstKeyframe = nullptr;
+    firstFrameIndex = std::numeric_limits<nanoem_frame_index_t>::max();
+    for (nanoem_rsize_t i = 0; i < numKeyframes; i++) {
+        const nanoem_motion_model_keyframe_t *keyframe = keyframes[i];
+        nanoem_rsize_t numOutsideParents;
+        nanoemMotionModelKeyframeGetAllOutsideParentObjects(keyframe, &numOutsideParents);
+        if (numOutsideParents > 0) {
+            const nanoem_frame_index_t frameIndex =
+                nanoemMotionKeyframeObjectGetFrameIndex(nanoemMotionModelKeyframeGetKeyframeObject(keyframe));
+            if (frameIndex <= firstFrameIndex) {
+                firstFrameIndex = frameIndex;
+                firstKeyframe = keyframe;
+            }
+        }
+    }
+    return firstKeyframe;
+}
+
 static void
 applyConstraintStatesFromKeyframe(const nanoem_motion_model_keyframe_t *keyframe, Model *model)
 {
@@ -78,10 +102,23 @@ applyConstraintStatesFromKeyframe(const nanoem_motion_model_keyframe_t *keyframe
 }
 
 static void
+applyOutsideParentStatesFromKeyframe(const nanoem_motion_model_keyframe_t *keyframe, Model *model)
+{
+    model->applyOutsideParentStates(keyframe);
+}
+
+static void
 applyInitialConstraintStatesFromMotion(Motion *motion, Model *model)
 {
     nanoem_frame_index_t firstFrameIndex;
     applyConstraintStatesFromKeyframe(findEarliestConstraintStateKeyframe(motion, firstFrameIndex), model);
+}
+
+static void
+applyInitialOutsideParentStatesFromMotion(Motion *motion, Model *model)
+{
+    nanoem_frame_index_t firstFrameIndex;
+    applyOutsideParentStatesFromKeyframe(findEarliestOutsideParentKeyframe(motion, firstFrameIndex), model);
 }
 
 static void
@@ -120,6 +157,49 @@ copyInitialConstraintStatesToFrameZero(Motion *motion)
                 state, nanoemMotionModelKeyframeConstraintStateIsEnabled(sourceState));
             nanoemMutableMotionModelKeyframeAddConstraintState(mutableKeyframe, state, &status);
             nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
+        }
+        nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
+    }
+}
+
+static void
+copyInitialOutsideParentStatesToFrameZero(Motion *motion)
+{
+    nanoem_frame_index_t firstFrameIndex;
+    const nanoem_motion_model_keyframe_t *sourceKeyframe = findEarliestOutsideParentKeyframe(motion, firstFrameIndex);
+    if (!sourceKeyframe || firstFrameIndex == 0) {
+        return;
+    }
+    if (nanoem_motion_model_keyframe_t *destinationKeyframe = motion->findModelKeyframe(0)) {
+        nanoem_status_t status = NANOEM_STATUS_SUCCESS;
+        nanoem_mutable_motion_model_keyframe_t *mutableKeyframe =
+            nanoemMutableMotionModelKeyframeCreateByFound(motion->data(), 0, &status);
+        if (!mutableKeyframe || status != NANOEM_STATUS_SUCCESS) {
+            nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
+            return;
+        }
+        nanoem_rsize_t numOutsideParents;
+        nanoem_motion_outside_parent_t *const *outsideParents =
+            nanoemMotionModelKeyframeGetAllOutsideParentObjects(destinationKeyframe, &numOutsideParents);
+        for (nanoem_rsize_t i = 0; i < numOutsideParents; i++) {
+            nanoem_mutable_motion_outside_parent_t *outsideParent =
+                nanoemMutableMotionOutsideParentCreateAsReference(outsideParents[i], &status);
+            nanoemMutableMotionModelKeyframeRemoveOutsideParent(mutableKeyframe, outsideParent, &status);
+            nanoemMutableMotionOutsideParentDestroy(outsideParent);
+        }
+        outsideParents = nanoemMotionModelKeyframeGetAllOutsideParentObjects(sourceKeyframe, &numOutsideParents);
+        for (nanoem_rsize_t i = 0; i < numOutsideParents; i++) {
+            const nanoem_motion_outside_parent_t *sourceOutsideParent = outsideParents[i];
+            nanoem_mutable_motion_outside_parent_t *outsideParent =
+                nanoemMutableMotionOutsideParentCreateFromModelKeyframe(destinationKeyframe, &status);
+            nanoemMutableMotionOutsideParentSetSubjectBoneName(
+                outsideParent, nanoemMotionOutsideParentGetSubjectBoneName(sourceOutsideParent), &status);
+            nanoemMutableMotionOutsideParentSetTargetObjectName(
+                outsideParent, nanoemMotionOutsideParentGetTargetObjectName(sourceOutsideParent), &status);
+            nanoemMutableMotionOutsideParentSetTargetBoneName(
+                outsideParent, nanoemMotionOutsideParentGetTargetBoneName(sourceOutsideParent), &status);
+            nanoemMutableMotionModelKeyframeAddOutsideParent(mutableKeyframe, outsideParent, &status);
+            nanoemMutableMotionOutsideParentDestroy(outsideParent);
         }
         nanoemMutableMotionModelKeyframeDestroy(mutableKeyframe);
     }
@@ -1154,7 +1234,9 @@ DefaultFileManager::loadModelMotion(const URI &fileURI, Project *project, Error 
                 motion->selectAllModelObjectKeyframes(model);
                 lastMotionPtr = project->addModelMotion(motion, model);
                 copyInitialConstraintStatesToFrameZero(motion);
+                copyInitialOutsideParentStatesToFrameZero(motion);
                 applyInitialConstraintStatesFromMotion(motion, model);
+                applyInitialOutsideParentStatesFromMotion(motion, model);
                 project->restart();
             }
             project->destroyMotion(lastMotionPtr);
