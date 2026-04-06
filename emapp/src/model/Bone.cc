@@ -316,7 +316,6 @@ Bone::applyAllLocalTransform(const nanoem_model_bone_t *bone, const Model *model
     updateLocalOrientation(bone, model);
     updateLocalTranslation(bone);
     updateLocalTransform(bone);
-    solveConstraint(bone);
 }
 
 void
