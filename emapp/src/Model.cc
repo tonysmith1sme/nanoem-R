@@ -3695,8 +3695,7 @@ Model::solveConstraint(
     const model::Bone *targetBone = model::Bone::cast(targetBonePtr);
     model::Bone *effectorBone = model::Bone::cast(effectorBonePtr);
     model::Constraint *constraint = model::Constraint::cast(constraintPtr);
-    const Vector4 effectorBonePosition(effectorBone->worldTransformOrigin(), 1),
-        targetBonePosition(targetBone->worldTransformOrigin(), 1);
+    const Vector4 targetBonePosition(targetBone->worldTransformOrigin(), 1);
     for (int i = 0; i < numIterations; i++) {
         const bool firstIteration = i == 0;
         for (nanoem_rsize_t j = 0; j < numJoints; j++) {
@@ -3704,6 +3703,7 @@ Model::solveConstraint(
             const nanoem_model_bone_t *jointBonePtr = nanoemModelConstraintJointGetBoneObject(joint);
             model::Bone *jointBone = model::Bone::cast(jointBonePtr);
             model::Constraint::Joint *jointResult = constraint->jointIterationResult(joint, i);
+            const Vector4 effectorBonePosition(effectorBone->worldTransformOrigin(), 1);
             if (!model::Constraint::solveAxisAngle(
                     jointBone->worldTransform(), effectorBonePosition, targetBonePosition, jointResult)) {
                 nanoem_f32_t newAngleLimit = angleLimit * (j + 1);
