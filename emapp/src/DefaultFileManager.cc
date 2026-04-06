@@ -7,6 +7,7 @@
 #include "emapp/DefaultFileManager.h"
 
 #include "emapp/Accessory.h"
+#include "emapp/ApplicationPreference.h"
 #include "emapp/Archiver.h"
 #include "emapp/BaseApplicationService.h"
 #include "emapp/BaseAudioPlayer.h"
@@ -1301,7 +1302,10 @@ DefaultFileManager::loadModelMotion(const URI &fileURI, Project *project, Error 
                 }
                 motion->selectAllModelObjectKeyframes(model);
                 lastMotionPtr = project->addModelMotion(motion, model);
-                autoBakeImportedLegIKMotion(motion, model, project, error);
+                ApplicationPreference preference(m_applicationPtr);
+                if (preference.isModelMotionImportingWithAutoBoneBindingEnabled()) {
+                    autoBakeImportedLegIKMotion(motion, model, project, error);
+                }
                 project->restart();
             }
             project->destroyMotion(lastMotionPtr);
