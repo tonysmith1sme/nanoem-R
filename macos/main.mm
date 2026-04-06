@@ -90,11 +90,15 @@ main(int argc, char *argv[])
 #if defined(NANOEM_ENABLE_LOGGING)
             spdlog::init_thread_pool(1024, 1);
             tinystl::vector<spdlog::sink_ptr, TinySTLAllocator> sinks;
-            sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+            sinks.push_back(std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
             auto logger = std::make_shared<spdlog::async_logger>(
                 "emapp", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+            logger->set_level(spdlog::level::trace);
+            logger->flush_on(spdlog::level::debug);
             spdlog::register_logger(logger);
             spdlog::cfg::load_env_levels();
+            logger->info("nanoem logger initialized");
+            logger->flush();
 #endif /* NANOEM_ENABLE_LOGGING */
             {
                 NSWindow *nativeWindow = macos::CocoaThreadedApplicationService::createMainWindow();

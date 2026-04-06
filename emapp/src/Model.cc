@@ -1730,6 +1730,11 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
     const nanoem_motion_model_keyframe_t *keyframe = nullptr;
     const nanoem_motion_model_keyframe_t *stateKeyframe = nullptr;
     bool visible = true;
+#if NANOEM_ENABLE_LOGGING
+    EMLOG_DEBUG("synchronizeMotion: model={} frameIndex={} amount={} timing={} hasMotion={}",
+        canonicalNameConstString(), frameIndex, amount,
+        timing == PhysicsEngine::kSimulationTimingBefore ? "before" : "after", motion != nullptr);
+#endif /* NANOEM_ENABLE_LOGGING */
     if (motion && timing == PhysicsEngine::kSimulationTimingBefore) {
         stateKeyframe = resolveStateKeyframe(motion, frameIndex, keyframe);
         if (stateKeyframe) {
@@ -1742,6 +1747,10 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
     }
     if (motion && visible) {
         if (timing == PhysicsEngine::kSimulationTimingBefore) {
+#if NANOEM_ENABLE_LOGGING
+            EMLOG_DEBUG("synchronizeMotion(before): frameIndex={} hasStateKeyframe={} hasKeyframe={}", frameIndex,
+                stateKeyframe != nullptr, keyframe != nullptr);
+#endif /* NANOEM_ENABLE_LOGGING */
             performPrePhysicsMotion(motion, frameIndex, amount);
             solveAllConstraints();
             performPostConstraintTransform(PhysicsEngine::kSimulationTimingBefore);
@@ -1761,9 +1770,20 @@ Model::resetConstraintStateChannel(bool value)
     m_constraintStateChannel.clear();
     nanoem_rsize_t numConstraints;
     nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints);
-    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        m_constraintStateChannel.insert(
-            tinystl::make_pair(static_cast<const nanoem_model_constraint_t *>(constraints[i]), value));
+    if (constraints && numConstraints > 0) {
+        for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
+            m_constraintStateChannel.insert(
+                tinystl::make_pair(static_cast<const nanoem_model_constraint_t *>(constraints[i]), value));
+        }
+    }
+    else {
+        nanoem_rsize_t numBones;
+        nanoem_model_bone_t *const *bones = nanoemModelGetAllBoneObjects(m_opaque, &numBones);
+        for (nanoem_rsize_t i = 0; i < numBones; i++) {
+            if (const nanoem_model_constraint_t *constraint = nanoemModelBoneGetConstraintObject(bones[i])) {
+                m_constraintStateChannel.insert(tinystl::make_pair(constraint, value));
+            }
+        }
     }
 }
 
@@ -2358,14 +2378,19 @@ Model::solveAllConstraints()
     nanoem_rsize_t numConstraints;
     nanoem_unicode_string_factory_t *factory = m_project->unicodeStringFactory();
     nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints);
-    for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-        const nanoem_model_constraint_t *constraintPtr = constraints[i];
+    const auto solveConstraintIfNeeded = [this, factory](const nanoem_model_constraint_t *constraintPtr) {
         if (const model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
             if (constraint->isEnabled()) {
                 const int numIterations = nanoemModelConstraintGetNumIterations(constraintPtr);
+#if NANOEM_ENABLE_LOGGING
+                const nanoem_model_bone_t *effectorBonePtr = nanoemModelConstraintGetEffectorBoneObject(constraintPtr);
+                EMLOG_DEBUG("Solving constraint: name={} iterations={} effector={}", constraint->nameConstString(),
+                    numIterations, model::Bone::nameConstString(effectorBonePtr, "(null)"));
+#endif /* NANOEM_ENABLE_LOGGING */
                 solveConstraint(constraintPtr, numIterations, factory);
             }
             else {
+                EMLOG_DEBUG("Skipping disabled constraint: name={}", constraint->nameConstString());
                 nanoem_rsize_t numJoints;
                 nanoem_model_constraint_joint_t *const *joints =
                     nanoemModelConstraintGetAllJointObjects(constraintPtr, &numJoints);
@@ -2375,6 +2400,26 @@ Model::solveAllConstraints()
                         jointBone->setConstraintJointOrientation(Constants::kZeroQ);
                     }
                 }
+            }
+        }
+    };
+#if NANOEM_ENABLE_LOGGING
+    EMLOG_DEBUG("solveAllConstraints: model={} numConstraints={}", canonicalNameConstString(), numConstraints);
+#endif /* NANOEM_ENABLE_LOGGING */
+    if (constraints && numConstraints > 0) {
+        for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
+            solveConstraintIfNeeded(constraints[i]);
+        }
+    }
+    else {
+        nanoem_rsize_t numBones;
+        nanoem_model_bone_t *const *bones = nanoemModelGetAllBoneObjects(m_opaque, &numBones);
+#if NANOEM_ENABLE_LOGGING
+        EMLOG_DEBUG("solveAllConstraints: falling back to bone-attached constraints numBones={}", numBones);
+#endif /* NANOEM_ENABLE_LOGGING */
+        for (nanoem_rsize_t i = 0; i < numBones; i++) {
+            if (const nanoem_model_constraint_t *constraintPtr = nanoemModelBoneGetConstraintObject(bones[i])) {
+                solveConstraintIfNeeded(constraintPtr);
             }
         }
     }
@@ -3925,17 +3970,22 @@ Model::synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyf
     nanoem_rsize_t numStates;
     nanoem_motion_model_keyframe_constraint_state_t *const *states =
         nanoemMotionModelKeyframeGetAllConstraintStateObjects(keyframe, &numStates);
+#if NANOEM_ENABLE_LOGGING
+    EMLOG_DEBUG("synchronizeAllConstraintStates: model={} numStates={}", canonicalNameConstString(), numStates);
+#endif /* NANOEM_ENABLE_LOGGING */
     for (nanoem_rsize_t i = 0; i < numStates; i++) {
         const nanoem_motion_model_keyframe_constraint_state_t *state = states[i];
         const nanoem_unicode_string_t *name = nanoemMotionModelKeyframeConstraintStateGetBoneName(state);
         const nanoem_model_constraint_t *constraintPtr = findConstraint(name);
+        String motionBoneName;
+        nanoem_unicode_string_factory_t *factory = m_project->unicodeStringFactory();
+        StringUtils::getUtf8String(name, factory, motionBoneName);
         if (!constraintPtr) {
             const nanoem_model_bone_t *bonePtr = findBone(name);
             constraintPtr = bonePtr ? findConstraint(bonePtr) : nullptr;
         }
         if (!constraintPtr) {
             nanoem_rsize_t numConstraints;
-            nanoem_unicode_string_factory_t *factory = m_project->unicodeStringFactory();
             if (nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numConstraints)) {
                 for (nanoem_rsize_t j = 0; j < numConstraints; j++) {
                     const nanoem_model_constraint_t *candidate = constraints[j];
@@ -3952,6 +4002,17 @@ Model::synchronizeAllConstraintStates(const nanoem_motion_model_keyframe_t *keyf
         if (constraintPtr) {
             const bool enabled = nanoemMotionModelKeyframeConstraintStateIsEnabled(state) != 0;
             m_constraintStateChannel[constraintPtr] = enabled;
+#if NANOEM_ENABLE_LOGGING
+            if (const model::Constraint *constraint = model::Constraint::cast(constraintPtr)) {
+                EMLOG_DEBUG("Resolved constraint state: motionBone={} constraint={} enabled={}",
+                    motionBoneName.c_str(), constraint->nameConstString(), enabled);
+            }
+#endif /* NANOEM_ENABLE_LOGGING */
+        }
+        else {
+            String unresolvedName;
+            StringUtils::getUtf8String(name, factory, unresolvedName);
+            EMLOG_WARN("Constraint state unresolved: name={}", unresolvedName.c_str());
         }
     }
 }
@@ -3989,6 +4050,10 @@ Model::synchronizeAllOutsideParents(const nanoem_motion_model_keyframe_t *keyfra
 void
 Model::performPrePhysicsMotion(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount)
 {
+#if NANOEM_ENABLE_LOGGING
+    EMLOG_DEBUG("performPrePhysicsMotion: model={} frameIndex={} amount={}", canonicalNameConstString(), frameIndex,
+        amount);
+#endif /* NANOEM_ENABLE_LOGGING */
     m_boundingBox.reset();
     resetAllMaterials();
     resetAllBoneLocalTransform();
