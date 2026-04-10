@@ -38,6 +38,8 @@
 #include "emapp/command/RemoveTimelineFrameCommand.h"
 #include "emapp/private/CommonInclude.h"
 
+#include "glm/gtc/matrix_inverse.hpp"
+
 namespace nanoem {
 
 CommandRegistrator::CommandRegistrator(Project *project)
@@ -872,6 +874,28 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
     const Project::ModelList *models = m_project->allModels();
     Project::MotionList motions;
     motions.reserve(models->size());
+    const auto writeBakedBoneTransform =
+        [](const Model *model, const nanoem_model_bone_t *bonePtr, const model::Bone *bone,
+            nanoem_mutable_motion_bone_keyframe_t *dst) {
+            BX_UNUSED_1(model);
+            Vector3 translation;
+            Quaternion orientation;
+            if (const nanoem_model_bone_t *parentBonePtr = nanoemModelBoneGetParentBoneObject(bonePtr)) {
+                const model::Bone *parentBone = model::Bone::cast(parentBonePtr);
+                const Vector3 offset(model::Bone::origin(bonePtr) - model::Bone::origin(parentBonePtr));
+                const Matrix4x4 localTransform(glm::affineInverse(parentBone->worldTransform()) * bone->worldTransform());
+                translation = Vector3(localTransform[3]) - offset;
+                orientation = glm::quat_cast(localTransform);
+            }
+            else {
+                const Matrix4x4 localTransform(bone->worldTransform());
+                translation = Vector3(localTransform[3]) - model::Bone::origin(bonePtr);
+                orientation = glm::quat_cast(localTransform);
+            }
+            const Vector4 value(translation, 1);
+            nanoemMutableMotionBoneKeyframeSetTranslation(dst, glm::value_ptr(value));
+            nanoemMutableMotionBoneKeyframeSetOrientation(dst, glm::value_ptr(orientation));
+        };
     for (Project::ModelList::const_iterator it = models->begin(), end = models->end(); it != end; ++it) {
         Model *model = *it;
         Motion *motion = m_project->createMotion();
@@ -975,10 +999,7 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                             : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
                         nanoemMutableMotionBoneKeyframeCopy(dst, nanoemMutableMotionBoneKeyframeGetOriginObject(src));
                         if (enableBakingConstraint && constraintBoneSet.find(bonePtr) != constraintBoneSet.end()) {
-                            const Matrix4x4 transform(bone->localTransform());
-                            nanoemMutableMotionBoneKeyframeSetTranslation(dst, glm::value_ptr(transform[3]));
-                            nanoemMutableMotionBoneKeyframeSetOrientation(
-                                dst, glm::value_ptr(glm::quat_cast(transform)));
+                            writeBakedBoneTransform(model, bonePtr, bone, dst);
                         }
                         nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
                         nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
@@ -1000,12 +1021,10 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                         }
                     }
                     else if (enableBakingConstraint && constraintBoneSet.find(bonePtr) != constraintBoneSet.end()) {
-                        const Matrix4x4 transform(bone->localTransform());
                         nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
                             ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
                             : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
-                        nanoemMutableMotionBoneKeyframeSetTranslation(dst, glm::value_ptr(transform[3]));
-                        nanoemMutableMotionBoneKeyframeSetOrientation(dst, glm::value_ptr(glm::quat_cast(transform)));
+                        writeBakedBoneTransform(model, bonePtr, bone, dst);
                         nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
                         nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
                         nanoemMutableMotionBoneKeyframeDestroy(dst);
