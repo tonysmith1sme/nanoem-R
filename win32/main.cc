@@ -24,7 +24,6 @@
 #if defined(NANOEM_ENABLE_LOGGING)
 #define SPDLOG_WCHAR_TO_UTF8_SUPPORT
 #include "spdlog/async.h"
-#include "spdlog/cfg/env.h"
 #include "spdlog/sinks/base_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
@@ -86,8 +85,11 @@ runApplication(HINSTANCE hInstance, int argc, const char *const *argv, const wch
         sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
         auto logger = std::make_shared<spdlog::async_logger>(
             "emapp", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+        logger->set_level(spdlog::level::debug);
+        logger->flush_on(spdlog::level::debug);
         spdlog::register_logger(logger);
-        spdlog::cfg::load_env_levels();
+        logger->info("nanoem logger initialized");
+        logger->flush();
 #endif /* NANOEM_ENABLE_LOGGING */
         const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
         const int screenHeight = GetSystemMetrics(SM_CYSCREEN);

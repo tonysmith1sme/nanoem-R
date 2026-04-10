@@ -14,7 +14,6 @@
 #include "whereami.h"
 
 #if defined(NANOEM_ENABLE_LOGGING)
-#include "spdlog/cfg/env.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #endif /* NANOEM_ENABLE_LOGGING */
 
@@ -105,8 +104,10 @@ sokol_main(int argc, char *argv[])
 {
     Allocator::initialize();
 #if defined(NANOEM_ENABLE_LOGGING)
-    spdlog::stdout_color_mt("emapp");
-    spdlog::cfg::load_env_levels();
+    auto logger = spdlog::stdout_color_mt("emapp");
+    logger->set_level(spdlog::level::debug);
+    logger->flush_on(spdlog::level::debug);
+    logger->info("nanoem logger initialized");
 #endif /* NANOEM_ENABLE_LOGGING */
     auto state = new ApplicationState(argc, argv);
     sapp_desc desc = {};
