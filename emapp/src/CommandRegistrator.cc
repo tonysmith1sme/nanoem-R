@@ -953,11 +953,16 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
             nanoem_mutable_motion_t *m = nanoemMutableMotionCreateAsReference(dstMotionPtr, &status);
             nanoem_mutable_motion_model_keyframe_t *mk = nullptr;
             nanoem_model_bone_t *const *bones = nanoemModelGetAllBoneObjects(model->data(), &numBones);
+            mk = frameIndex == 0 ? nanoemMutableMotionModelKeyframeCreateByFound(dstMotionPtr, 0, &status)
+                                 : nanoemMutableMotionModelKeyframeCreate(dstMotionPtr, &status);
+            nanoemMutableMotionModelKeyframeSetAddBlendEnabled(mk, model->isAddBlendEnabled());
+            nanoemMutableMotionModelKeyframeSetEdgeColor(mk, glm::value_ptr(model->edgeColor()));
+            nanoemMutableMotionModelKeyframeSetEdgeScaleFactor(mk, model->edgeSizeScaleFactor());
+            nanoemMutableMotionModelKeyframeSetVisible(mk, model->isVisible());
+            nanoemMutableMotionModelKeyframeSetPhysicsSimulationEnabled(mk, 0);
             if (nanoem_mutable_motion_model_keyframe_t *src =
                     nanoemMutableMotionModelKeyframeCreateByFound(sourceMotionPtr, frameIndex, &status)) {
                 nanoem_motion_model_keyframe_t *sk = nanoemMutableMotionModelKeyframeGetOriginObject(src);
-                mk = frameIndex == 0 ? nanoemMutableMotionModelKeyframeCreateByFound(dstMotionPtr, 0, &status)
-                                     : nanoemMutableMotionModelKeyframeCreate(dstMotionPtr, &status);
                 nanoemMutableMotionModelKeyframeSetAddBlendEnabled(mk, nanoemMotionModelKeyframeIsAddBlendEnabled(sk));
                 nanoemMutableMotionModelKeyframeSetEdgeColor(mk, nanoemMotionModelKeyframeGetEdgeColor(sk));
                 nanoemMutableMotionModelKeyframeSetEdgeScaleFactor(mk, nanoemMotionModelKeyframeGetEdgeScaleFactor(sk));
