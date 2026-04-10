@@ -223,13 +223,14 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2.0.15
         with:
           manifest-path: ./rust/Cargo.toml
+          rust-version: 1.91.0
       - name: setup rust toolchain (stable and wasm32-wasip1)
         uses: actions-rust-lang/setup-rust-toolchain@1fbea72663f6d4c03efaab13560c8a24cfd2a7cc # v1.9.0
         with:
           cache-workspaces: ${{ env.NANOEM_RUST_DIRECTORY }}
           components: rustfmt
           target: wasm32-wasip1
-          toolchain: 1.90.0
+          toolchain: 1.91.0
       - name: run rustfmt for check
         uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1.1.1
         with:
