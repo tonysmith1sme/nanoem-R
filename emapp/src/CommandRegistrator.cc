@@ -857,6 +857,8 @@ void
 CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstraint, Error &error)
 {
     typedef tinystl::unordered_map<const Model *, model::Bone::Set, TinySTLAllocator> AllModelConstraintBoneSet;
+    typedef tinystl::pair<Vector3, Quaternion> BoneTransform;
+    typedef tinystl::unordered_map<const nanoem_model_bone_t *, BoneTransform, TinySTLAllocator> BoneTransformMap;
     typedef tinystl::unordered_map<const nanoem_model_bone_t *, const nanoem_model_bone_t *, TinySTLAllocator>
         ResolveInherentParentBoneMap;
     const nanoem_frame_index_t duration = m_project->duration(),
@@ -976,6 +978,30 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
             }
             else {
                 constraintBoneSet.clear();
+            }
+            if (enableBakingConstraint) {
+                BoneTransformMap bakedPhysicsBoneTransforms;
+                for (nanoem_rsize_t i = 0; i < numBones; i++) {
+                    const nanoem_model_bone_t *candidateBonePtr = bones[i];
+                    if (model->isRigidBodyBound(candidateBonePtr) &&
+                        constraintBoneSet.find(candidateBonePtr) == constraintBoneSet.end()) {
+                        if (const model::Bone *candidateBone = model::Bone::cast(candidateBonePtr)) {
+                            bakedPhysicsBoneTransforms.insert(tinystl::make_pair(candidateBonePtr,
+                                tinystl::make_pair(
+                                    candidateBone->localUserTranslation(), candidateBone->localUserOrientation())));
+                        }
+                    }
+                }
+                model->synchronizeMotionForBake(sourceMotion, frameIndex, 0);
+                for (BoneTransformMap::const_iterator it3 = bakedPhysicsBoneTransforms.begin(),
+                                                     end3 = bakedPhysicsBoneTransforms.end();
+                     it3 != end3; ++it3) {
+                    if (model::Bone *physicsBone = model::Bone::cast(it3->first)) {
+                        physicsBone->setLocalUserTranslation(it3->second.first);
+                        physicsBone->setLocalUserOrientation(it3->second.second);
+                    }
+                }
+                model->performAllBonesTransform();
             }
             for (nanoem_rsize_t i = 0; i < numBones; i++) {
                 const nanoem_model_bone_t *bonePtr = bones[i];

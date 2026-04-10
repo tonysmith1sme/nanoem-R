@@ -1765,6 +1765,29 @@ Model::synchronizeMotion(const Motion *motion, nanoem_frame_index_t frameIndex, 
 }
 
 void
+Model::synchronizeMotionForBake(const Motion *motion, nanoem_frame_index_t frameIndex, nanoem_f32_t amount)
+{
+    const nanoem_motion_model_keyframe_t *keyframe = nullptr;
+    const nanoem_motion_model_keyframe_t *stateKeyframe = nullptr;
+    bool visible = true;
+    if (motion) {
+        stateKeyframe = resolveStateKeyframe(motion, frameIndex, keyframe);
+        if (stateKeyframe) {
+            setVisible(nanoemMotionModelKeyframeIsVisible(stateKeyframe) != 0);
+            synchronizeAllConstraintStates(stateKeyframe);
+            synchronizeAllOutsideParents(stateKeyframe);
+            visible = isVisible();
+        }
+        else {
+            visible = isVisible();
+        }
+    }
+    if (motion && visible) {
+        performPrePhysicsMotion(motion, frameIndex, amount);
+    }
+}
+
+void
 Model::resetConstraintStateChannel(bool value)
 {
     m_constraintStateChannel.clear();
