@@ -18,6 +18,7 @@
 #include "CocoaThreadedApplicationService.h"
 #if defined(NANOEM_ENABLE_LOGGING)
 #include "spdlog/async.h"
+#include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #endif /* NANOEM_ENABLE_LOGGING */
 
@@ -94,7 +95,7 @@ main(int argc, char *argv[])
                 "emapp", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
             logger->set_level(spdlog::level::debug);
             logger->flush_on(spdlog::level::debug);
-            spdlog::register_logger(logger);
+            spdlog::set_default_logger(logger);
             logger->info("nanoem logger initialized");
             logger->flush();
 #endif /* NANOEM_ENABLE_LOGGING */
