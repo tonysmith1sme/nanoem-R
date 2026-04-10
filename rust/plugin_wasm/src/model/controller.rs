@@ -6,7 +6,7 @@
 
 use std::{ffi::CString, path::Path, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use notify::Watcher;
 use parking_lot::Mutex;
 use walkdir::WalkDir;
@@ -50,7 +50,8 @@ impl ModelIOPluginController {
         let plugins_inner = Arc::clone(&plugins);
         let mut linker = Linker::new(&engine);
         let linker_inner = linker.clone();
-        wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)?;
+        wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)
+            .map_err(|error| anyhow!(error.to_string()))?;
         let event_handler = move |res: notify::Result<notify::Event>| match res {
             Ok(ev) => {
                 let create_plugin = |path: &Path| -> Result<ModelIOPlugin> {

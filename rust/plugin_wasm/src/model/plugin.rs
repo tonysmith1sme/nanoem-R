@@ -15,67 +15,84 @@ use crate::{
     inner_get_data, inner_get_function_name, inner_get_string, inner_initialize_function,
     inner_load_ui_window, inner_set_data, inner_set_function, inner_set_language,
     inner_set_ui_component_layout, inner_terminate_function, ByteArray, OpaquePtr, SizePtr,
-    StatusPtr, Store, FREE_FN, MALLOC_FN,
+    StatusPtr, Store, FREE_FN, MALLOC_FN, wrap_wasmtime_error,
 };
 
 fn validate_plugin(instance: &Instance, mut store: impl AsContextMut) -> Result<()> {
     instance
         .get_memory(store.as_context_mut(), "memory")
         .unwrap();
-    instance.get_typed_func::<u32, OpaquePtr>(store.as_context_mut(), MALLOC_FN)?;
-    instance.get_typed_func::<OpaquePtr, ()>(store.as_context_mut(), FREE_FN)?;
+    instance
+        .get_typed_func::<u32, OpaquePtr>(store.as_context_mut(), MALLOC_FN)
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ()>(store.as_context_mut(), FREE_FN)
+        .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(), OpaquePtr>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOCreate",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetName",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetVersion",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOSetLanguage",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, i32>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOCountAllFunctions",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32), ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetFunctionName",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOSetFunction",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOSetInputModelData",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOExecute",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetOutputModelData",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, SizePtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetOutputModelDataSize",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIOGetFailureReason",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginModelIODestroy",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     Ok(())
 }
 
@@ -93,8 +110,10 @@ impl ModelIOPlugin {
         bytes: &[u8],
         mut store: Store,
     ) -> Result<Self> {
-        let module = Module::new(linker.engine(), bytes)?;
-        let instance = linker.instantiate(store.as_context_mut(), &module)?;
+        let module = Module::new(linker.engine(), bytes).map_err(wrap_wasmtime_error)?;
+        let instance = linker
+            .instantiate(store.as_context_mut(), &module)
+            .map_err(wrap_wasmtime_error)?;
         validate_plugin(&instance, store.as_context_mut())?;
         let path = path.to_path_buf();
         Ok(Self {

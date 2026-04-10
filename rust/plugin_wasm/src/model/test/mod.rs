@@ -130,7 +130,8 @@ fn inner_create_controller(pipe: Box<dyn WasiFile>, path: &str) -> Result<ModelI
     let store = Store::new(&engine, data);
     let bytes = std::fs::read(&path)?;
     let mut linker = Linker::new(&engine);
-    wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)?;
+    wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let plugin = ModelIOPlugin::new(&linker, &path, &bytes, store)?;
     let watcher = notify::recommended_watcher(|_res| {})?;
     Ok(ModelIOPluginController::new(

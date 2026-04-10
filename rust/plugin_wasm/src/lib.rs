@@ -7,7 +7,7 @@
 use core::slice;
 use std::mem::size_of;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use wasi_common::WasiCtx;
 use wasmtime::{AsContextMut, Instance, Memory, TypedFunc};
 use zerocopy::IntoBytes;
@@ -59,6 +59,10 @@ fn notify_export_function_error(name: &str) {
     );
 }
 
+fn wrap_wasmtime_error(error: wasmtime::Error) -> anyhow::Error {
+    anyhow!(error.to_string())
+}
+
 fn inner_get_data_internal(
     instance: &Instance,
     opaque: &OpaquePtr,
@@ -68,7 +72,9 @@ fn inner_get_data_internal(
     mut store: impl AsContextMut,
 ) -> Result<()> {
     let data_size_ptr = allocate_size_ptr(instance, store.as_context_mut())?;
-    get_data_size.call(store.as_context_mut(), (*opaque, data_size_ptr))?;
+    get_data_size
+        .call(store.as_context_mut(), (*opaque, data_size_ptr))
+        .map_err(wrap_wasmtime_error)?;
     let mut data_size = 0;
     inner_memory(instance, store.as_context_mut())?.read(
         store.as_context_mut(),
@@ -77,10 +83,12 @@ fn inner_get_data_internal(
     )?;
     let bytes = allocate_byte_array(instance, data_size, store.as_context_mut())?;
     let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-    get_data_body.call(
-        store.as_context_mut(),
-        (*opaque, bytes, data_size, status_ptr),
-    )?;
+    get_data_body
+        .call(
+            store.as_context_mut(),
+            (*opaque, bytes, data_size, status_ptr),
+        )
+        .map_err(wrap_wasmtime_error)?;
     output_data.resize(data_size as usize, 0);
     inner_memory(instance, store.as_context_mut())?.read(
         store.as_context_mut(),
@@ -106,19 +114,21 @@ fn inner_set_data_internal(
     {
         let data_ptr = allocate_byte_array_with_data(instance, data, store.as_context_mut())?;
         let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-        set_input_model_data.call(
-            store.as_context_mut(),
-            (
-                *opaque,
-                data_ptr,
-                if component_size > 1 {
-                    (data.len() / component_size) as u32
-                } else {
-                    data.len() as u32
-                },
-                status_ptr,
-            ),
-        )?;
+        set_input_model_data
+            .call(
+                store.as_context_mut(),
+                (
+                    *opaque,
+                    data_ptr,
+                    if component_size > 1 {
+                        (data.len() / component_size) as u32
+                    } else {
+                        data.len() as u32
+                    },
+                    status_ptr,
+                ),
+            )
+            .map_err(wrap_wasmtime_error)?;
         release_byte_array(instance, data_ptr, store.as_context_mut())?;
         release_status_ptr(instance, status_ptr, store.as_context_mut())?;
     } else {
@@ -143,8 +153,12 @@ pub(crate) fn allocate_byte_array(
     mut store: impl AsContextMut,
 ) -> Result<ByteArray> {
     let malloc_func =
-        instance.get_typed_func::<u32, ByteArray>(store.as_context_mut(), MALLOC_FN)?;
-    let data_ptr = malloc_func.call(store.as_context_mut(), data_size)?;
+        instance
+            .get_typed_func::<u32, ByteArray>(store.as_context_mut(), MALLOC_FN)
+            .map_err(wrap_wasmtime_error)?;
+    let data_ptr = malloc_func
+        .call(store.as_context_mut(), data_size)
+        .map_err(wrap_wasmtime_error)?;
     tracing::debug!(size = data_size, "Allocated byte array");
     Ok(data_ptr)
 }
@@ -170,8 +184,12 @@ pub(crate) fn allocate_status_ptr(
     mut store: impl AsContextMut,
 ) -> Result<StatusPtr> {
     let malloc_func =
-        instance.get_typed_func::<u32, StatusPtr>(store.as_context_mut(), MALLOC_FN)?;
-    let data_ptr = malloc_func.call(store.as_context_mut(), size_of::<u32>() as u32)?;
+        instance
+            .get_typed_func::<u32, StatusPtr>(store.as_context_mut(), MALLOC_FN)
+            .map_err(wrap_wasmtime_error)?;
+    let data_ptr = malloc_func
+        .call(store.as_context_mut(), size_of::<u32>() as u32)
+        .map_err(wrap_wasmtime_error)?;
     inner_memory(instance, store.as_context_mut())?.write(
         store.as_context_mut(),
         data_ptr as usize,
@@ -184,8 +202,12 @@ pub(crate) fn allocate_size_ptr(
     instance: &Instance,
     mut store: impl AsContextMut,
 ) -> Result<SizePtr> {
-    let malloc_func = instance.get_typed_func::<u32, SizePtr>(store.as_context_mut(), MALLOC_FN)?;
-    let size_ptr = malloc_func.call(store.as_context_mut(), size_of::<u32>() as u32)?;
+    let malloc_func = instance
+        .get_typed_func::<u32, SizePtr>(store.as_context_mut(), MALLOC_FN)
+        .map_err(wrap_wasmtime_error)?;
+    let size_ptr = malloc_func
+        .call(store.as_context_mut(), size_of::<u32>() as u32)
+        .map_err(wrap_wasmtime_error)?;
     inner_memory(instance, store.as_context_mut())?.write(
         store.as_context_mut(),
         size_ptr as usize,
@@ -222,8 +244,12 @@ pub(crate) fn release_byte_array(
     ptr: ByteArray,
     mut store: impl AsContextMut,
 ) -> Result<()> {
-    let free_func = instance.get_typed_func::<ByteArray, ()>(store.as_context_mut(), FREE_FN)?;
-    free_func.call(store.as_context_mut(), ptr)?;
+    let free_func = instance
+        .get_typed_func::<ByteArray, ()>(store.as_context_mut(), FREE_FN)
+        .map_err(wrap_wasmtime_error)?;
+    free_func
+        .call(store.as_context_mut(), ptr)
+        .map_err(wrap_wasmtime_error)?;
     tracing::debug!("Released byte array");
     Ok(())
 }
@@ -233,8 +259,12 @@ pub(crate) fn release_size_ptr(
     ptr: SizePtr,
     mut store: impl AsContextMut,
 ) -> Result<()> {
-    let free_func = instance.get_typed_func::<SizePtr, ()>(store.as_context_mut(), FREE_FN)?;
-    free_func.call(store.as_context_mut(), ptr)?;
+    let free_func = instance
+        .get_typed_func::<SizePtr, ()>(store.as_context_mut(), FREE_FN)
+        .map_err(wrap_wasmtime_error)?;
+    free_func
+        .call(store.as_context_mut(), ptr)
+        .map_err(wrap_wasmtime_error)?;
     Ok(())
 }
 
@@ -243,8 +273,12 @@ pub(crate) fn release_status_ptr(
     ptr: StatusPtr,
     mut store: impl AsContextMut,
 ) -> Result<()> {
-    let free_func = instance.get_typed_func::<StatusPtr, ()>(store.as_context_mut(), FREE_FN)?;
-    free_func.call(store.as_context_mut(), ptr)?;
+    let free_func = instance
+        .get_typed_func::<StatusPtr, ()>(store.as_context_mut(), FREE_FN)
+        .map_err(wrap_wasmtime_error)?;
+    free_func
+        .call(store.as_context_mut(), ptr)
+        .map_err(wrap_wasmtime_error)?;
     Ok(())
 }
 
@@ -254,7 +288,9 @@ pub(crate) fn inner_initialize_function(
     mut store: impl AsContextMut,
 ) -> Result<()> {
     if let Ok(initialize) = instance.get_typed_func::<(), ()>(store.as_context_mut(), name) {
-        initialize.call(store.as_context_mut(), ())?;
+        initialize
+            .call(store.as_context_mut(), ())
+            .map_err(wrap_wasmtime_error)?;
         tracing::debug!(name = name, "Called initialization");
     } else {
         notify_export_function_error(name);
@@ -267,8 +303,12 @@ pub(crate) fn inner_create_opaque(
     name: &str,
     mut store: impl AsContextMut,
 ) -> Result<OpaquePtr> {
-    let create = instance.get_typed_func::<(), OpaquePtr>(store.as_context_mut(), name)?;
-    let opaque = create.call(store.as_context_mut(), ())?;
+    let create = instance
+        .get_typed_func::<(), OpaquePtr>(store.as_context_mut(), name)
+        .map_err(wrap_wasmtime_error)?;
+    let opaque = create
+        .call(store.as_context_mut(), ())
+        .map_err(wrap_wasmtime_error)?;
     tracing::debug!(name = name, opaque = ?opaque, "Called creating opaque");
     Ok(opaque)
 }
@@ -317,7 +357,9 @@ pub(crate) fn inner_get_string(
         if let Ok(get_string) =
             instance.get_typed_func::<OpaquePtr, ByteArray>(store.as_context_mut(), name)
         {
-            let ptr = get_string.call(store.as_context_mut(), *opaque)?;
+            let ptr = get_string
+                .call(store.as_context_mut(), *opaque)
+                .map_err(wrap_wasmtime_error)?;
             let value = read_utf8_string(
                 inner_memory(instance, store.as_context_mut())?,
                 ptr,
@@ -351,8 +393,8 @@ pub(crate) fn inner_get_data(
         let get_data_body = instance.get_typed_func(store.as_context_mut(), body_func_name);
         let mut output_data = Vec::new();
         if get_data_size.is_ok() && get_data_body.is_ok() {
-            let get_data_size = get_data_size?;
-            let get_data_body = get_data_body?;
+            let get_data_size = get_data_size.map_err(wrap_wasmtime_error)?;
+            let get_data_body = get_data_body.map_err(wrap_wasmtime_error)?;
             inner_get_data_internal(
                 instance,
                 opaque,
@@ -400,8 +442,12 @@ pub(crate) fn inner_set_language(
 ) -> Result<()> {
     if let Some(opaque) = opaque {
         let set_language =
-            instance.get_typed_func::<(OpaquePtr, i32), ()>(store.as_context_mut(), name)?;
-        set_language.call(store.as_context_mut(), (*opaque, value))?;
+            instance
+                .get_typed_func::<(OpaquePtr, i32), ()>(store.as_context_mut(), name)
+                .map_err(wrap_wasmtime_error)?;
+        set_language
+            .call(store.as_context_mut(), (*opaque, value))
+            .map_err(wrap_wasmtime_error)?;
         tracing::debug!(name = name, opaque = ?opaque, value = value, "Called setting language");
     }
     Ok(())
@@ -415,8 +461,12 @@ pub(crate) fn inner_count_all_functions(
 ) -> Result<i32> {
     if let Some(opaque) = opaque {
         let count_all_functions =
-            instance.get_typed_func::<OpaquePtr, i32>(store.as_context_mut(), name)?;
-        let count = count_all_functions.call(store.as_context_mut(), *opaque)?;
+            instance
+                .get_typed_func::<OpaquePtr, i32>(store.as_context_mut(), name)
+                .map_err(wrap_wasmtime_error)?;
+        let count = count_all_functions
+            .call(store.as_context_mut(), *opaque)
+            .map_err(wrap_wasmtime_error)?;
         tracing::debug!(name = name, opaque = ?opaque, count = count, "Called counting all functions");
         Ok(count)
     } else {
@@ -433,8 +483,12 @@ pub(crate) fn inner_get_function_name(
 ) -> Result<String> {
     if let Some(opaque) = opaque {
         let get_function_name =
-            instance.get_typed_func::<(OpaquePtr, i32), ByteArray>(store.as_context_mut(), name)?;
-        let ptr = get_function_name.call(store.as_context_mut(), (*opaque, index))?;
+            instance
+                .get_typed_func::<(OpaquePtr, i32), ByteArray>(store.as_context_mut(), name)
+                .map_err(wrap_wasmtime_error)?;
+        let ptr = get_function_name
+            .call(store.as_context_mut(), (*opaque, index))
+            .map_err(wrap_wasmtime_error)?;
         let function_name = read_utf8_string(
             inner_memory(instance, store.as_context_mut())?,
             ptr,
@@ -463,8 +517,11 @@ pub(crate) fn inner_set_function(
     let result = if let Some(opaque) = opaque {
         let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
         let set_function = instance
-            .get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(store.as_context_mut(), name)?;
-        set_function.call(store.as_context_mut(), (*opaque, index, status_ptr))?;
+            .get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(store.as_context_mut(), name)
+            .map_err(wrap_wasmtime_error)?;
+        set_function
+            .call(store.as_context_mut(), (*opaque, index, status_ptr))
+            .map_err(wrap_wasmtime_error)?;
         let mut result = 0;
         inner_memory(instance, store.as_context_mut())?.read(
             store.as_context_mut(),
@@ -489,8 +546,12 @@ pub(crate) fn inner_execute(
     let result = if let Some(opaque) = opaque {
         let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
         let execute =
-            instance.get_typed_func::<(OpaquePtr, StatusPtr), ()>(store.as_context_mut(), name)?;
-        execute.call(store.as_context_mut(), (*opaque, status_ptr))?;
+            instance
+                .get_typed_func::<(OpaquePtr, StatusPtr), ()>(store.as_context_mut(), name)
+                .map_err(wrap_wasmtime_error)?;
+        execute
+            .call(store.as_context_mut(), (*opaque, status_ptr))
+            .map_err(wrap_wasmtime_error)?;
         let mut result = 0;
         inner_memory(instance, store.as_context_mut())?.read(
             store.as_context_mut(),
@@ -517,7 +578,9 @@ pub(crate) fn inner_load_ui_window(
             instance.get_typed_func::<(OpaquePtr, StatusPtr), ()>(store.as_context_mut(), name)
         {
             let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-            load_ui_window_layout.call(store.as_context_mut(), (*opaque, status_ptr))?;
+            load_ui_window_layout
+                .call(store.as_context_mut(), (*opaque, status_ptr))
+                .map_err(wrap_wasmtime_error)?;
             let mut result = 0;
             inner_memory(instance, store.as_context_mut())?.read(
                 store.as_context_mut(),
@@ -558,17 +621,19 @@ pub(crate) fn inner_set_ui_component_layout(
             let data_ptr = allocate_byte_array_with_data(instance, data, store.as_context_mut())?;
             let reload_layout_ptr = allocate_size_ptr(instance, store.as_context_mut())?;
             let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-            set_ui_component_layout.call(
-                store.as_context_mut(),
-                (
-                    *opaque,
-                    id_ptr,
-                    data_ptr,
-                    data.len() as u32,
-                    reload_layout_ptr,
-                    status_ptr,
-                ),
-            )?;
+            set_ui_component_layout
+                .call(
+                    store.as_context_mut(),
+                    (
+                        *opaque,
+                        id_ptr,
+                        data_ptr,
+                        data.len() as u32,
+                        reload_layout_ptr,
+                        status_ptr,
+                    ),
+                )
+                .map_err(wrap_wasmtime_error)?;
             *reload = false;
             let mut result = 0;
             inner_memory(instance, store.as_context_mut())?.read(
