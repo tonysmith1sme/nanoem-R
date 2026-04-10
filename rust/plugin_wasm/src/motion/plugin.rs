@@ -18,8 +18,8 @@ use crate::{
     inner_create_opaque, inner_destroy_opaque, inner_execute, inner_get_data,
     inner_get_function_name, inner_get_string, inner_initialize_function, inner_load_ui_window,
     inner_set_data, inner_set_function, inner_set_language, inner_set_ui_component_layout,
-    inner_terminate_function, release_byte_array, release_status_ptr, ByteArray, OpaquePtr,
-    SizePtr, StatusPtr, Store, FREE_FN, MALLOC_FN, wrap_wasmtime_error,
+    inner_terminate_function, release_byte_array, release_status_ptr, wrap_wasmtime_error,
+    ByteArray, OpaquePtr, SizePtr, StatusPtr, Store, FREE_FN, MALLOC_FN,
 };
 
 pub struct MotionIOPlugin {
@@ -77,71 +77,84 @@ fn validate_plugin(instance: &Instance, mut store: impl AsContextMut) -> Result<
     instance
         .get_typed_func::<OpaquePtr, ()>(store.as_context_mut(), FREE_FN)
         .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(), OpaquePtr>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOCreate",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<OpaquePtr, ByteArray>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetName",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<OpaquePtr, ByteArray>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetVersion",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, i32), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOSetLanguage",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<OpaquePtr, i32>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOCountAllFunctions",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, i32), ByteArray>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetFunctionName",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOSetFunction",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOSetInputMotionData",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, StatusPtr), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOExecute",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetOutputMotionData",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<(OpaquePtr, SizePtr), ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetOutputMotionDataSize",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<OpaquePtr, ByteArray>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIOGetFailureReason",
-    )
-    .map_err(wrap_wasmtime_error)?;
-    instance.get_typed_func::<OpaquePtr, ()>(
-        store.as_context_mut(),
-        "nanoemApplicationPluginMotionIODestroy",
-    )
-    .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(), OpaquePtr>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOCreate",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ByteArray>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetName",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ByteArray>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetVersion",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, i32), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOSetLanguage",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, i32>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOCountAllFunctions",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, i32), ByteArray>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetFunctionName",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOSetFunction",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOSetInputMotionData",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, StatusPtr), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOExecute",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetOutputMotionData",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<(OpaquePtr, SizePtr), ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetOutputMotionDataSize",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ByteArray>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIOGetFailureReason",
+        )
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ()>(
+            store.as_context_mut(),
+            "nanoemApplicationPluginMotionIODestroy",
+        )
+        .map_err(wrap_wasmtime_error)?;
     Ok(())
 }
 
