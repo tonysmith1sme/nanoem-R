@@ -152,10 +152,9 @@ pub(crate) fn allocate_byte_array(
     data_size: u32,
     mut store: impl AsContextMut,
 ) -> Result<ByteArray> {
-    let malloc_func =
-        instance
-            .get_typed_func::<u32, ByteArray>(store.as_context_mut(), MALLOC_FN)
-            .map_err(wrap_wasmtime_error)?;
+    let malloc_func = instance
+        .get_typed_func::<u32, ByteArray>(store.as_context_mut(), MALLOC_FN)
+        .map_err(wrap_wasmtime_error)?;
     let data_ptr = malloc_func
         .call(store.as_context_mut(), data_size)
         .map_err(wrap_wasmtime_error)?;
@@ -183,10 +182,9 @@ pub(crate) fn allocate_status_ptr(
     instance: &Instance,
     mut store: impl AsContextMut,
 ) -> Result<StatusPtr> {
-    let malloc_func =
-        instance
-            .get_typed_func::<u32, StatusPtr>(store.as_context_mut(), MALLOC_FN)
-            .map_err(wrap_wasmtime_error)?;
+    let malloc_func = instance
+        .get_typed_func::<u32, StatusPtr>(store.as_context_mut(), MALLOC_FN)
+        .map_err(wrap_wasmtime_error)?;
     let data_ptr = malloc_func
         .call(store.as_context_mut(), size_of::<u32>() as u32)
         .map_err(wrap_wasmtime_error)?;
@@ -441,10 +439,9 @@ pub(crate) fn inner_set_language(
     mut store: impl AsContextMut,
 ) -> Result<()> {
     if let Some(opaque) = opaque {
-        let set_language =
-            instance
-                .get_typed_func::<(OpaquePtr, i32), ()>(store.as_context_mut(), name)
-                .map_err(wrap_wasmtime_error)?;
+        let set_language = instance
+            .get_typed_func::<(OpaquePtr, i32), ()>(store.as_context_mut(), name)
+            .map_err(wrap_wasmtime_error)?;
         set_language
             .call(store.as_context_mut(), (*opaque, value))
             .map_err(wrap_wasmtime_error)?;
@@ -460,10 +457,9 @@ pub(crate) fn inner_count_all_functions(
     mut store: impl AsContextMut,
 ) -> Result<i32> {
     if let Some(opaque) = opaque {
-        let count_all_functions =
-            instance
-                .get_typed_func::<OpaquePtr, i32>(store.as_context_mut(), name)
-                .map_err(wrap_wasmtime_error)?;
+        let count_all_functions = instance
+            .get_typed_func::<OpaquePtr, i32>(store.as_context_mut(), name)
+            .map_err(wrap_wasmtime_error)?;
         let count = count_all_functions
             .call(store.as_context_mut(), *opaque)
             .map_err(wrap_wasmtime_error)?;
@@ -482,10 +478,9 @@ pub(crate) fn inner_get_function_name(
     mut store: impl AsContextMut,
 ) -> Result<String> {
     if let Some(opaque) = opaque {
-        let get_function_name =
-            instance
-                .get_typed_func::<(OpaquePtr, i32), ByteArray>(store.as_context_mut(), name)
-                .map_err(wrap_wasmtime_error)?;
+        let get_function_name = instance
+            .get_typed_func::<(OpaquePtr, i32), ByteArray>(store.as_context_mut(), name)
+            .map_err(wrap_wasmtime_error)?;
         let ptr = get_function_name
             .call(store.as_context_mut(), (*opaque, index))
             .map_err(wrap_wasmtime_error)?;
@@ -545,10 +540,9 @@ pub(crate) fn inner_execute(
 ) -> Result<i32> {
     let result = if let Some(opaque) = opaque {
         let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-        let execute =
-            instance
-                .get_typed_func::<(OpaquePtr, StatusPtr), ()>(store.as_context_mut(), name)
-                .map_err(wrap_wasmtime_error)?;
+        let execute = instance
+            .get_typed_func::<(OpaquePtr, StatusPtr), ()>(store.as_context_mut(), name)
+            .map_err(wrap_wasmtime_error)?;
         execute
             .call(store.as_context_mut(), (*opaque, status_ptr))
             .map_err(wrap_wasmtime_error)?;
