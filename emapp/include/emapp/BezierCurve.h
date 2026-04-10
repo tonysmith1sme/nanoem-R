@@ -41,10 +41,14 @@ private:
         };
         nanoem_u64_t value;
     };
+    static nanoem_f32_t evaluate(const nanoem_f32_t p0, const nanoem_f32_t p1, const nanoem_f32_t p2,
+        const nanoem_f32_t p3, const nanoem_f32_t t) NANOEM_DECL_NOEXCEPT;
+    static nanoem_f32_t derivative(const nanoem_f32_t p0, const nanoem_f32_t p1, const nanoem_f32_t p2,
+        const nanoem_f32_t p3, const nanoem_f32_t t) NANOEM_DECL_NOEXCEPT;
+    static nanoem_f32_t solveT(const nanoem_f32_t x, const nanoem_f32_t x1, const nanoem_f32_t x2) NANOEM_DECL_NOEXCEPT;
     static void splitBezierCurve(const PointList &points, nanoem_f32_t t, PointList &left, PointList &right);
     static const Vector2 kP0;
     static const Vector2 kP1;
-    PointList m_parameters;
     Vector2U8 m_c0;
     Vector2U8 m_c1;
     nanoem_frame_index_t m_interval;
