@@ -133,7 +133,8 @@ fn inner_create_controller(
     let store = Store::new(&engine, data);
     let bytes = std::fs::read(&path)?;
     let mut linker = Linker::new(&engine);
-    wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)?;
+    wasi_common::sync::add_to_linker(&mut linker, |ctx| ctx)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let plugin = MotionIOPlugin::new(&linker, &path, &bytes, store)?;
     let watcher = notify::recommended_watcher(|_res| {})?;
     Ok(MotionIOPluginController::new(

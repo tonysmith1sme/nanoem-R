@@ -19,7 +19,7 @@ use crate::{
     inner_get_function_name, inner_get_string, inner_initialize_function, inner_load_ui_window,
     inner_set_data, inner_set_function, inner_set_language, inner_set_ui_component_layout,
     inner_terminate_function, release_byte_array, release_status_ptr, ByteArray, OpaquePtr,
-    SizePtr, StatusPtr, Store, FREE_FN, MALLOC_FN,
+    SizePtr, StatusPtr, Store, FREE_FN, MALLOC_FN, wrap_wasmtime_error,
 };
 
 pub struct MotionIOPlugin {
@@ -53,10 +53,12 @@ fn inner_set_named_data(
                 allocate_byte_array_with_data(instance, name.as_slice(), store.as_context_mut())?;
             let data_ptr = allocate_byte_array_with_data(instance, data, store.as_context_mut())?;
             let status_ptr = allocate_status_ptr(instance, store.as_context_mut())?;
-            set_input_model_data.call(
-                store.as_context_mut(),
-                (*opaque, name_ptr, data_ptr, data_size as u32, status_ptr),
-            )?;
+            set_input_model_data
+                .call(
+                    store.as_context_mut(),
+                    (*opaque, name_ptr, data_ptr, data_size as u32, status_ptr),
+                )
+                .map_err(wrap_wasmtime_error)?;
             release_byte_array(instance, name_ptr, store.as_context_mut())?;
             release_byte_array(instance, data_ptr, store.as_context_mut())?;
             release_status_ptr(instance, status_ptr, store.as_context_mut())?;
@@ -69,60 +71,77 @@ fn validate_plugin(instance: &Instance, mut store: impl AsContextMut) -> Result<
     instance
         .get_memory(store.as_context_mut(), "memory")
         .unwrap();
-    instance.get_typed_func::<u32, OpaquePtr>(store.as_context_mut(), MALLOC_FN)?;
-    instance.get_typed_func::<OpaquePtr, ()>(store.as_context_mut(), FREE_FN)?;
+    instance
+        .get_typed_func::<u32, OpaquePtr>(store.as_context_mut(), MALLOC_FN)
+        .map_err(wrap_wasmtime_error)?;
+    instance
+        .get_typed_func::<OpaquePtr, ()>(store.as_context_mut(), FREE_FN)
+        .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(), OpaquePtr>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOCreate",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetName",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetVersion",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOSetLanguage",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, i32>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOCountAllFunctions",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32), ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetFunctionName",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, i32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOSetFunction",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOSetInputMotionData",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOExecute",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, ByteArray, u32, StatusPtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetOutputMotionData",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<(OpaquePtr, SizePtr), ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetOutputMotionDataSize",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ByteArray>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIOGetFailureReason",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     instance.get_typed_func::<OpaquePtr, ()>(
         store.as_context_mut(),
         "nanoemApplicationPluginMotionIODestroy",
-    )?;
+    )
+    .map_err(wrap_wasmtime_error)?;
     Ok(())
 }
 
@@ -133,8 +152,10 @@ impl MotionIOPlugin {
         bytes: &[u8],
         mut store: Store,
     ) -> Result<Self> {
-        let module = Module::new(linker.engine(), bytes)?;
-        let instance = linker.instantiate(store.as_context_mut(), &module)?;
+        let module = Module::new(linker.engine(), bytes).map_err(wrap_wasmtime_error)?;
+        let instance = linker
+            .instantiate(store.as_context_mut(), &module)
+            .map_err(wrap_wasmtime_error)?;
         validate_plugin(&instance, store.as_context_mut())?;
         let path = path.to_path_buf();
         Ok(Self {
