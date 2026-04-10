@@ -857,6 +857,8 @@ DefaultFileManager::internalLoadFromFile(
     nanoem_parameter_assert(project, "must NOT be nullptr");
     nanoem_parameter_assert(!fileURI.isEmpty(), "must NOT be empty");
     bool succeeded = false;
+    EMLOG_INFO("DefaultFileManager::internalLoadFromFile: type={} handle={} ignoreModalDialog={} path={}",
+        int(type), handle, ignoreModalDialog, fileURI.absolutePathConstString());
     if (!ignoreModalDialog && m_applicationPtr->currentModalDialog()) {
         /* do nothing */
         succeeded = true;
@@ -954,6 +956,8 @@ DefaultFileManager::internalLoadFromFile(
             break;
         }
     }
+    EMLOG_INFO("DefaultFileManager::internalLoadFromFile: type={} succeeded={} path={}", int(type), succeeded,
+        fileURI.absolutePathConstString());
     return succeeded;
 }
 
