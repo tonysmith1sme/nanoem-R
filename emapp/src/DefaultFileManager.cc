@@ -1482,6 +1482,11 @@ DefaultFileManager::saveProject(const URI &fileURI, Project *project, Error &err
 {
     FileWriterScope writeScope;
     bool succeeded = false;
+    FileUtils::TransientPath lastTransientPath;
+    const bool hasLastTransientPath = project->hasTransientPath();
+    if (hasLastTransientPath) {
+        lastTransientPath = project->transientPath();
+    }
     if (writeScope.open(fileURI, error)) {
         const URI &lastFileURI = project->fileURI();
         const String &lastFileExtension = lastFileURI.pathExtension(), &savingFileExtension = fileURI.pathExtension();
@@ -1520,15 +1525,14 @@ DefaultFileManager::saveProject(const URI &fileURI, Project *project, Error &err
             }
         }
     }
-    FileUtils::TransientPath transientPath;
-    bool created = FileUtils::createTransientFile(fileURI.absolutePath(), transientPath);
-    if (project->hasTransientPath()) {
-        FileUtils::TransientPath lastTransientPath(project->transientPath());
-        FileUtils::deleteTransientFile(lastTransientPath);
-        project->setTransientPath(transientPath);
-    }
-    if (created) {
-        project->setTransientPath(transientPath);
+    if (succeeded) {
+        FileUtils::TransientPath transientPath;
+        if (FileUtils::createTransientFile(fileURI.absolutePath(), transientPath)) {
+            project->setTransientPath(transientPath);
+            if (hasLastTransientPath) {
+                FileUtils::deleteTransientFile(lastTransientPath);
+            }
+        }
     }
     return succeeded;
 }
