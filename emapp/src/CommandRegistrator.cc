@@ -995,10 +995,7 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                         nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
                             ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
                             : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
-                        const Vector4 translation(bone->localUserTranslation(), 1);
-                        const Quaternion orientation(bone->localUserOrientation());
-                        nanoemMutableMotionBoneKeyframeSetTranslation(dst, glm::value_ptr(translation));
-                        nanoemMutableMotionBoneKeyframeSetOrientation(dst, glm::value_ptr(orientation));
+                        writeBakedBoneTransform(model, bonePtr, bone, dst);
                         nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
                         nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
                         nanoemMutableMotionBoneKeyframeDestroy(dst);
