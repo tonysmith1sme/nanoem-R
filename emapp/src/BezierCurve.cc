@@ -18,18 +18,6 @@ BezierCurve::BezierCurve(const Vector2U8 &c0, const Vector2U8 &c1, nanoem_frame_
     , m_c1(c1)
     , m_interval(interval)
 {
-    interval = glm::max(interval, nanoem_frame_index_t(16));
-    m_parameters.resize(interval + 1);
-    const Vector2 c0f(c0), c1f(c1);
-    const nanoem_f32_t intervalFloat = nanoem_f32_t(interval);
-    for (nanoem_frame_index_t i = 0; i <= interval; i++) {
-        const nanoem_f32_t t = i / intervalFloat;
-        const nanoem_f32_t it = 1.0f - t;
-        const Vector2 &v = ((kP0 * glm::pow(it, 3.0f)) + (c0f * t * glm::pow(it, 2.0f) * 3.0f) +
-                               (c1f * it * glm::pow(t, 2.0f) * 3.0f) + (kP1 * glm::pow(t, 3.0f))) /
-            kP1;
-        m_parameters[i] = v;
-    }
 }
 
 BezierCurve::~BezierCurve() NANOEM_DECL_NOEXCEPT
@@ -39,21 +27,19 @@ BezierCurve::~BezierCurve() NANOEM_DECL_NOEXCEPT
 nanoem_f32_t
 BezierCurve::value(nanoem_f32_t value) const NANOEM_DECL_NOEXCEPT
 {
-    const nanoem_frame_index_t interval(length());
-    Vector2 nearest(kP1);
-    for (nanoem_frame_index_t i = 0; i < interval; i++) {
-        const Vector2 v(m_parameters[i]);
-        if (glm::abs(nearest.x - value) > glm::abs(v.x - value)) {
-            nearest = v;
-        }
-    }
-    return nearest.y;
+    const nanoem_f32_t x = glm::clamp(value, 0.0f, 1.0f);
+    const nanoem_f32_t x1 = m_c0.x / 127.0f;
+    const nanoem_f32_t x2 = m_c1.x / 127.0f;
+    const nanoem_f32_t y1 = m_c0.y / 127.0f;
+    const nanoem_f32_t y2 = m_c1.y / 127.0f;
+    const nanoem_f32_t t = solveT(x, x1, x2);
+    return evaluate(0.0f, y1, y2, 1.0f, t);
 }
 
 nanoem_frame_index_t
 BezierCurve::length() const NANOEM_DECL_NOEXCEPT
 {
-    return nanoem_frame_index_t(m_parameters.size());
+    return m_interval;
 }
 
 BezierCurve::Pair
@@ -100,6 +86,58 @@ BezierCurve::toHash(const nanoem_u8_t *parameters, nanoem_frame_index_t interval
     hash.c1y = parameters[3];
     hash.interval = interval;
     return hash.value;
+}
+
+nanoem_f32_t
+BezierCurve::evaluate(
+    const nanoem_f32_t p0, const nanoem_f32_t p1, const nanoem_f32_t p2, const nanoem_f32_t p3, const nanoem_f32_t t)
+    NANOEM_DECL_NOEXCEPT
+{
+    const nanoem_f32_t it = 1.0f - t;
+    return (it * it * it * p0) + (3.0f * it * it * t * p1) + (3.0f * it * t * t * p2) + (t * t * t * p3);
+}
+
+nanoem_f32_t
+BezierCurve::derivative(
+    const nanoem_f32_t p0, const nanoem_f32_t p1, const nanoem_f32_t p2, const nanoem_f32_t p3, const nanoem_f32_t t)
+    NANOEM_DECL_NOEXCEPT
+{
+    const nanoem_f32_t it = 1.0f - t;
+    return (3.0f * it * it * (p1 - p0)) + (6.0f * it * t * (p2 - p1)) + (3.0f * t * t * (p3 - p2));
+}
+
+nanoem_f32_t
+BezierCurve::solveT(const nanoem_f32_t x, const nanoem_f32_t x1, const nanoem_f32_t x2) NANOEM_DECL_NOEXCEPT
+{
+    nanoem_f32_t t = x;
+    for (int i = 0; i < 8; i++) {
+        const nanoem_f32_t current = evaluate(0.0f, x1, x2, 1.0f, t) - x;
+        if (glm::abs(current) < 1.0e-6f) {
+            return glm::clamp(t, 0.0f, 1.0f);
+        }
+        const nanoem_f32_t slope = derivative(0.0f, x1, x2, 1.0f, t);
+        if (glm::abs(slope) < 1.0e-6f) {
+            break;
+        }
+        t -= current / slope;
+    }
+    nanoem_f32_t left = 0.0f;
+    nanoem_f32_t right = 1.0f;
+    t = x;
+    for (int i = 0; i < 24; i++) {
+        const nanoem_f32_t current = evaluate(0.0f, x1, x2, 1.0f, t);
+        if (glm::abs(current - x) < 1.0e-6f) {
+            break;
+        }
+        if (current < x) {
+            left = t;
+        }
+        else {
+            right = t;
+        }
+        t = (left + right) * 0.5f;
+    }
+    return glm::clamp(t, 0.0f, 1.0f);
 }
 
 void
