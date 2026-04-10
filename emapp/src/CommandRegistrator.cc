@@ -1052,21 +1052,6 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                 }
             }
             if (mk) {
-                nanoem_model_constraint_t *const *constraints =
-                    nanoemModelGetAllConstraintObjects(model->data(), &numConstraints);
-                for (nanoem_rsize_t i = 0; i < numConstraints; i++) {
-                    const nanoem_model_constraint_t *constraintPtr = constraints[i];
-                    const nanoem_model_bone_t *bonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
-                    const nanoem_unicode_string_t *name =
-                        nanoemModelBoneGetName(bonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
-                    nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
-                        nanoemMutableMotionModelKeyframeConstraintStateCreate(
-                            nanoemMutableMotionModelKeyframeGetOriginObject(mk), &status);
-                    nanoemMutableMotionModelKeyframeConstraintStateSetBoneName(state, name, &status);
-                    nanoemMutableMotionModelKeyframeConstraintStateSetEnabled(state, 1);
-                    nanoemMutableMotionModelKeyframeAddConstraintState(mk, state, &status);
-                    nanoemMutableMotionModelKeyframeConstraintStateDestroy(state);
-                }
                 nanoemMutableMotionAddModelKeyframe(m, mk, frameIndex, &status);
                 nanoemMutableMotionModelKeyframeDestroy(mk);
             }
