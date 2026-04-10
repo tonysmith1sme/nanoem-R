@@ -1875,9 +1875,6 @@ ImGuiWindow::drawAllWindows(Project *project, IState *state, nanoem_u32_t flags)
         drawMainWindow(deviceScaleWindowSize, project, state, flags, seekable);
         drawAllNonModalWindows(project);
         handleModalDialogWindow(deviceScaleWindowSize, project);
-#if !defined(NDEBUG)
-        ImGui::ShowDemoWindow();
-#endif
         if (sg_imgui_t *debugger = static_cast<sg_imgui_t *>(m_debugger)) {
             sg_imgui_draw(debugger);
         }

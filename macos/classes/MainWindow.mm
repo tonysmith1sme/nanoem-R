@@ -60,7 +60,8 @@ handlePerformDragOperation(id<NSDraggingInfo> sender, macos::MainWindow *window)
                 EnumUtils::isEnabledT<NSUInteger>(mask, NSDragOperationCopy)) &&
             files.count > 0) {
             for (NSString *filePath in files) {
-                const URI &fileURI = URI::createFromFilePath(filePath.UTF8String);
+                NSURL *fileURL = [[NSURL alloc] initFileURLWithPath:filePath];
+                const URI fileURI(macos::CocoaThreadedApplicationService::canonicalFileURI(fileURL));
                 client->sendDropFileMessage(fileURI);
                 if (Project::isLoadableExtension(fileURI)) {
                     window->setTitle(filePath.lastPathComponent);
