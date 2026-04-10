@@ -5,6 +5,7 @@
  */
 
 #import "Document.h"
+#import "CocoaThreadedApplicationService.h"
 
 #include "emapp/Accessory.h"
 #include "emapp/Archiver.h"
@@ -1472,7 +1473,7 @@ typedef NSString * (^SavingMotionCallback)(Motion *, ByteArray &);
             if (const char *filename = json_value_get_string(v)) {
                 for (NSURL *audioURL in m_allAudioURLSet) {
                     if (StringUtils::equals(filename, audioURL.lastPathComponent.UTF8String)) {
-                        const URI &fileURI = URI::createFromFilePath(audioURL.path.UTF8String);
+                        const URI fileURI(macos::CocoaThreadedApplicationService::canonicalFileURI(audioURL));
                         Error error;
                         if (!fileManager->loadAudioFile(fileURI, projectPtr, error) && outError) {
                             *outError = createNSError(error);
@@ -1496,7 +1497,7 @@ typedef NSString * (^SavingMotionCallback)(Motion *, ByteArray &);
             if (const char *filename = json_value_get_string(v)) {
                 for (NSURL *audioURL in m_allVideoURLSet) {
                     if (StringUtils::equals(filename, audioURL.lastPathComponent.UTF8String)) {
-                        const URI &fileURI = URI::createFromFilePath(audioURL.path.UTF8String);
+                        const URI fileURI(macos::CocoaThreadedApplicationService::canonicalFileURI(audioURL));
                         Error error;
                         if (!fileManager->loadVideoFile(fileURI, projectPtr, error) && outError) {
                             *outError = createNSError(error);
@@ -2183,7 +2184,9 @@ handleNSException(NSException *exception, NSError **outError)
 - (BOOL)readFromData:(NSData *)data ofType:(NSString *)typeName error:(NSError **)outError
 {
     BOOL result = NO;
-    const URI fileURI(URI::createFromFilePath(self.fileURL.path.UTF8String));
+    const URI fileURI(macos::CocoaThreadedApplicationService::canonicalFileURI(self.fileURL));
+    EMLOG_INFO("Document::readFromData: type={} originalPath={} canonicalPath={}", typeName.UTF8String,
+        self.fileURL.path.UTF8String, fileURI.absolutePathConstString());
     NSDataReader reader(data);
     @autoreleasepool {
         @try {
