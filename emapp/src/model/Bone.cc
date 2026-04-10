@@ -622,7 +622,7 @@ Bone::worldTransformOrigin() const NANOEM_DECL_NOEXCEPT
 Vector3
 Bone::localTransformOrigin() const NANOEM_DECL_NOEXCEPT
 {
-    return glm::make_vec3(reinterpret_cast<const nanoem_f32_t *>(&m_matrices.m_worldTransform.col[3]));
+    return glm::make_vec3(reinterpret_cast<const nanoem_f32_t *>(&m_matrices.m_localTransform.col[3]));
 }
 
 Quaternion
