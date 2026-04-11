@@ -85,6 +85,11 @@ PreferenceDialog::draw(Project *project)
                 ImGui::EndCombo();
             }
             addSeparator();
+            bool enableSystemFont = preference.isSystemFontEnabled();
+            if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.system-font.enable"), &enableSystemFont)) {
+                preference.setSystemFontEnabled(enableSystemFont);
+                m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
+            }
             bool enableModelEditing = preference.isModelEditingEnabled();
             if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.editing-model.enable"), &enableModelEditing)) {
                 preference.setModelEditingEnabled(enableModelEditing);
@@ -129,6 +134,7 @@ PreferenceDialog::draw(Project *project)
                         ImGui::Selectable(selectedLanguageString(type), type == language, flags)) {
                         project->setLanguage(type);
                         translator->setLanguage(type);
+                        m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
                     }
                 }
                 ImGui::EndCombo();

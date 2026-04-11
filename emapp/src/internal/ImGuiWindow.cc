@@ -13,6 +13,7 @@
 #include "emapp/Constants.h"
 #include "emapp/EnumUtils.h"
 #include "emapp/Error.h"
+#include "emapp/FileUtils.h"
 #include "emapp/IAudioPlayer.h"
 #include "emapp/ICamera.h"
 #include "emapp/IEventPublisher.h"
@@ -118,6 +119,89 @@ UniformBlock
 static const Vector4 kColorRed(1, 0, 0, 1);
 static const Vector4 kColorGreen(0, 1, 0, 1);
 static const Vector4 kColorBlue(0, 0, 1, 1);
+
+const char *
+resolveSystemFontPath(ITranslator::LanguageType language) NANOEM_DECL_NOEXCEPT
+{
+#if defined(_WIN32)
+    static const char *const kDefaultPaths[] = { "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf" };
+    static const char *const kSimplifiedChinesePaths[] = {
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/msyh.ttf",
+        "C:/Windows/Fonts/simsun.ttc",
+    };
+    static const char *const kTraditionalChinesePaths[] = {
+        "C:/Windows/Fonts/msjh.ttc",
+        "C:/Windows/Fonts/msjh.ttf",
+        "C:/Windows/Fonts/mingliu.ttc",
+    };
+    static const char *const kJapanesePaths[] = {
+        "C:/Windows/Fonts/YuGothM.ttc",
+        "C:/Windows/Fonts/msgothic.ttc",
+    };
+    static const char *const kKoreanPaths[] = { "C:/Windows/Fonts/malgun.ttf", "C:/Windows/Fonts/gulim.ttc" };
+#elif defined(__APPLE__)
+    static const char *const kDefaultPaths[] = {
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    };
+    static const char *const kSimplifiedChinesePaths[] = {
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+    };
+    static const char *const kTraditionalChinesePaths[] = {
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+    };
+    static const char *const kJapanesePaths[] = {
+        "/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc",
+        "/System/Library/Fonts/Osaka.ttf",
+    };
+    static const char *const kKoreanPaths[] = { "/System/Library/Fonts/AppleSDGothicNeo.ttc" };
+#else
+    static const char *const kDefaultPaths[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    };
+    static const char *const kSimplifiedChinesePaths[] = { "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" };
+    static const char *const kTraditionalChinesePaths[] = { "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" };
+    static const char *const kJapanesePaths[] = { "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" };
+    static const char *const kKoreanPaths[] = { "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" };
+#endif
+    const char *const *candidates = kDefaultPaths;
+    nanoem_rsize_t numCandidates = BX_COUNTOF(kDefaultPaths);
+    switch (language) {
+    case ITranslator::kLanguageTypeChineseSimplified:
+        candidates = kSimplifiedChinesePaths;
+        numCandidates = BX_COUNTOF(kSimplifiedChinesePaths);
+        break;
+    case ITranslator::kLanguageTypeChineseTraditional:
+        candidates = kTraditionalChinesePaths;
+        numCandidates = BX_COUNTOF(kTraditionalChinesePaths);
+        break;
+    case ITranslator::kLanguageTypeJapanese:
+        candidates = kJapanesePaths;
+        numCandidates = BX_COUNTOF(kJapanesePaths);
+        break;
+    case ITranslator::kLanguageTypeKorean:
+        candidates = kKoreanPaths;
+        numCandidates = BX_COUNTOF(kKoreanPaths);
+        break;
+    default:
+        break;
+    }
+    for (nanoem_rsize_t i = 0; i < numCandidates; i++) {
+        if (FileUtils::exists(candidates[i])) {
+            return candidates[i];
+        }
+    }
+    for (nanoem_rsize_t i = 0; i < BX_COUNTOF(kDefaultPaths); i++) {
+        if (FileUtils::exists(kDefaultPaths[i])) {
+            return kDefaultPaths[i];
+        }
+    }
+    return nullptr;
+}
 static const Vector4 kColorTranslucentRed(1, 0, 0, 0.5f);
 static const Vector4 kColorTranslucentGreen(0, 1, 0, 0.5f);
 static const Vector4 kColorTranslucentBlue(0, 0, 1, 0.5f);
@@ -1516,7 +1600,14 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
     resources::initializeTextFont(&m_atlas, pointSize, language, &m_textFontRanges);
     resources::initializeIconFont(&m_atlas, pointSize);
     ApplicationPreference preference(m_applicationPtr);
-    if (const char *fontPath = preference.extraFontPath()) {
+    const char *fontPath = nullptr;
+    if (preference.isSystemFontEnabled()) {
+        fontPath = resolveSystemFontPath(language);
+    }
+    if (!fontPath) {
+        fontPath = preference.extraFontPath();
+    }
+    if (fontPath) {
         ImFontGlyphRangesBuilder builder;
         if (!m_textFontRanges.empty()) {
             builder.AddRanges(m_textFontRanges.Data);
