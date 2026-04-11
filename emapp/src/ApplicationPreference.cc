@@ -17,6 +17,7 @@ namespace {
 static const char kPreferenceKeyPrefix[] = "application.preference";
 static const char kRendererBackend[] = "renderer.backend";
 static const char kFontPath[] = "font.path";
+static const char kSystemFontEnabled[] = "font.system.enabled";
 static const char kDefaultColorPixelFormat[] = "renderer.colorPixelFormat";
 static const char kModelEditingEnabled[] = "editing.model.enabled";
 static const char kAnalyticsEnabled[] = "analytics.enabled";
@@ -97,6 +98,18 @@ void
 ApplicationPreference::setExtraFontPath(const char *value)
 {
     writeString(kFontPath, value);
+}
+
+bool
+ApplicationPreference::isSystemFontEnabled() const NANOEM_DECL_NOEXCEPT
+{
+    return readBool(kSystemFontEnabled, true);
+}
+
+void
+ApplicationPreference::setSystemFontEnabled(bool value)
+{
+    writeBool(kSystemFontEnabled, value);
 }
 
 ApplicationPreference::HighDPIViewportModeType

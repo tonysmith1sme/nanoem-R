@@ -26,6 +26,7 @@ const char kRendererKey[] = "renderer";
 const char kDefaultColorPixelFormatNameKey[] = "defaultColorPixelFormat";
 const char kEnableSkinDeformAcceleratorKey[] = "enableSkinDeformAcceleratorGen2";
 const char kHighDPIViewportModeKey[] = "highDPIViewportMode";
+const char kEnableSystemFontKey[] = "enableSystemFont";
 
 Preference::RandomGenerator::RandomGenerator()
 {
@@ -105,6 +106,7 @@ Preference::save()
     set(sectionIndex, kDefaultColorPixelFormatNameKey, uint32_t(m_preference.defaultColorPixelFormat()));
     set(sectionIndex, kEnableSkinDeformAcceleratorKey, m_preference.isSkinDeformAcceleratorEnabled());
     set(sectionIndex, kHighDPIViewportModeKey, uint32_t(m_preference.highDPIViewportMode()));
+    set(sectionIndex, kEnableSystemFontKey, m_preference.isSystemFontEnabled());
     if (m_preference.isResettingAnalyticsUUIDRequired()) {
         remove(sectionIndex, kClientUUIDKey);
     }
@@ -183,6 +185,7 @@ Preference::fillLoadedParameters()
     m_preference.setSkinDeformAcceleratorEnabled(get(sectionIndex, kEnableSkinDeformAcceleratorKey, false));
     m_preference.setHighDPIViewportMode(
         static_cast<ApplicationPreference::HighDPIViewportModeType>(get(sectionIndex, kHighDPIViewportModeKey, 0u)));
+    m_preference.setSystemFontEnabled(get(sectionIndex, kEnableSystemFontKey, true));
     m_preference.setDefaultColorPixelFormat(
         static_cast<sg_pixel_format>(get(sectionIndex, kDefaultColorPixelFormatNameKey, 0u)));
 }

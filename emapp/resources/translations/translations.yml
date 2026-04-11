@@ -1473,6 +1473,11 @@
     en_US: Enable Model Editing (Experimental Feature)
     ja_JP: モデル編集機能を有効にする（実験的な機能）
     zh_CN: 启用模型编辑 (实验性功能)
+- key: nanoem.gui.window.preference.global.system-font.enable
+  phrase:
+    en_US: Use System Font
+    ja_JP: システムフォントを使用する
+    zh_CN: 使用系统字体
 - key: nanoem.gui.window.preference.global.analytics.title
   phrase:
     en_US: Analytics

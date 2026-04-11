@@ -32,6 +32,7 @@ static NSString *kGFXPassPoolSizeKey = @"NMGFXPassPoolSize";
 static NSString *kGFXPipelinePoolSizeKey = @"NMGFXPipelinePoolSize";
 static NSString *kGFXUniformBufferSizeKey = @"NMGFXUniformBufferSize";
 static NSString *kHighDPIViewportModeKey = @"NMHighDPIViewportMode";
+static NSString *kEnableSystemFontKey = @"NMEnableSystemFont";
 } /* namespace anonymous */
 
 namespace nanoem {
@@ -74,6 +75,7 @@ Preference::~Preference()
     [m_defaults setInteger:m_preference.gfxPassPoolSize() forKey:kGFXPassPoolSizeKey];
     [m_defaults setInteger:m_preference.gfxPipelinePoolSize() forKey:kGFXPipelinePoolSizeKey];
     [m_defaults setInteger:m_preference.gfxUniformBufferSize() forKey:kGFXUniformBufferSizeKey];
+    [m_defaults setBool:m_preference.isSystemFontEnabled() forKey:kEnableSystemFontKey];
     [m_defaults removeObjectForKey:kCompatClientUUIDKey];
     [m_defaults removeObjectForKey:kCompatEnableAnalyticsKey];
     [m_defaults removeObjectForKey:kCompatRendererNameKey];
@@ -142,6 +144,9 @@ Preference::load()
     if (NSNumber *value = (NSNumber *) [m_defaults objectForKey:kHighDPIViewportModeKey]) {
         m_preference.setHighDPIViewportMode(
             static_cast<ApplicationPreference::HighDPIViewportModeType>(value.intValue));
+    }
+    if (NSNumber *value = (NSNumber *) [m_defaults objectForKey:kEnableSystemFontKey]) {
+        m_preference.setSystemFontEnabled(value.boolValue != NO);
     }
     if (NSNumber *value = (NSNumber *) [m_defaults objectForKey:kUndoSoftLimit]) {
         m_preference.setUndoSoftLimit(value.integerValue);

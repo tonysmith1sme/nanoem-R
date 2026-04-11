@@ -39,6 +39,8 @@ public:
     void setRendererBackend(const char *value);
     const char *extraFontPath() const NANOEM_DECL_NOEXCEPT;
     void setExtraFontPath(const char *value);
+    bool isSystemFontEnabled() const NANOEM_DECL_NOEXCEPT;
+    void setSystemFontEnabled(bool value);
     HighDPIViewportModeType highDPIViewportMode() const NANOEM_DECL_NOEXCEPT;
     void setHighDPIViewportMode(HighDPIViewportModeType value);
     sg_pixel_format defaultColorPixelFormat() const NANOEM_DECL_NOEXCEPT;
