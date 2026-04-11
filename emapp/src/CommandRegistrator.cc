@@ -857,8 +857,6 @@ void
 CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstraint, Error &error)
 {
     typedef tinystl::unordered_map<const Model *, model::Bone::Set, TinySTLAllocator> AllModelConstraintBoneSet;
-    typedef tinystl::pair<Vector3, Quaternion> BoneTransform;
-    typedef tinystl::unordered_map<const nanoem_model_bone_t *, BoneTransform, TinySTLAllocator> BoneTransformMap;
     typedef tinystl::unordered_map<const nanoem_model_bone_t *, const nanoem_model_bone_t *, TinySTLAllocator>
         ResolveInherentParentBoneMap;
     const nanoem_frame_index_t duration = m_project->duration(),
@@ -879,21 +877,10 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
     const auto writeBakedBoneTransform =
         [](const Model *model, const nanoem_model_bone_t *bonePtr, const model::Bone *bone,
             nanoem_mutable_motion_bone_keyframe_t *dst) {
-            BX_UNUSED_1(model);
-            Vector3 translation;
-            Quaternion orientation;
-            if (const nanoem_model_bone_t *parentBonePtr = nanoemModelBoneGetParentBoneObject(bonePtr)) {
-                const model::Bone *parentBone = model::Bone::cast(parentBonePtr);
-                const Vector3 offset(model::Bone::origin(bonePtr) - model::Bone::origin(parentBonePtr));
-                const Matrix4x4 localTransform(glm::affineInverse(parentBone->worldTransform()) * bone->worldTransform());
-                translation = Vector3(localTransform[3]) - offset;
-                orientation = glm::quat_cast(localTransform);
-            }
-            else {
-                const Matrix4x4 localTransform(bone->worldTransform());
-                translation = Vector3(localTransform[3]) - model::Bone::origin(bonePtr);
-                orientation = glm::quat_cast(localTransform);
-            }
+            const Vector3 translation(bone->localUserTranslation());
+            const Quaternion orientation(glm::normalize(
+                model->isConstraintJointBoneActive(bonePtr) ? bone->constraintJointOrientation()
+                                                            : bone->localUserOrientation()));
             const Vector4 value(translation, 1);
             nanoemMutableMotionBoneKeyframeSetTranslation(dst, glm::value_ptr(value));
             nanoemMutableMotionBoneKeyframeSetOrientation(dst, glm::value_ptr(orientation));
@@ -911,6 +898,17 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
             nanoem_rsize_t numBones;
             nanoem_model_bone_t *const *bones = nanoemModelGetAllBoneObjects(model->data(), &numBones);
             model::Bone::Set &constraintBoneSet = allConstraintBoneSets[model];
+            const auto insertConstraintBone = [&constraintBoneSet, &resolveInherentParentBones](
+                                                const nanoem_model_bone_t *candidateBonePtr) {
+                if (!candidateBonePtr) {
+                    return;
+                }
+                constraintBoneSet.insert(candidateBonePtr);
+                ResolveInherentParentBoneMap::const_iterator it = resolveInherentParentBones.find(candidateBonePtr);
+                if (it != resolveInherentParentBones.end()) {
+                    constraintBoneSet.insert(it->second);
+                }
+            };
             resolveInherentParentBones.clear();
             for (nanoem_rsize_t i = 0; i < numBones; i++) {
                 const nanoem_model_bone_t *bonePtr = bones[i];
@@ -933,14 +931,14 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                     for (nanoem_rsize_t j = 0; j < numJoints; j++) {
                         const nanoem_model_constraint_joint_t *jointPtr = joints[j];
                         const nanoem_model_bone_t *jointBonePtr = nanoemModelConstraintJointGetBoneObject(jointPtr);
-                        ResolveInherentParentBoneMap::const_iterator it = resolveInherentParentBones.find(jointBonePtr);
-                        constraintBoneSet.insert(it != resolveInherentParentBones.end() ? it->second : jointBonePtr);
+                        insertConstraintBone(jointBonePtr);
                     }
                     const nanoem_model_bone_t *effectorBonePtr =
                         nanoemModelConstraintGetEffectorBoneObject(constraintPtr);
-                    ResolveInherentParentBoneMap::const_iterator it = resolveInherentParentBones.find(effectorBonePtr);
-                    constraintBoneSet.insert(it != resolveInherentParentBones.end() ? it->second : effectorBonePtr);
-                    constraintBoneSet.insert(bonePtr);
+                    const nanoem_model_bone_t *targetBonePtr = nanoemModelConstraintGetTargetBoneObject(constraintPtr);
+                    insertConstraintBone(effectorBonePtr);
+                    insertConstraintBone(targetBonePtr);
+                    insertConstraintBone(bonePtr);
                 }
             }
         }
@@ -979,60 +977,39 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
             else {
                 constraintBoneSet.clear();
             }
-            if (enableBakingConstraint) {
-                BoneTransformMap bakedPhysicsBoneTransforms;
-                for (nanoem_rsize_t i = 0; i < numBones; i++) {
-                    const nanoem_model_bone_t *candidateBonePtr = bones[i];
-                    if (model->isRigidBodyBound(candidateBonePtr) &&
-                        constraintBoneSet.find(candidateBonePtr) == constraintBoneSet.end()) {
-                        if (const model::Bone *candidateBone = model::Bone::cast(candidateBonePtr)) {
-                            bakedPhysicsBoneTransforms.insert(tinystl::make_pair(candidateBonePtr,
-                                tinystl::make_pair(
-                                    candidateBone->localUserTranslation(), candidateBone->localUserOrientation())));
-                        }
-                    }
-                }
-                model->synchronizeMotionForBake(sourceMotion, frameIndex, 0);
-                for (BoneTransformMap::const_iterator it3 = bakedPhysicsBoneTransforms.begin(),
-                                                     end3 = bakedPhysicsBoneTransforms.end();
-                     it3 != end3; ++it3) {
-                    if (model::Bone *physicsBone = model::Bone::cast(it3->first)) {
-                        physicsBone->setLocalUserTranslation(it3->second.first);
-                        physicsBone->setLocalUserOrientation(it3->second.second);
-                    }
-                }
-                model->performAllBonesTransform();
-            }
             for (nanoem_rsize_t i = 0; i < numBones; i++) {
                 const nanoem_model_bone_t *bonePtr = bones[i];
                 int enableConstraint = enableBakingConstraint ? 0 : 1;
                 if (const model::Bone *bone = model::Bone::cast(bonePtr)) {
                     const nanoem_unicode_string_t *name =
                         nanoemModelBoneGetName(bonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
+                    const nanoem_model_constraint_t *resolvedConstraint = model->findConstraint(bonePtr);
                     if (enableBakingConstraint) {
-                        nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
-                            ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
-                            : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
-                        writeBakedBoneTransform(model, bonePtr, bone, dst);
-                        nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
-                        nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
-                        nanoemMutableMotionBoneKeyframeDestroy(dst);
+                        const bool shouldBakeEvaluatedBone = constraintBoneSet.find(bonePtr) != constraintBoneSet.end() ||
+                            resolvedConstraint != nullptr || model->isRigidBodyBound(bonePtr);
+                        if (shouldBakeEvaluatedBone) {
+                            nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
+                                ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
+                                : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
+                            writeBakedBoneTransform(model, bonePtr, bone, dst);
+                            nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
+                            nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
+                            nanoemMutableMotionBoneKeyframeDestroy(dst);
+                        }
+                        else if (nanoem_mutable_motion_bone_keyframe_t *src =
+                                     nanoemMutableMotionBoneKeyframeCreateByFound(sourceMotionPtr, name, frameIndex, &status)) {
+                            nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
+                                ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
+                                : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
+                            nanoemMutableMotionBoneKeyframeCopy(dst, nanoemMutableMotionBoneKeyframeGetOriginObject(src));
+                            nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
+                            nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
+                            nanoemMutableMotionBoneKeyframeDestroy(dst);
+                            nanoemMutableMotionBoneKeyframeDestroy(src);
+                        }
                     }
                     else {
-                    const bool shouldBakeConstraintBone =
-                        enableBakingConstraint && constraintBoneSet.find(bonePtr) != constraintBoneSet.end();
-                    if (shouldBakeConstraintBone) {
-                        nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
-                            ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
-                            : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
-                        writeBakedBoneTransform(model, bonePtr, bone, dst);
-                        nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
-                        nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
-                        nanoemMutableMotionBoneKeyframeDestroy(dst);
-                    }
-                    else if (model->isRigidBodyBound(bonePtr)) {
-                        const nanoem_unicode_string_t *name =
-                            nanoemModelBoneGetName(bonePtr, NANOEM_LANGUAGE_TYPE_FIRST_ENUM);
+                        if (model->isRigidBodyBound(bonePtr)) {
                         nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
                             ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
                             : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
@@ -1047,19 +1024,15 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                             ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
                             : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
                         nanoemMutableMotionBoneKeyframeCopy(dst, nanoemMutableMotionBoneKeyframeGetOriginObject(src));
-                        if (shouldBakeConstraintBone) {
-                            writeBakedBoneTransform(model, bonePtr, bone, dst);
-                        }
                         nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
                         nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
                         nanoemMutableMotionBoneKeyframeDestroy(dst);
                         nanoemMutableMotionBoneKeyframeDestroy(src);
-                        if (nanoemModelBoneHasConstraint(bonePtr)) {
-                            const nanoem_model_constraint_t *constraintPtr =
-                                nanoemModelBoneGetConstraintObject(bonePtr);
+                        if (resolvedConstraint) {
                             nanoem_rsize_t numJoints;
                             nanoem_model_constraint_joint_t *const *joints =
-                                nanoemModelConstraintGetAllJointObjects(constraintPtr, &numJoints);
+                                nanoemModelConstraintGetAllJointObjects(
+                                    const_cast<nanoem_model_constraint_t *>(resolvedConstraint), &numJoints);
                             for (nanoem_rsize_t j = 0; j < numJoints; j++) {
                                 const nanoem_model_constraint_joint_t *jointPtr = joints[j];
                                 if (model->isRigidBodyBound(nanoemModelConstraintJointGetBoneObject(jointPtr))) {
@@ -1069,17 +1042,8 @@ CommandRegistrator::registerBakeAllModelMotionsCommand(bool enableBakingConstrai
                             }
                         }
                     }
-                    else if (shouldBakeConstraintBone) {
-                        nanoem_mutable_motion_bone_keyframe_t *dst = frameIndex == 0
-                            ? nanoemMutableMotionBoneKeyframeCreateByFound(dstMotionPtr, name, 0, &status)
-                            : nanoemMutableMotionBoneKeyframeCreate(dstMotionPtr, &status);
-                        writeBakedBoneTransform(model, bonePtr, bone, dst);
-                        nanoemMutableMotionBoneKeyframeSetPhysicsSimulationEnabled(dst, 0);
-                        nanoemMutableMotionAddBoneKeyframe(m, dst, name, frameIndex, &status);
-                        nanoemMutableMotionBoneKeyframeDestroy(dst);
                     }
-                    }
-                    if (mk && nanoemModelBoneHasConstraint(bonePtr)) {
+                    if (mk && resolvedConstraint && nanoemModelConstraintGetTargetBoneObject(resolvedConstraint) == bonePtr) {
                         nanoem_mutable_motion_model_keyframe_constraint_state_t *state =
                             nanoemMutableMotionModelKeyframeConstraintStateCreate(
                                 nanoemMutableMotionModelKeyframeGetOriginObject(mk), &status);
