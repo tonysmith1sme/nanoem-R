@@ -15,6 +15,14 @@ Based on [nanoem](https://github.com/hkrn/nanoem).
 
 ![nanoem for macOS](docs/images/application/screen_v340_small.png)
 
+## What is the different between nanoem and nanoem-R?
+nanoem-R fixed some [nanoem](https://github.com/hkrn/nanoem)'s lingering issues.
+
+Such as:
+- Added support for Chinese character fonts and glyphs.
+- Completely fixed [models' leg shaking problem](https://nanoem.readthedocs.io/ja/latest/trouble_shooting.html#id12) (IK)
+- Optimized Camera Movement with Bezier Curve Algorithms (To make it smoother and more stable.)
+
 ## Background and Design Concept
 
 MikuMikuDance (a.k.a MMD) is created on Windows via DirectX9. As such, it's unavailable to run on non-Windows deployment unless you use a virtual machine or emulation layer such as Wine.
