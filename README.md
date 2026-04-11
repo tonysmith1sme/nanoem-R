@@ -1,6 +1,6 @@
 # nanoem-R
 
-[![Build Status](https://github.com/tonysmith1sme/nanoem-R/workflows/CI/badge.svg)](https://github.com/tonysmith1sme/nanoem-R/actions) [![Documentation Status](https://readthedocs.org/projects/nanoem/badge/?version=latest)](https://nanoem.readthedocs.io/ja/latest/?badge=latest) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](https://opensource.org/licenses/MPL-2.0) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/tonysmith1sme/nanoem-R/workflows/CI/badge.svg)](https://github.com/tonysmith1sme/nanoem-R/actions) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](https://opensource.org/licenses/MPL-2.0) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 nanoem-R is a cross-platform application compatible with [MMD (MikuMikuDance)](https://sites.google.com/view/vpvp/).
 
@@ -9,7 +9,7 @@ Based on [nanoem](https://github.com/hkrn/nanoem).
 "R" stands for "Refactoring."
 
 - [All Releases](https://github.com/tonysmith1sme/nanoem-R/releases)
-- [Usage Manual](https://nanoem.readthedocs.io) (Japanese)
+- [Usage Manual](https://tonysmith1sme.github.io/nanoem-R_docs/) (Japanese)
 
 ## Screenshot
 
