@@ -16,6 +16,46 @@ namespace nanoem {
 namespace internal {
 namespace imgui {
 
+namespace {
+
+struct LazyReloadFontCommand : ImGuiWindow::ILazyExecutionCommand {
+    explicit LazyReloadFontCommand(ImGuiWindow *parent)
+        : m_parent(parent)
+    {
+    }
+    void
+    execute(Project *project) NANOEM_DECL_OVERRIDE
+    {
+        m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
+    }
+    void
+    destroy(Project *project) NANOEM_DECL_OVERRIDE
+    {
+        BX_UNUSED_1(project);
+    }
+
+    ImGuiWindow *m_parent;
+};
+
+static const char *
+systemFontLabel(ITranslator *translator) NANOEM_DECL_NOEXCEPT
+{
+    const char *id = "nanoem.gui.window.preference.global.system-font.enable";
+    if (translator && translator->isTranslatable(id)) {
+        return translator->translate(id);
+    }
+    return "Use System Font";
+}
+
+static void
+requestFontReload(Project *project, ImGuiWindow *parent)
+{
+    BX_UNUSED_1(project);
+    parent->addLazyExecutionCommand(nanoem_new(LazyReloadFontCommand(parent)));
+}
+
+} /* namespace */
+
 const char *const PreferenceDialog::kIdentifier = "dialog.preference";
 
 PreferenceDialog::PreferenceDialog(BaseApplicationService *applicationPtr, ImGuiWindow *parent)
@@ -35,6 +75,7 @@ PreferenceDialog::draw(Project *project)
             ImGui::PushItemWidth(-1);
             ImGui::TextUnformatted(tr("nanoem.gui.window.preference.global.renderer"));
             ApplicationPreference preference(application());
+            ITranslator *translator = application()->translator();
             const StringList renderers(preference.allAvailableRenderers());
             if (ImGui::BeginCombo("##renderer", preference.rendererBackend())) {
                 for (StringList::const_iterator it = renderers.begin(), end = renderers.end(); it != end; ++it) {
@@ -86,9 +127,9 @@ PreferenceDialog::draw(Project *project)
             }
             addSeparator();
             bool enableSystemFont = preference.isSystemFontEnabled();
-            if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.system-font.enable"), &enableSystemFont)) {
+            if (ImGui::Checkbox(systemFontLabel(translator), &enableSystemFont)) {
                 preference.setSystemFontEnabled(enableSystemFont);
-                m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
+                requestFontReload(project, m_parent);
             }
             bool enableModelEditing = preference.isModelEditingEnabled();
             if (ImGui::Checkbox(tr("nanoem.gui.window.preference.global.editing-model.enable"), &enableModelEditing)) {
@@ -124,7 +165,6 @@ PreferenceDialog::draw(Project *project)
         if (ImGui::BeginTabItem(tr("nanoem.gui.window.preference.tab.project"))) {
             ImGui::PushItemWidth(-1);
             ImGui::TextUnformatted(tr("nanoem.gui.window.preference.project.language.title"));
-            ITranslator *translator = application()->translator();
             const ITranslator::LanguageType language = translator->language();
             if (ImGui::BeginCombo("##language", selectedLanguageString(language))) {
                 const nanoem_u32_t flags = project->isModelEditingEnabled() ? ImGuiSelectableFlags_Disabled : 0;
@@ -134,7 +174,7 @@ PreferenceDialog::draw(Project *project)
                         ImGui::Selectable(selectedLanguageString(type), type == language, flags)) {
                         project->setLanguage(type);
                         translator->setLanguage(type);
-                        m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
+                        requestFontReload(project, m_parent);
                     }
                 }
                 ImGui::EndCombo();
