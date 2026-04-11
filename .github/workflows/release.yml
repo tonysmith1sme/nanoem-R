@@ -220,10 +220,14 @@ jobs:
         run: |
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           ctest -C release --output-on-failure
+      - name: install nanoem runtime
+        run: |
+          cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
+          cmake --install . --config release
       - name: archive out directory
         shell: pwsh
         run: |
-          Compress-Archive -Path "${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/win32/Release/nanoem-R.exe" -DestinationPath "${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-windows-x86_64.zip" -Force
+          Compress-Archive -Path "${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/install-root/*" -DestinationPath "${{ github.workspace }}/nanoem-${{ env.NANOEM_RELEASE_VERSION }}-windows-x86_64.zip" -Force
       - name: upload nanoem artifacts
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
