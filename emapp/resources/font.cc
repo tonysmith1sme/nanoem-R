@@ -25,8 +25,6 @@ addChineseGlyphRanges(ImFontAtlas *fontAtlas, ITranslator::LanguageType language
 {
     switch (language) {
     case ITranslator::kLanguageTypeChineseSimplified:
-        builder.AddRanges(fontAtlas->GetGlyphRangesChineseSimplifiedCommon());
-        break;
     case ITranslator::kLanguageTypeChineseTraditional:
         builder.AddRanges(fontAtlas->GetGlyphRangesChineseFull());
         break;
