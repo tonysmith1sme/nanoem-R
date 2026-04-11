@@ -1221,8 +1221,13 @@ MainWindow::translateKey(LPARAM lparam) noexcept
 Vector2SI32
 MainWindow::devicePixelScreenPosition(HWND hwnd, const Vector2SI32 &value) noexcept
 {
-    POINT point = { value.x, value.y };
-    ClientToScreen(hwnd, &point);
+    BX_UNUSED_1(value);
+    POINT point = {};
+    if (!GetCursorPos(&point)) {
+        point.x = value.x;
+        point.y = value.y;
+        ClientToScreen(hwnd, &point);
+    }
     return Vector2SI32(point.x, point.y);
 }
 
