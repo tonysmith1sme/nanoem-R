@@ -1523,7 +1523,17 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
         }
         else {
             builder.AddRanges(m_atlas.GetGlyphRangesCyrillic());
-            builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
+            switch (language) {
+            case ITranslator::kLanguageTypeChineseSimplified:
+                builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
+                break;
+            case ITranslator::kLanguageTypeChineseTraditional:
+                builder.AddRanges(m_atlas.GetGlyphRangesChineseFull());
+                break;
+            default:
+                builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
+                break;
+            }
             builder.AddRanges(m_atlas.GetGlyphRangesJapanese());
             builder.AddRanges(m_atlas.GetGlyphRangesKorean());
             builder.AddRanges(m_atlas.GetGlyphRangesThai());
