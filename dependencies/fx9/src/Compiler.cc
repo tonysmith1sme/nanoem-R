@@ -1332,6 +1332,7 @@ Compiler::HLSLPassShader::~HLSLPassShader()
 void
 Compiler::HLSLPassShader::configureParserContext(ParserContext &parser)
 {
+    parser.enableUniformBuffer();
     ParserContext::BuiltInLocationMap value;
     for (auto it : m_parent->m_vertexShaderInputLocations) {
         value.insert(std::make_pair(it.first, 0x7ff - it.second));
