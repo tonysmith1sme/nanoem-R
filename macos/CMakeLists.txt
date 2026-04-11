@@ -16,16 +16,25 @@ add_executable(${NANOEM_EXECUTABLE_NAME} MACOSX_BUNDLE ${OSX_SOURCES} ${CMAKE_CU
 target_include_directories(${NANOEM_EXECUTABLE_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/classes ${PROJECT_BINARY_DIR}/emapp/resources/include)
 
 include(${PROJECT_SOURCE_DIR}/cmake/GetGitRevisionDescription.cmake)
-git_describe(NANOEM_BUNDLE_VERSION)
-string(REGEX MATCH "^v([0-9]+\\.[0-9]+\\.[0-9]+)" VERSION_MATCH ${NANOEM_BUNDLE_VERSION})
+if(NANOEM_VERSION_GIT)
+  set(NANOEM_BUNDLE_VERSION "${NANOEM_VERSION_GIT}")
+else()
+  git_describe(NANOEM_BUNDLE_VERSION)
+endif()
+string(REGEX MATCH "^v?([0-9]+\\.[0-9]+\\.[0-9]+)" VERSION_MATCH "${NANOEM_BUNDLE_VERSION}")
+if(VERSION_MATCH)
+  set(NANOEM_BUNDLE_SHORT_VERSION "${CMAKE_MATCH_1}")
+else()
+  set(NANOEM_BUNDLE_SHORT_VERSION "0.0.0")
+endif()
 set_target_properties(${NANOEM_EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME ${PROJECT_NAME}
                       MACOSX_BUNDLE_INFO_STRING "${PROJECT_NAME}"
                       MACOSX_BUNDLE_ICON_FILE "${PROJECT_NAME}.icns"
                       MACOSX_BUNDLE_GUI_IDENTIFIER "com.github.nanoemr"
                       MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_NAME} ${NANOEM_BUNDLE_VERSION}"
                       MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}"
-                      MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_MATCH_1}"
-                      MACOSX_BUNDLE_COPYRIGHT "Copyright 2015-2023 hkrn All Rights Reserved."
+                      MACOSX_BUNDLE_SHORT_VERSION_STRING "${NANOEM_BUNDLE_SHORT_VERSION}"
+                      MACOSX_BUNDLE_COPYRIGHT "Copyright 2015-${NANOEM_COPYRIGHT_YEAR} hkrn All Rights Reserved."
                       MACOSX_BUNDLE_BUNDLE_VERSION "${NANOEM_BUNDLE_VERSION}"
                       MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
                       XCODE_ATTRIBUTE_CLANG_ENABLE_MODULES "YES"
