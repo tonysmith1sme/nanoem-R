@@ -70,12 +70,12 @@ PreferenceDialog::draw(Project *project)
     bool visible = true;
     if (open(
             tr("nanoem.gui.window.preference.title"), kIdentifier, &visible, ImGui::GetFrameHeightWithSpacing() * 21)) {
+        ITranslator *translator = application()->translator();
         ImGui::BeginTabBar("tabbar");
         if (ImGui::BeginTabItem(tr("nanoem.gui.window.preference.tab.global"))) {
             ImGui::PushItemWidth(-1);
             ImGui::TextUnformatted(tr("nanoem.gui.window.preference.global.renderer"));
             ApplicationPreference preference(application());
-            ITranslator *translator = application()->translator();
             const StringList renderers(preference.allAvailableRenderers());
             if (ImGui::BeginCombo("##renderer", preference.rendererBackend())) {
                 for (StringList::const_iterator it = renderers.begin(), end = renderers.end(); it != end; ++it) {
