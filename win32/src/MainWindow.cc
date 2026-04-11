@@ -2098,12 +2098,18 @@ MainWindow::setupDirectXRenderer(HWND windowHandle, int width, int height, bool 
         IDXGIDevice *deviceDXGI = nullptr;
         device->QueryInterface(IID_PPV_ARGS(&deviceDXGI));
         IDXGIAdapter *adapter = nullptr;
-        deviceDXGI->GetParent(IID_PPV_ARGS(&adapter));
+        if (deviceDXGI) {
+            deviceDXGI->GetParent(IID_PPV_ARGS(&adapter));
+        }
         IDXGIFactory *factory = nullptr;
-        adapter->GetParent(IID_PPV_ARGS(&factory));
-        factory->MakeWindowAssociation(windowHandle, DXGI_MWA_NO_PRINT_SCREEN);
+        if (adapter) {
+            adapter->GetParent(IID_PPV_ARGS(&factory));
+        }
+        if (factory) {
+            factory->MakeWindowAssociation(windowHandle, DXGI_MWA_NO_PRINT_SCREEN);
+        }
         IDXGIFactory6 *factory6 = nullptr;
-        if (!FAILED(factory->QueryInterface(IID_PPV_ARGS(&factory6)))) {
+        if (factory && !FAILED(factory->QueryInterface(IID_PPV_ARGS(&factory6)))) {
             DXGI_ADAPTER_DESC adapterDesc = {};
             adapter->GetDesc(&adapterDesc);
             IDXGIAdapter1 *adapterItem = nullptr;
@@ -2119,10 +2125,14 @@ MainWindow::setupDirectXRenderer(HWND windowHandle, int width, int height, bool 
                         adapterItemDesc.AdapterLuid.HighPart == adapterDesc.AdapterLuid.HighPart &&
                         adapterItemDesc.AdapterLuid.LowPart == adapterDesc.AdapterLuid.LowPart) {
                         isLowPower = true;
+                        adapterItem->Release();
                         break;
                     }
+                    adapterItem->Release();
+                    adapterItem = nullptr;
                 }
             }
+            factory6->Release();
         }
         else {
             isLowPower = true;
@@ -2152,6 +2162,9 @@ MainWindow::setupDirectXRenderer(HWND windowHandle, int width, int height, bool 
             sizeof(adapterName), 0, false);
         JSON_Object *pending = json_object(m_service->applicationPendingChangeConfiguration());
         json_object_dotset_string(pending, "win32.renderer.name", adapterName);
+        COMInline::safeRelease(factory);
+        COMInline::safeRelease(adapter);
+        COMInline::safeRelease(deviceDXGI);
     }
     else {
         COMInline::wrapCall(rc, error);
