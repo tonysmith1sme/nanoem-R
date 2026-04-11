@@ -66,6 +66,7 @@ jobs:
       - name: build all dependencies of nanoem
         run: cmake -DCONFIG=release -P ${{ github.workspace }}/scripts/build.cmake
         env:
+          NANOEM_DISABLE_BUILD_TBB: 1
           NANOEM_ENABLE_BUILD_FFMPEG: 1
           NANOEM_ENABLE_BUILD_GLFW: 1
           NANOEM_ENABLE_BUILD_ICU4C: 1
@@ -187,6 +188,7 @@ jobs:
       - name: build all dependencies of nanoem
         run: cmake -DCONFIG=release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -P ${{ github.workspace }}/scripts/build.cmake
         env:
+          NANOEM_DISABLE_BUILD_TBB: 1
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
           NANOEM_TARGET_ARCHITECTURES: x86_64
           NANOEM_TARGET_COMPILER: vs2019
@@ -201,6 +203,7 @@ jobs:
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL `
             -DFX9_ENABLE_OPTIMIZER=OFF `
             -DNANOEM_ENABLE_BULLET=ON `
+            -DNANOEM_ENABLE_TBB=OFF `
             -DNANOEM_ENABLE_MIMALLOC=ON `
             -DNANOEM_ENABLE_NMD=ON `
             -DNANOEM_ENABLE_TEST=ON `
