@@ -224,8 +224,13 @@ bool
 Dialog::showDialog(IFileDialog *dialog, const FilterList &filter, const char *defaultFileName, DWORD newFlags)
 {
     DialogEventHandler *events = new DialogEventHandler();
-    DWORD cookie, flags;
-    dialog->Advise(events, &cookie);
+    DWORD cookie = 0, flags;
+    const HRESULT adviseRC = dialog->Advise(events, &cookie);
+    const bool advised = !FAILED(adviseRC);
+    if (!advised) {
+        delete events;
+        events = nullptr;
+    }
     dialog->GetOptions(&flags);
     dialog->SetOptions(flags | FOS_FORCEFILESYSTEM | newFlags);
     if (defaultFileName) {
@@ -245,15 +250,17 @@ Dialog::showDialog(IFileDialog *dialog, const FilterList &filter, const char *de
         IShellItem *result = nullptr;
         dialog->GetResult(&result);
         PWSTR filePath = nullptr;
-        rc = result->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
-        if (!FAILED(rc)) {
+        rc = result ? result->GetDisplayName(SIGDN_FILESYSPATH, &filePath) : E_FAIL;
+        if (!FAILED(rc) && filePath) {
             m_filePath = MutableWideString(filePath, filePath + wcslen(filePath) + 1);
         }
         CoTaskMemFree(filePath);
         safeRelease(result);
-        dialog->Unadvise(cookie);
-        safeRelease(dialog);
     }
+    if (advised) {
+        dialog->Unadvise(cookie);
+    }
+    safeRelease(dialog);
     return opened;
 }
 

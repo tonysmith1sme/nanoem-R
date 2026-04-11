@@ -872,15 +872,22 @@ Win32ThreadedApplicationService::handleInitializeApplication()
                 IDXGIDevice *deviceDXGI = nullptr;
                 m_device->QueryInterface(IID_PPV_ARGS(&deviceDXGI));
                 IDXGIAdapter *adapter = nullptr;
-                deviceDXGI->GetParent(IID_PPV_ARGS(&adapter));
+                if (deviceDXGI) {
+                    deviceDXGI->GetParent(IID_PPV_ARGS(&adapter));
+                }
                 IDXGIFactory *factory = nullptr;
-                adapter->GetParent(IID_PPV_ARGS(&factory));
+                if (adapter) {
+                    adapter->GetParent(IID_PPV_ARGS(&factory));
+                }
                 bool result = false;
-                if (factory->CreateSwapChain(m_device, &sd, &m_swapChain) >= 0) {
+                if (factory && factory->CreateSwapChain(m_device, &sd, &m_swapChain) >= 0) {
                     createRenderTargetView();
                     createDepthStencilView(sd.BufferDesc.Width, sd.BufferDesc.Height);
                     result = true;
                 }
+                COMInline::safeRelease(factory);
+                COMInline::safeRelease(adapter);
+                COMInline::safeRelease(deviceDXGI);
                 return result;
             }
             void
