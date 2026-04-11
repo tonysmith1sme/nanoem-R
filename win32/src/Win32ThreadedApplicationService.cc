@@ -40,8 +40,25 @@ namespace nanoem {
 namespace win32 {
 namespace {
 
-static wchar_t s_crashFilePath[MAX_PATH];
-static wchar_t s_redoFilePath[MAX_PATH];
+static wchar_t s_crashFilePath[MAX_PATH] = {};
+static wchar_t s_redoFilePath[MAX_PATH] = {};
+
+static bool
+buildRedoDirectoryPath(const JSON_Value *config, MutableWideString &path)
+{
+    const char *storagePath = json_object_dotget_string(json_object(config), "win32.redo.path");
+    if (!storagePath) {
+        return false;
+    }
+    StringUtils::getWideCharString(storagePath, path);
+    return !path.empty();
+}
+
+static bool
+copyWideStringPath(const MutableWideString &source, wchar_t *destination, size_t destinationSize)
+{
+    return !source.empty() && wcscpy_s(destination, destinationSize, source.data()) == 0;
+}
 
 class Win32BackgroundVideoRendererProxy : public IBackgroundVideoRenderer {
 public:
@@ -496,12 +513,12 @@ Win32ThreadedApplicationService::Win32ThreadedApplicationService(const JSON_Valu
     , m_requestWindowResize(nullptr)
     , m_displaySyncInterval(1)
 {
-    const char *storagePath = json_object_dotget_string(json_object(applicationConfiguration()), "win32.redo.path");
     MutableWideString ws;
-    StringUtils::getWideCharString(storagePath, ws);
-    const wchar_t filename[] = L"/CRASH";
-    ws.insert(ws.end() - 1, filename, filename + ARRAYSIZE(filename));
-    wcscpy_s(s_crashFilePath, ARRAYSIZE(s_crashFilePath), ws.data());
+    if (buildRedoDirectoryPath(applicationConfiguration(), ws)) {
+        const wchar_t filename[] = L"/CRASH";
+        ws.insert(ws.end() - 1, filename, filename + ARRAYSIZE(filename));
+        copyWideStringPath(ws, s_crashFilePath, ARRAYSIZE(s_crashFilePath));
+    }
 }
 
 Win32ThreadedApplicationService::~Win32ThreadedApplicationService()
@@ -1029,11 +1046,15 @@ Win32ThreadedApplicationService::recoverableRedoFileURI() const
     HANDLE file = CreateFileW(s_crashFilePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_READONLY | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     URI fileURI;
-    if (file != INVALID_HANDLE_VALUE && ReadFile(file, s_redoFilePath, sizeof(s_redoFilePath), nullptr, nullptr)) {
+    if (file != INVALID_HANDLE_VALUE) {
+        DWORD size = 0;
+        if (ReadFile(file, s_redoFilePath, sizeof(s_redoFilePath) - sizeof(wchar_t), &size, nullptr)) {
+            s_redoFilePath[size / sizeof(wchar_t)] = 0;
+            MutableString ms;
+            StringUtils::getMultiBytesString(s_redoFilePath, ms);
+            fileURI = URI::createFromFilePath(ms.data());
+        }
         CloseHandle(file);
-        MutableString ms;
-        StringUtils::getMultiBytesString(s_redoFilePath, ms);
-        fileURI = URI::createFromFilePath(ms.data());
     }
     return fileURI;
 }
@@ -1122,6 +1143,10 @@ Win32ThreadedApplicationService::setupNewProject()
 {
     char path[MAX_PATH];
     const char *storagePath = json_object_dotget_string(json_object(applicationConfiguration()), "win32.redo.path");
+    if (!storagePath) {
+        s_redoFilePath[0] = 0;
+        return;
+    }
     SYSTEMTIME time;
     GetLocalTime(&time);
     bx::snprintf(path, sizeof(path), "%s/nanoem-%04d-%02d-%02d-%02d%02d%02d.%s", storagePath, time.wYear, time.wMonth,
@@ -1130,7 +1155,9 @@ Win32ThreadedApplicationService::setupNewProject()
     project->setRedoFileURI(URI::createFromFilePath(path));
     MutableWideString ws;
     StringUtils::getWideCharString(path, ws);
-    wcscpy_s(s_redoFilePath, ARRAYSIZE(s_redoFilePath), ws.data());
+    if (!copyWideStringPath(ws, s_redoFilePath, ARRAYSIZE(s_redoFilePath))) {
+        s_redoFilePath[0] = 0;
+    }
 }
 
 void
