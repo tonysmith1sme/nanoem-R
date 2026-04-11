@@ -71,8 +71,8 @@ jobs:
           NANOEM_ENABLE_BUILD_ICU4C: 1
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
           NANOEM_TARGET_ARCHITECTURES: x86_64
+          NANOEM_TARGET_CONFIGURATIONS: "debug;release"
           NANOEM_TARGET_COMPILER: clang
-          NANOEM_TARGET_CONFIGURATIONS: release
       - name: build nanoem itself
         run: |
           mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
@@ -130,12 +130,12 @@ jobs:
       - name: build all dependencies of nanoem
         run: cmake -DCONFIG=release -P ${{ github.workspace }}/scripts/build.cmake
         env:
+          NANOEM_TARGET_CONFIGURATIONS: "debug;release"
+          NANOEM_TARGET_COMPILER: clang
           NANOEM_DISABLE_BUILD_TBB: 1
           NANOEM_ENABLE_BUILD_FFMPEG: 1
           NANOEM_ENABLE_BUILD_ICU4C: 1
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
-          NANOEM_TARGET_COMPILER: clang
-          NANOEM_TARGET_CONFIGURATIONS: release
       - name: build nanoem itself
         run: |
           mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
@@ -188,7 +188,7 @@ jobs:
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
           NANOEM_TARGET_ARCHITECTURES: x86_64
           NANOEM_TARGET_COMPILER: vs2019
-          NANOEM_TARGET_CONFIGURATIONS: release
+          NANOEM_TARGET_CONFIGURATIONS: "debug;release"
           NANOEM_TARGET_TOOLSET: v142
       - name: build nanoem itself
         run: |
@@ -239,13 +239,14 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2.0.15
         with:
           manifest-path: ./rust/Cargo.toml
+          rust-version: 1.91.0
       - name: setup rust toolchain (stable and wasm32-wasip1)
         uses: actions-rust-lang/setup-rust-toolchain@1fbea72663f6d4c03efaab13560c8a24cfd2a7cc # v1.9.0
         with:
           cache-workspaces: ${{ env.NANOEM_RUST_DIRECTORY }}
           components: rustfmt
           target: wasm32-wasip1
-          toolchain: 1.90.0
+          toolchain: 1.91.0
       - name: run rustfmt for check
         uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1.1.1
         with:
@@ -256,20 +257,25 @@ jobs:
             protobuf-compiler
       - name: build plugin_wasm and its test WASMs
         run: |
+          profiles=('dev' 'release-lto')
           packages=(
             'plugin_wasm_test_model_minimum'
             'plugin_wasm_test_motion_minimum'
             'plugin_wasm_test_model_full'
             'plugin_wasm_test_motion_full'
           )
-          for package in "${packages[@]}"; do
-            cargo build --profile release-lto --package "${package}" --target wasm32-wasip1
+          for profile in "${profiles[@]}"; do
+            for package in "${packages[@]}"; do
+              cargo build --profile "${profile}" --package "${package}" --target wasm32-wasip1
+            done
           done
           cargo check --profile release-lto
           cargo test --profile release-lto
       - name: stage rust artifacts into out
         run: |
+          mkdir -p "${{ github.workspace }}/out/rust/debug"
           mkdir -p "${{ github.workspace }}/out/rust/release-lto"
+          find "${{ env.NANOEM_RUST_DIRECTORY }}/target/wasm32-wasip1/debug" -maxdepth 1 -type f -name '*.wasm' -exec cp {} "${{ github.workspace }}/out/rust/debug/" \;
           find "${{ env.NANOEM_RUST_DIRECTORY }}/target/wasm32-wasip1/release-lto" -maxdepth 1 -type f -name '*.wasm' -exec cp {} "${{ github.workspace }}/out/rust/release-lto/" \;
       - name: archive out directory
         run: |
