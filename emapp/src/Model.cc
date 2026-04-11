@@ -5597,6 +5597,23 @@ Model::findConstraint(const nanoem_unicode_string_t *name) const NANOEM_DECL_NOE
                     factory, nanoemModelBoneGetName(targetBone, NANOEM_LANGUAGE_TYPE_FIRST_ENUM), name) == 0) {
                 return constraint;
             }
+            const nanoem_model_bone_t *effectorBone = nanoemModelConstraintGetEffectorBoneObject(constraint);
+            if (effectorBone && nanoemUnicodeStringFactoryCompareString(
+                                    factory, nanoemModelBoneGetName(effectorBone, NANOEM_LANGUAGE_TYPE_FIRST_ENUM),
+                                    name) == 0) {
+                return constraint;
+            }
+            nanoem_rsize_t numJoints;
+            nanoem_model_constraint_joint_t *const *joints = nanoemModelConstraintGetAllJointObjects(
+                const_cast<nanoem_model_constraint_t *>(constraint), &numJoints);
+            for (nanoem_rsize_t j = 0; j < numJoints; j++) {
+                const nanoem_model_bone_t *jointBone = nanoemModelConstraintJointGetBoneObject(joints[j]);
+                if (jointBone && nanoemUnicodeStringFactoryCompareString(
+                                     factory, nanoemModelBoneGetName(jointBone, NANOEM_LANGUAGE_TYPE_FIRST_ENUM),
+                                     name) == 0) {
+                    return constraint;
+                }
+            }
         }
     }
     else {
@@ -5617,8 +5634,32 @@ Model::findConstraint(const nanoem_unicode_string_t *name) const NANOEM_DECL_NOE
 const nanoem_model_constraint_t *
 Model::findConstraint(const nanoem_model_bone_t *bone) const NANOEM_DECL_NOEXCEPT
 {
+    if (!bone) {
+        return nullptr;
+    }
     ConstraintMap::const_iterator it = m_constraints.find(bone);
-    return it != m_constraints.end() ? it->second : nullptr;
+    if (it != m_constraints.end()) {
+        return it->second;
+    }
+    if (const nanoem_model_constraint_t *constraint = nanoemModelBoneGetConstraintObject(bone)) {
+        return constraint;
+    }
+    if (ResolveConstraintJointParentMap::const_iterator it2 = m_constraintJointBones.find(bone);
+        it2 != m_constraintJointBones.end()) {
+        return it2->second;
+    }
+    if (m_constraintEffectorBones.find(bone) != m_constraintEffectorBones.end()) {
+        nanoem_rsize_t numObjects;
+        if (nanoem_model_constraint_t *const *constraints = nanoemModelGetAllConstraintObjects(m_opaque, &numObjects)) {
+            for (nanoem_rsize_t i = 0; i < numObjects; i++) {
+                const nanoem_model_constraint_t *constraint = constraints[i];
+                if (nanoemModelConstraintGetEffectorBoneObject(constraint) == bone) {
+                    return constraint;
+                }
+            }
+        }
+    }
+    return nullptr;
 }
 
 bool
