@@ -1518,12 +1518,17 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
     ApplicationPreference preference(m_applicationPtr);
     if (const char *fontPath = preference.extraFontPath()) {
         ImFontGlyphRangesBuilder builder;
-        builder.AddRanges(m_atlas.GetGlyphRangesCyrillic());
-        builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
-        builder.AddRanges(m_atlas.GetGlyphRangesJapanese());
-        builder.AddRanges(m_atlas.GetGlyphRangesKorean());
-        builder.AddRanges(m_atlas.GetGlyphRangesThai());
-        builder.AddRanges(m_atlas.GetGlyphRangesVietnamese());
+        if (!m_textFontRanges.empty()) {
+            builder.AddRanges(m_textFontRanges.Data);
+        }
+        else {
+            builder.AddRanges(m_atlas.GetGlyphRangesCyrillic());
+            builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
+            builder.AddRanges(m_atlas.GetGlyphRangesJapanese());
+            builder.AddRanges(m_atlas.GetGlyphRangesKorean());
+            builder.AddRanges(m_atlas.GetGlyphRangesThai());
+            builder.AddRanges(m_atlas.GetGlyphRangesVietnamese());
+        }
         ImVector<ImWchar> ranges;
         builder.BuildRanges(&ranges);
         ImFontConfig config;
