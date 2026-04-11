@@ -1616,8 +1616,6 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
             builder.AddRanges(m_atlas.GetGlyphRangesCyrillic());
             switch (language) {
             case ITranslator::kLanguageTypeChineseSimplified:
-                builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
-                break;
             case ITranslator::kLanguageTypeChineseTraditional:
                 builder.AddRanges(m_atlas.GetGlyphRangesChineseFull());
                 break;
