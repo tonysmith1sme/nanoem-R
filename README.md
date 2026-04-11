@@ -104,5 +104,5 @@ See [Architecture Document](docs/architecture.rst) (Japanese)
 ## Contributors
 
 <a href="https://github.com/tonysmith1sme/nanoem-R/graphs/contributors">
-  <img src="https://contributors-img.web.app/image?repo=hkrn/nanoem" />
+  <img src="https://contributors-img.web.app/image?repo=tonysmith1sme/nanoem-R" />
 </a>
