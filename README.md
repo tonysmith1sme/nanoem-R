@@ -15,7 +15,7 @@ Based on [nanoem](https://github.com/hkrn/nanoem).
 
 ![nanoem for macOS](docs/images/application/screen_v340_small.png)
 
-## What is the different between nanoem and nanoem-R?
+## What is the difference between nanoem and nanoem-R?
 nanoem-R fixed some [nanoem](https://github.com/hkrn/nanoem)'s lingering issues.
 
 Such as:
