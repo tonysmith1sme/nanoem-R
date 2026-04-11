@@ -1,10 +1,14 @@
-# nanoem
+# nanoem-R
 
-[![Build Status](https://github.com/hkrn/nanoem/workflows/CI/badge.svg)](https://github.com/hkrn/nanoem/actions) [![Documentation Status](https://readthedocs.org/projects/nanoem/badge/?version=latest)](https://nanoem.readthedocs.io/ja/latest/?badge=latest) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](https://opensource.org/licenses/MPL-2.0) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/tonysmith1sme/nanoem-R/workflows/CI/badge.svg)](https://github.com/tonysmith1sme/nanoem-R/actions) [![Documentation Status](https://readthedocs.org/projects/nanoem/badge/?version=latest)](https://nanoem.readthedocs.io/ja/latest/?badge=latest) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](https://opensource.org/licenses/MPL-2.0) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-nanoem is an [MMD (MikuMikuDance)](https://sites.google.com/view/vpvp/) compatible implementation and its like application mainly built for macOS.
+nanoem-R is a cross-platform application compatible with [MMD (MikuMikuDance)](https://sites.google.com/view/vpvp/).
 
-- [All Releases](https://github.com/hkrn/nanoem/releases)
+Based on [nanoem](https://github.com/hkrn/nanoem).
+
+"R" stands for "Refactoring."
+
+- [All Releases](https://github.com/tonysmith1sme/nanoem-R/releases)
 - [Usage Manual](https://nanoem.readthedocs.io) (Japanese)
 
 ## Screenshot
@@ -91,6 +95,6 @@ See [Architecture Document](docs/architecture.rst) (Japanese)
 
 ## Contributors
 
-<a href="https://github.com/hkrn/nanoem/graphs/contributors">
+<a href="https://github.com/tonysmith1sme/nanoem-R/graphs/contributors">
   <img src="https://contributors-img.web.app/image?repo=hkrn/nanoem" />
 </a>
