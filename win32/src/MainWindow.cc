@@ -752,7 +752,7 @@ MainWindow::handleWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             Win32ThreadedApplicationService::ViewportData::getWindowStyle(viewport->Flags, style, styleEx);
             if (userData->m_style != style || userData->m_styleEx != styleEx) {
                 userData->m_style = style;
-                userData->m_styleEx = style;
+                userData->m_styleEx = styleEx;
                 HWND windowHandle = userData->m_windowHandle;
                 SetWindowLongW(windowHandle, GWL_STYLE, style);
                 SetWindowLongW(windowHandle, GWL_EXSTYLE, styleEx);
@@ -789,9 +789,13 @@ MainWindow::handleWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             COMPOSITIONFORM cf = { CFS_FORCE_POSITION,
                 { static_cast<LONG>(pos->x - viewport->Pos.x), static_cast<LONG>(pos->y - viewport->Pos.y) },
                 { 0, 0, 0, 0 } };
+            CANDIDATEFORM candf = { CFS_CANDIDATEPOS,
+                { static_cast<LONG>(pos->x - viewport->Pos.x), static_cast<LONG>(pos->y - viewport->Pos.y) },
+                { 0, 0, 0, 0 } };
             if (HWND windowHandle = static_cast<HWND>(viewport->PlatformHandle)) {
                 if (HIMC himc = ImmGetContext(windowHandle)) {
                     ImmSetCompositionWindow(himc, &cf);
+                    ImmSetCandidateWindow(himc, &candf);
                     ImmReleaseContext(windowHandle, himc);
                 }
             }
