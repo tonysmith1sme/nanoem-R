@@ -5644,8 +5644,8 @@ Model::findConstraint(const nanoem_model_bone_t *bone) const NANOEM_DECL_NOEXCEP
     if (const nanoem_model_constraint_t *constraint = nanoemModelBoneGetConstraintObject(bone)) {
         return constraint;
     }
-    if (ResolveConstraintJointParentMap::const_iterator it2 = m_constraintJointBones.find(bone);
-        it2 != m_constraintJointBones.end()) {
+    ResolveConstraintJointParentMap::const_iterator it2 = m_constraintJointBones.find(bone);
+    if (it2 != m_constraintJointBones.end()) {
         return it2->second;
     }
     if (m_constraintEffectorBones.find(bone) != m_constraintEffectorBones.end()) {
