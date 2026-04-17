@@ -993,6 +993,12 @@ Compiler::BasePassShader::convertPassState(
             value = resolveRenderStateValue(state, m_parent->m_renderStateBlendOpValueConversions);
             break;
         }
+        case 154:
+        case 155:
+        case 158:
+        case 159:
+        case 160:
+        case 166:
         case 175:
         case 195: {
             const TIntermNode *valueNode = state.m_value;
@@ -1451,6 +1457,14 @@ Compiler::MSLPassShader::~MSLPassShader()
 void
 Compiler::MSLPassShader::configureParserContext(ParserContext &parser)
 {
+    const auto decodeRenderStateFloatValue = [](uint32_t value) {
+        union {
+            uint32_t m_uint;
+            float m_float;
+        } u;
+        u.m_uint = value;
+        return u.m_float;
+    };
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     float pointSize = 0.0f;
     for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
@@ -1461,7 +1475,7 @@ Compiler::MSLPassShader::configureParserContext(ParserContext &parser)
         }
         /* POINTSIZE */
         else if (state->key == 154) {
-            pointSize = float(state->value);
+            pointSize = decodeRenderStateFloatValue(state->value);
         }
     }
     parser.setPointSizeAssignment(pointSize);
