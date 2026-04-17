@@ -36,7 +36,7 @@
 	url = https://github.com/KhronosGroup/SPIRV-Tools.git
 [submodule "dependencies/sokol"]
 	path = dependencies/sokol
-	url = https://github.com/hkrn/sokol
+	url = https://github.com/tonysmith1sme/sokol
 [submodule "dependencies/imgui"]
 	path = dependencies/imgui
 	url = https://github.com/ocornut/imgui.git
