@@ -102,6 +102,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasBlendDestFactorAlpha(false)
     , m_hasBlendOpRGB(false)
     , m_hasBlendOpAlpha(false)
+    , m_hasSeparateAlphaBlendEnabled(false)
+    , m_separateAlphaBlendEnabled(false)
     , m_hasAlphaTestEnabled(false)
     , m_alphaTestEnabled(false)
     , m_hasAlphaTestCompareFunc(false)
@@ -131,6 +133,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasBlendDestFactorAlpha(source.m_hasBlendDestFactorAlpha)
     , m_hasBlendOpRGB(source.m_hasBlendOpRGB)
     , m_hasBlendOpAlpha(source.m_hasBlendOpAlpha)
+    , m_hasSeparateAlphaBlendEnabled(source.m_hasSeparateAlphaBlendEnabled)
+    , m_separateAlphaBlendEnabled(source.m_separateAlphaBlendEnabled)
     , m_hasAlphaTestEnabled(source.m_hasAlphaTestEnabled)
     , m_alphaTestEnabled(source.m_alphaTestEnabled)
     , m_hasAlphaTestCompareFunc(source.m_hasAlphaTestCompareFunc)
@@ -1614,7 +1618,10 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         break;
     }
     case 206: { /* D3DRS_SEPARATEALPHABLENDENABLE */
-        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SEPARATEALPHABLENDENABLE, value=%d)", value);
+        pd.m_hasSeparateAlphaBlendEnabled = true;
+        pd.m_separateAlphaBlendEnabled = value != 0;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SEPARATEALPHABLENDENABLE, enabled=%s)",
+            pd.m_separateAlphaBlendEnabled ? "true" : "false");
         break;
     }
     case 207: { /* D3DRS_SRCBLENDALPHA */
