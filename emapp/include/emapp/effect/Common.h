@@ -78,6 +78,8 @@ struct PipelineDescriptor {
     bool m_hasDepthBiasSlopeScale;
     bool m_hasScissorTestEnabled;
     bool m_scissorTestEnabled;
+    bool m_hasTwoSidedStencilMode;
+    bool m_twoSidedStencilMode;
     bool m_hasStencilEnabled;
     bool m_hasStencilRef;
     bool m_hasStencilReadMask;

@@ -697,7 +697,16 @@ Technique::overrideStencilState(
     SG_INSERT_MARKERF("effect::Technique::overrideStencilState(stencilWriteMask=0x%x, wasSet=%s)", dst.write_mask,
         EnumStringifyUtils::toString(hasStencilWriteMask));
     overrideStencilFaceState(pd.m_stencilFront, src.front, dst.front);
-    overrideStencilFaceState(pd.m_stencilBack, src.back, dst.back);
+    const bool hasTwoSidedStencilMode = pd.m_hasTwoSidedStencilMode;
+    const bool twoSidedStencilMode = hasTwoSidedStencilMode ? pd.m_twoSidedStencilMode : false;
+    if (twoSidedStencilMode) {
+        overrideStencilFaceState(pd.m_stencilBack, src.back, dst.back);
+    }
+    else {
+        dst.back = dst.front;
+    }
+    SG_INSERT_MARKERF("effect::Technique::overrideStencilState(twoSidedStencilMode=%s, wasSet=%s)",
+        EnumStringifyUtils::toString(twoSidedStencilMode), EnumStringifyUtils::toString(hasTwoSidedStencilMode));
 }
 
 void
