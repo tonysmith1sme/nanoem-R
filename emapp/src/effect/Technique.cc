@@ -654,6 +654,18 @@ Technique::overrideDepthState(
     }
     SG_INSERT_MARKERF("effect::Technique::overrideDepthState(depthWriteEnabled=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.write_enabled), EnumStringifyUtils::toString(hasDepthWriteEnabled));
+    const bool hasDepthBias = pd.m_hasDepthBias;
+    if (!hasDepthBias) {
+        dst.bias = src.bias;
+    }
+    SG_INSERT_MARKERF("effect::Technique::overrideDepthState(depthBias=%f, wasSet=%s)", dst.bias,
+        EnumStringifyUtils::toString(hasDepthBias));
+    const bool hasDepthBiasSlopeScale = pd.m_hasDepthBiasSlopeScale;
+    if (!hasDepthBiasSlopeScale) {
+        dst.bias_slope_scale = src.bias_slope_scale;
+    }
+    SG_INSERT_MARKERF("effect::Technique::overrideDepthState(depthBiasSlopeScale=%f, wasSet=%s)",
+        dst.bias_slope_scale, EnumStringifyUtils::toString(hasDepthBiasSlopeScale));
 }
 
 void

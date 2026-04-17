@@ -74,6 +74,8 @@ struct PipelineDescriptor {
     bool m_depthEnabled;
     bool m_hasDepthCompareFunc;
     bool m_hasDepthWriteEnabled;
+    bool m_hasDepthBias;
+    bool m_hasDepthBiasSlopeScale;
     bool m_hasStencilEnabled;
     bool m_hasStencilRef;
     bool m_hasStencilReadMask;
