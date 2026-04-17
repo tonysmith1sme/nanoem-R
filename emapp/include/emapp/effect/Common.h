@@ -62,6 +62,8 @@ struct PipelineDescriptor {
     bool m_hasBlendOpRGB;
     bool m_hasBlendOpAlpha;
     bool m_hasColorWriteMask;
+    bool m_hasDepthEnabled;
+    bool m_depthEnabled;
     bool m_hasDepthCompareFunc;
     bool m_hasDepthWriteEnabled;
     bool m_hasStencilEnabled;
