@@ -571,15 +571,25 @@ Technique::overrideColorState(const IDrawable *drawable, const PipelineDescripto
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(dstFactorRGB=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.dst_factor_rgb), EnumStringifyUtils::toString(hasBlendDestFactorRGB));
+    const bool hasSeparateAlphaBlendEnabled = pd.m_hasSeparateAlphaBlendEnabled;
+    const bool separateAlphaBlendEnabled = hasSeparateAlphaBlendEnabled ? pd.m_separateAlphaBlendEnabled : false;
+    SG_INSERT_MARKERF("effect::Technique::overrideColorState(separateAlphaBlendEnabled=%s, wasSet=%s)",
+        EnumStringifyUtils::toString(separateAlphaBlendEnabled), EnumStringifyUtils::toString(hasSeparateAlphaBlendEnabled));
     const bool hasBlendSourceFactorAlpha = pd.m_hasBlendSourceFactorAlpha;
-    if (!hasBlendSourceFactorAlpha) {
+    if (!separateAlphaBlendEnabled) {
+        dst.src_factor_alpha = dst.src_factor_rgb;
+    }
+    else if (!hasBlendSourceFactorAlpha) {
         dst.src_factor_alpha =
             src.src_factor_alpha != _SG_BLENDFACTOR_DEFAULT ? src.src_factor_alpha : SG_BLENDFACTOR_ONE;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(srcFactorAlpha=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.src_factor_alpha), EnumStringifyUtils::toString(hasBlendSourceFactorAlpha));
     const bool hasBlendDestFactorAlpha = pd.m_hasBlendDestFactorAlpha;
-    if (!hasBlendDestFactorAlpha) {
+    if (!separateAlphaBlendEnabled) {
+        dst.dst_factor_alpha = dst.dst_factor_rgb;
+    }
+    else if (!hasBlendDestFactorAlpha) {
         dst.dst_factor_alpha =
             src.dst_factor_alpha != _SG_BLENDFACTOR_DEFAULT ? src.dst_factor_alpha : SG_BLENDFACTOR_ZERO;
     }
@@ -599,7 +609,10 @@ Technique::overrideColorState(const IDrawable *drawable, const PipelineDescripto
         EnumStringifyUtils::toString(dst.op_rgb), EnumStringifyUtils::toString(hasBlendOpRGB));
 #if defined(NANOEM_ENABLE_BLENDOP_MINMAX)
     const bool hasBlendOpAlpha = pd.m_hasBlendOpAlpha;
-    if (!hasBlendOpAlpha) {
+    if (!separateAlphaBlendEnabled) {
+        dst.op_alpha = dst.op_rgb;
+    }
+    else if (!hasBlendOpAlpha) {
         dst.op_alpha = src.op_alpha != _SG_BLENDOP_DEFAULT ? src.op_alpha : SG_BLENDOP_MAX;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(opAlpha=%s, wasSet=%s)",
