@@ -5927,6 +5927,23 @@ Effect::internalDrawRenderPass(const IDrawable *drawable, effect::Pass *pass, sg
     renderPassScope->modifyPipelineDescription(pd);
     {
         sg::PassBlock pb(drawQueue, m_project->beginRenderPass(handle), pa);
+        const effect::PipelineDescriptor &epd = pass->pipelineDescriptor();
+        if (epd.m_hasScissorTestEnabled && !epd.m_scissorTestEnabled) {
+            Vector2UI16 passImageSize;
+            const sg_image_desc &colorImageDescription = m_currentNamedPrimaryRenderTargetColorImageDescription.second;
+            if (colorImageDescription.width > 0 && colorImageDescription.height > 0) {
+                passImageSize = Vector2UI16(colorImageDescription.width, colorImageDescription.height);
+            }
+            else if (sg::is_valid(handle) && handle.id == m_project->viewportPrimaryPass().id) {
+                passImageSize = m_project->deviceScaleViewportPrimaryImageSize();
+            }
+            else {
+                passImageSize = m_project->deviceScaleUniformedViewportImageSize();
+            }
+            SG_INSERT_MARKERF("Effect::internalDrawRenderPass(resetScissorRect=true, width=%d, height=%d)",
+                passImageSize.x, passImageSize.y);
+            pb.applyScissorRect(0, 0, passImageSize.x, passImageSize.y);
+        }
         if (pd.colors[0].write_mask == _SG_COLORMASK_DEFAULT) {
 #if defined(NANOEM_ENABLE_BLENDOP_MINMAX)
             pd.colors[0].write_mask = SG_COLORMASK_RGBA;
