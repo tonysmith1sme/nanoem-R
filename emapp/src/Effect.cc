@@ -136,6 +136,9 @@ public:
     static void setRegisterIndex(const Fx9__Effect__Symbol *symbolPtr, RegisterIndexMap &registerIndices);
     static void attachShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techniqueName,
         const char *passName, sg_shader_stage_desc &desc, String &newShaderCode, Error &error);
+    static bool injectAlphaTestShaderSource(const Fx9__Effect__Shader *shaderPtr, const PipelineDescriptor &pd,
+        const char *techniqueName, const char *passName, sg_shader_stage_desc &desc, String &newShaderCode,
+        Error &error);
     static void retrieveShaderSymbols(const Fx9__Effect__Shader *shaderPtr, RegisterIndexMap &registerIndices,
         UniformBufferOffsetMap &uniformBufferOffsetMap);
     static void setImageTypesFromSampler(
@@ -165,6 +168,157 @@ public:
         return nanoem_rsize_t(4) * sizeof(nanoem_f32_t) * size.x * size.y;
     }
 };
+
+static void
+compileHLSLShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techniqueName, const char *passName,
+    sg_shader_stage_desc &desc, String &newShaderCode, Error &error)
+{
+#if BX_PLATFORM_WINDOWS
+    bx::MemoryBlock block(g_emapp_allocator);
+    bx::MemoryWriter writer(&block);
+    String newFilename(techniqueName);
+    newFilename.append("_");
+    newFilename.append(passName);
+    const char *shaderProfile = nullptr;
+    switch (shaderPtr->type) {
+    case FX9__EFFECT__SHADER__TYPE__ST_PIXEL: {
+        newFilename.append("_PS.hlsl");
+        shaderProfile = "ps_4_1";
+        break;
+    }
+    case FX9__EFFECT__SHADER__TYPE__ST_VERTEX: {
+        newFilename.append("_VS.hlsl");
+        shaderProfile = "vs_4_1";
+        break;
+    }
+    default:
+        nanoem_assert(false, "must NOT reach here");
+        break;
+    }
+    const UINT flags = 0
+#if defined(NANOEM_ENABLE_DEBUG_LABEL)
+        | D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION | D3DCOMPILE_DEBUG_NAME_FOR_SOURCE
+#else
+        | D3DCOMPILE_OPTIMIZATION_LEVEL1
+#endif
+        ;
+    if (g_D3DCompile) {
+        const UINT flags2 = D3DCOMPILE_FLAGS2_FORCE_ROOT_SIGNATURE_LATEST;
+        ID3DBlob *assemblyBlob = nullptr, *errorBlob = nullptr;
+        HRESULT result = g_D3DCompile(newShaderCode.c_str(), newShaderCode.size(), newFilename.c_str(), nullptr,
+            nullptr, "main", shaderProfile, flags, flags2, &assemblyBlob, &errorBlob);
+        if (!FAILED(result)) {
+            const char *ptr = static_cast<const char *>(assemblyBlob->GetBufferPointer());
+            newShaderCode = String(ptr, assemblyBlob->GetBufferSize());
+            desc.bytecode.ptr = reinterpret_cast<const nanoem_u8_t *>(newShaderCode.c_str());
+            desc.bytecode.size = newShaderCode.size();
+            assemblyBlob->Release();
+        }
+        else {
+            String reason(static_cast<const char *>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
+            error = Error(reason.c_str(), result, Error::kDomainTypeOS);
+        }
+    }
+    else {
+        error = Error("Failed to load D3DCompile family dll.", 0, Error::kDomainTypeOS);
+    }
+#else
+    BX_UNUSED_6(shaderPtr, techniqueName, passName, desc, newShaderCode, error);
+#endif
+}
+
+static bool
+buildAlphaTestCondition(const PipelineDescriptor &pd, const char *alphaExpr, String &condition)
+{
+    const nanoem_f32_t reference = nanoem_f32_t(pd.m_alphaTestReference) / 255.0f;
+    char referenceBuffer[32];
+    StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "%.8ff", reference);
+    switch (pd.m_alphaTestCompareFunc) {
+    case SG_COMPAREFUNC_NEVER:
+        condition = "false";
+        return true;
+    case SG_COMPAREFUNC_LESS:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s < %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_EQUAL:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s == %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_LESS_EQUAL:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s <= %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_GREATER:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s > %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_NOT_EQUAL:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s != %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_GREATER_EQUAL:
+        StringUtils::format(referenceBuffer, sizeof(referenceBuffer), "(%s >= %.8ff)", alphaExpr, reference);
+        condition = referenceBuffer;
+        return true;
+    case SG_COMPAREFUNC_ALWAYS:
+    case _SG_COMPAREFUNC_DEFAULT:
+    default:
+        condition = "true";
+        return true;
+    }
+}
+
+static bool
+injectAlphaTestAssignmentBlock(
+    Fx9__Effect__Shader__BodyCase bodyCase, const PipelineDescriptor &pd, String &newShaderCode)
+{
+    static const char *kTargetLiteral = "_RESERVED_IDENTIFIER_FIXUP_gl_FragData[0] = ";
+    const char *begin = newShaderCode.c_str();
+    const char *target = strstr(begin, kTargetLiteral);
+    if (!target) {
+        return false;
+    }
+    const char *expression = target + StringUtils::length(kTargetLiteral);
+    const char *expressionEnd = StringUtils::indexOf(expression, ';');
+    if (!expressionEnd) {
+        return false;
+    }
+    String condition;
+    if (!buildAlphaTestCondition(pd, "nanoem_alpha_test_color.a", condition)) {
+        return false;
+    }
+    const String originalExpression(expression, expressionEnd - expression);
+    String replacement;
+    if (bodyCase == FX9__EFFECT__SHADER__BODY_HLSL) {
+        replacement.append("float4 nanoem_alpha_test_color = ");
+        replacement.append(originalExpression.c_str());
+        replacement.append(";\n    if (!(");
+        replacement.append(condition.c_str());
+        replacement.append(")) {\n        discard;\n    }\n    ");
+        replacement.append(kTargetLiteral);
+        replacement.append("nanoem_alpha_test_color");
+    }
+    else if (bodyCase == FX9__EFFECT__SHADER__BODY_GLSL) {
+        replacement.append("vec4 nanoem_alpha_test_color = ");
+        replacement.append(originalExpression.c_str());
+        replacement.append(";\n    if (!(");
+        replacement.append(condition.c_str());
+        replacement.append(")) {\n        discard;\n    }\n    ");
+        replacement.append(kTargetLiteral);
+        replacement.append("nanoem_alpha_test_color");
+    }
+    else {
+        return false;
+    }
+    String rebuilt;
+    rebuilt.reserve(newShaderCode.size() + replacement.size());
+    rebuilt.append(begin, target);
+    rebuilt.append(replacement.c_str());
+    rebuilt.append(expressionEnd, begin + newShaderCode.size());
+    newShaderCode = rebuilt;
+    return true;
+}
 
 void
 PrivateEffectUtils::parseAnnotations(Fx9__Effect__Annotation *const *annotationsPtr, size_t numAnnotations,
@@ -702,58 +856,7 @@ PrivateEffectUtils::attachShaderSource(const Fx9__Effect__Shader *shaderPtr, con
     case FX9__EFFECT__SHADER__BODY_HLSL: {
         appendShaderVariablesHeaderComment(shaderPtr, newShaderCode);
         newShaderCode.append(shaderPtr->hlsl);
-#if BX_PLATFORM_WINDOWS
-        bx::MemoryBlock block(g_emapp_allocator);
-        bx::MemoryWriter writer(&block);
-        String newFilename(techniqueName);
-        newFilename.append("_");
-        newFilename.append(passName);
-        const char *shaderProfile = nullptr;
-        switch (shaderPtr->type) {
-        case FX9__EFFECT__SHADER__TYPE__ST_PIXEL: {
-            newFilename.append("_PS.hlsl");
-            shaderProfile = "ps_4_1";
-            break;
-        }
-        case FX9__EFFECT__SHADER__TYPE__ST_VERTEX: {
-            newFilename.append("_VS.hlsl");
-            shaderProfile = "vs_4_1";
-            break;
-        }
-        default:
-            nanoem_assert(false, "must NOT reach here");
-            break;
-        }
-        const UINT flags = 0
-#if defined(NANOEM_ENABLE_DEBUG_LABEL)
-            | D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION | D3DCOMPILE_DEBUG_NAME_FOR_SOURCE
-#else
-            | D3DCOMPILE_OPTIMIZATION_LEVEL1
-#endif
-            ;
-        if (g_D3DCompile) {
-            const UINT flags2 = D3DCOMPILE_FLAGS2_FORCE_ROOT_SIGNATURE_LATEST;
-            ID3DBlob *assemblyBlob = nullptr, *errorBlob = nullptr;
-            HRESULT result = g_D3DCompile(newShaderCode.c_str(), newShaderCode.size(), newFilename.c_str(), nullptr,
-                nullptr, "main", shaderProfile, flags, flags2, &assemblyBlob, &errorBlob);
-            if (!FAILED(result)) {
-                const char *ptr = static_cast<const char *>(assemblyBlob->GetBufferPointer());
-                newShaderCode = String(ptr, assemblyBlob->GetBufferSize());
-                desc.bytecode.ptr = reinterpret_cast<const nanoem_u8_t *>(newShaderCode.c_str());
-                desc.bytecode.size = newShaderCode.size();
-                assemblyBlob->Release();
-            }
-            else {
-                String reason(static_cast<const char *>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
-                error = Error(reason.c_str(), result, Error::kDomainTypeOS);
-            }
-        }
-        else {
-            error = Error("Failed to load D3DCompile family dll.", 0, Error::kDomainTypeOS);
-        }
-#else
-        BX_UNUSED_3(error, techniqueName, passName);
-#endif
+        compileHLSLShaderSource(shaderPtr, techniqueName, passName, desc, newShaderCode, error);
         break;
     }
     case FX9__EFFECT__SHADER__BODY_MSL: {
@@ -772,6 +875,35 @@ PrivateEffectUtils::attachShaderSource(const Fx9__Effect__Shader *shaderPtr, con
     default:
         break;
     }
+}
+
+bool
+PrivateEffectUtils::injectAlphaTestShaderSource(const Fx9__Effect__Shader *shaderPtr, const PipelineDescriptor &pd,
+    const char *techniqueName, const char *passName, sg_shader_stage_desc &desc, String &newShaderCode, Error &error)
+{
+    if (!(pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) || error.hasReason() ||
+        shaderPtr->type != FX9__EFFECT__SHADER__TYPE__ST_PIXEL) {
+        return true;
+    }
+    const Fx9__Effect__Shader__BodyCase bodyCase = shaderPtr->body_case;
+    if (bodyCase != FX9__EFFECT__SHADER__BODY_HLSL && bodyCase != FX9__EFFECT__SHADER__BODY_GLSL) {
+        return false;
+    }
+    if (bodyCase == FX9__EFFECT__SHADER__BODY_HLSL) {
+        newShaderCode.resize(0);
+        appendShaderVariablesHeaderComment(shaderPtr, newShaderCode);
+        newShaderCode.append(shaderPtr->hlsl);
+    }
+    if (!injectAlphaTestAssignmentBlock(bodyCase, pd, newShaderCode)) {
+        return false;
+    }
+    if (bodyCase == FX9__EFFECT__SHADER__BODY_HLSL) {
+        compileHLSLShaderSource(shaderPtr, techniqueName, passName, desc, newShaderCode, error);
+    }
+    else {
+        desc.source = newShaderCode.c_str();
+    }
+    return !error.hasReason();
 }
 
 void
@@ -1781,6 +1913,16 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                         if (const char *name = pixelShader->uniform_block_name) {
                             shaderDescription.fs.uniform_blocks[0].uniforms[0].name = name;
                         }
+                        if (!error.hasReason()) {
+                            const bool alphaTestInjected = PrivateEffectUtils::injectAlphaTestShaderSource(pixelShader,
+                                pd, techniquePtr->name, passPtr->name, shaderDescription.fs, pixelShaderCode, error);
+                            if (!alphaTestInjected && pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) {
+                                m_logger->log("Pass \"%s/%s/%s\" enables alpha test (func=%d, ref=%d) but source "
+                                              "injection for shader-side alpha test emulation failed",
+                                    nameConstString(), techniquePtr->name, passPtr->name, pd.m_alphaTestCompareFunc,
+                                    pd.m_alphaTestReference);
+                            }
+                        }
                         break;
                     }
                     if (!PrivateEffectUtils::hasShaderSource(shaderDescription)) {
@@ -1788,12 +1930,6 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             nameConstString(), techniquePtr->name, passPtr->name);
                     }
                     else if (!error.hasReason()) {
-                        if (pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) {
-                            m_logger->log("Pass \"%s/%s/%s\" enables alpha test (func=%d, ref=%d) but shader-side "
-                                          "alpha test emulation is not implemented yet on this backend",
-                                nameConstString(), techniquePtr->name, passPtr->name, pd.m_alphaTestCompareFunc,
-                                pd.m_alphaTestReference);
-                        }
                         shaderDescription.attrs[0] = sg_shader_attr_desc { "a_position", "SV_POSITION", 0 };
                         shaderDescription.attrs[1] = sg_shader_attr_desc { "a_normal", "NORMAL", 0 };
                         shaderDescription.attrs[2] = sg_shader_attr_desc { "a_texcoord0", "TEXCOORD", 0 };
