@@ -444,7 +444,9 @@ Technique::overrideObjectPipelineDescription(
         SG_INSERT_MARKERF(
             "effect::Technique::overrideObjectPipelineDescription(primitiveType=%d)", body.primitive_type);
     }
-    overrideColorState(drawable, pd, m_pipelineDescription.colors[0], body.colors[0]);
+    for (nanoem_u32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], body.colors[i]);
+    }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
     m_effect->overridePipelineDescription(body, Effect::kScriptClassTypeObject);
@@ -471,7 +473,9 @@ Technique::overrideScenePipelineDescription(
     ld.attrs[5] = sg_vertex_attr_desc { 0, offsetof(sg::QuadVertexUnit, m_texcoord), SG_VERTEXFORMAT_FLOAT2 };
     ld.attrs[6] = sg_vertex_attr_desc { 0, offsetof(sg::QuadVertexUnit, m_texcoord), SG_VERTEXFORMAT_FLOAT2 };
     ld.attrs[7] = sg_vertex_attr_desc { 0, offsetof(sg::QuadVertexUnit, m_position), SG_VERTEXFORMAT_FLOAT2 };
-    overrideColorState(drawable, pd, m_pipelineDescription.colors[0], body.colors[0]);
+    for (nanoem_u32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
+        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], body.colors[i]);
+    }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
     m_effect->overridePipelineDescription(body, Effect::kScriptClassTypeScene);
@@ -545,8 +549,8 @@ Technique::mutablePipelineDescription() NANOEM_DECL_NOEXCEPT
 }
 
 void
-Technique::overrideColorState(const IDrawable *drawable, const PipelineDescriptor &pd, const sg_color_state &csrc,
-    sg_color_state &cdst) NANOEM_DECL_NOEXCEPT
+Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttachmentIndex,
+    const PipelineDescriptor &pd, const sg_color_state &csrc, sg_color_state &cdst) NANOEM_DECL_NOEXCEPT
 {
     const sg_blend_state &src = csrc.blend;
     sg_blend_state &dst = cdst.blend;
@@ -595,12 +599,14 @@ Technique::overrideColorState(const IDrawable *drawable, const PipelineDescripto
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(dstFactorAlpha=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.dst_factor_alpha), EnumStringifyUtils::toString(hasBlendDestFactorAlpha));
-    const bool hasColorWriteMask = pd.m_hasColorWriteMask;
+    const bool hasColorWriteMask = colorAttachmentIndex < SG_MAX_COLOR_ATTACHMENTS
+        ? pd.m_hasColorWriteMask[colorAttachmentIndex]
+        : false;
     if (!hasColorWriteMask) {
         cdst.write_mask = csrc.write_mask;
     }
-    SG_INSERT_MARKERF("effect::Technique::overrideColorState(colorWriteMask=0x%x, wasSet=%s)", cdst.write_mask,
-        EnumStringifyUtils::toString(hasColorWriteMask));
+    SG_INSERT_MARKERF("effect::Technique::overrideColorState(attachment=%d, colorWriteMask=0x%x, wasSet=%s)",
+        Inline::saturateInt32(colorAttachmentIndex), cdst.write_mask, EnumStringifyUtils::toString(hasColorWriteMask));
     const bool hasBlendOpRGB = pd.m_hasBlendOpRGB;
     if (!hasBlendOpRGB) {
         dst.op_rgb = src.op_rgb != _SG_BLENDOP_DEFAULT ? src.op_rgb : SG_BLENDOP_ADD;
