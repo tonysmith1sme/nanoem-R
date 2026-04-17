@@ -114,6 +114,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_depthEnabled(true)
     , m_hasDepthCompareFunc(false)
     , m_hasDepthWriteEnabled(false)
+    , m_hasDepthBias(false)
+    , m_hasDepthBiasSlopeScale(false)
     , m_hasStencilEnabled(false)
     , m_hasStencilRef(false)
     , m_hasStencilReadMask(false)
@@ -145,6 +147,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_depthEnabled(source.m_depthEnabled)
     , m_hasDepthCompareFunc(source.m_hasDepthCompareFunc)
     , m_hasDepthWriteEnabled(source.m_hasDepthWriteEnabled)
+    , m_hasDepthBias(source.m_hasDepthBias)
+    , m_hasDepthBiasSlopeScale(source.m_hasDepthBiasSlopeScale)
     , m_hasStencilEnabled(source.m_hasStencilEnabled)
     , m_hasStencilRef(source.m_hasStencilRef)
     , m_hasStencilReadMask(source.m_hasStencilReadMask)
@@ -1393,6 +1397,14 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
 void
 RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescriptor &pd)
 {
+    const auto decodeFloatValue = [](nanoem_u32_t encoded) {
+        union {
+            nanoem_u32_t m_uint;
+            nanoem_f32_t m_float;
+        } u;
+        u.m_uint = encoded;
+        return u.m_float;
+    };
     const auto setColorWriteMask = [&pd](nanoem_u32_t attachmentIndex, nanoem_u32_t maskValue) {
         if (attachmentIndex < SG_MAX_COLOR_ATTACHMENTS) {
             sg_color_mask &writeMask = pd.m_body.colors[attachmentIndex].write_mask;
@@ -1589,6 +1601,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
             "effect::RenderState::convertPipeline(key=D3DRS_BLENDOP, value=%d)", desc.colors[0].blend.op_rgb);
         break;
     }
+    case 175: { /* D3DRS_SLOPESCALEDEPTHBIAS */
+        desc.depth.bias_slope_scale = decodeFloatValue(value);
+        pd.m_hasDepthBiasSlopeScale = true;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SLOPESCALEDEPTHBIAS, value=%f)",
+            desc.depth.bias_slope_scale);
+        break;
+    }
     case 186: { /* D3DRS_CCW_STENCILFAIL */
         convertStencilOp(value, desc.stencil.back.fail_op);
         pd.m_stencilBack.m_hasFailOp = true;
@@ -1627,6 +1646,12 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 192: { /* D3DRS_COLORWRITEENABLE3 */
         setColorWriteMask(3, value);
+        break;
+    }
+    case 195: { /* D3DRS_DEPTHBIAS */
+        desc.depth.bias = decodeFloatValue(value);
+        pd.m_hasDepthBias = true;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_DEPTHBIAS, value=%f)", desc.depth.bias);
         break;
     }
     case 206: { /* D3DRS_SEPARATEALPHABLENDENABLE */

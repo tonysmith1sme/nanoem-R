@@ -932,6 +932,14 @@ void
 Compiler::BasePassShader::convertPassState(
     const TString &name, const ParserContext::PassState &state, uint32_t &key, uint32_t &value) const
 {
+    const auto encodeRenderStateFloatValue = [](float value) {
+        union {
+            uint32_t m_uint;
+            float m_float;
+        } u;
+        u.m_float = value;
+        return u.m_uint;
+    };
     TString nameUpperCase(name);
     std::transform(name.begin(), name.end(), nameUpperCase.begin(), ::toupper);
     auto it = m_parent->m_renderStateEnumConversions.find(nameUpperCase.c_str());
@@ -983,6 +991,28 @@ Compiler::BasePassShader::convertPassState(
         }
         case 171: {
             value = resolveRenderStateValue(state, m_parent->m_renderStateBlendOpValueConversions);
+            break;
+        }
+        case 175:
+        case 195: {
+            const TIntermNode *valueNode = state.m_value;
+            if (const TIntermConstantUnion *constantUnionNode = valueNode->getAsConstantUnion()) {
+                const TConstUnionArray &values = constantUnionNode->getConstArray();
+                switch (values[0].getType()) {
+                case EbtFloat:
+                case EbtFloat16:
+                case EbtDouble: {
+                    value = encodeRenderStateFloatValue(float(values[0].getDConst()));
+                    break;
+                }
+                case EbtInt: {
+                    value = encodeRenderStateFloatValue(float(values[0].getIConst()));
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
             break;
         }
         default:
