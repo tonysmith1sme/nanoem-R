@@ -118,6 +118,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasDepthBiasSlopeScale(false)
     , m_hasScissorTestEnabled(false)
     , m_scissorTestEnabled(true)
+    , m_hasTwoSidedStencilMode(false)
+    , m_twoSidedStencilMode(false)
     , m_hasStencilEnabled(false)
     , m_hasStencilRef(false)
     , m_hasStencilReadMask(false)
@@ -153,6 +155,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasDepthBiasSlopeScale(source.m_hasDepthBiasSlopeScale)
     , m_hasScissorTestEnabled(source.m_hasScissorTestEnabled)
     , m_scissorTestEnabled(source.m_scissorTestEnabled)
+    , m_hasTwoSidedStencilMode(source.m_hasTwoSidedStencilMode)
+    , m_twoSidedStencilMode(source.m_twoSidedStencilMode)
     , m_hasStencilEnabled(source.m_hasStencilEnabled)
     , m_hasStencilRef(source.m_hasStencilRef)
     , m_hasStencilReadMask(source.m_hasStencilReadMask)
@@ -1617,6 +1621,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         pd.m_hasDepthBiasSlopeScale = true;
         SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SLOPESCALEDEPTHBIAS, value=%f)",
             desc.depth.bias_slope_scale);
+        break;
+    }
+    case 185: { /* D3DRS_TWOSIDEDSTENCILMODE */
+        pd.m_hasTwoSidedStencilMode = true;
+        pd.m_twoSidedStencilMode = value != 0;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_TWOSIDEDSTENCILMODE, enabled=%s)",
+            pd.m_twoSidedStencilMode ? "true" : "false");
         break;
     }
     case 186: { /* D3DRS_CCW_STENCILFAIL */
