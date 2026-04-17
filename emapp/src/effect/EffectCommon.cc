@@ -110,7 +110,6 @@ PipelineDescriptor::PipelineDescriptor()
     , m_alphaTestCompareFunc(_SG_COMPAREFUNC_DEFAULT)
     , m_hasAlphaTestReference(false)
     , m_alphaTestReference(0)
-    , m_hasColorWriteMask(false)
     , m_hasDepthEnabled(false)
     , m_depthEnabled(true)
     , m_hasDepthCompareFunc(false)
@@ -121,6 +120,7 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasStencilWriteMask(false)
 {
     Inline::clearZeroMemory(m_body);
+    Inline::clearZeroMemory(m_hasColorWriteMask);
 }
 
 PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
@@ -141,7 +141,6 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_alphaTestCompareFunc(source.m_alphaTestCompareFunc)
     , m_hasAlphaTestReference(source.m_hasAlphaTestReference)
     , m_alphaTestReference(source.m_alphaTestReference)
-    , m_hasColorWriteMask(source.m_hasColorWriteMask)
     , m_hasDepthEnabled(source.m_hasDepthEnabled)
     , m_depthEnabled(source.m_depthEnabled)
     , m_hasDepthCompareFunc(source.m_hasDepthCompareFunc)
@@ -152,6 +151,7 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasStencilWriteMask(source.m_hasStencilWriteMask)
 {
     memcpy(&m_body, &source.m_body, sizeof(m_body));
+    memcpy(m_hasColorWriteMask, source.m_hasColorWriteMask, sizeof(m_hasColorWriteMask));
 }
 
 PipelineDescriptor::~PipelineDescriptor()
@@ -1393,6 +1393,17 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
 void
 RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescriptor &pd)
 {
+    const auto setColorWriteMask = [&pd](nanoem_u32_t attachmentIndex, nanoem_u32_t maskValue) {
+        if (attachmentIndex < SG_MAX_COLOR_ATTACHMENTS) {
+            sg_color_mask &writeMask = pd.m_body.colors[attachmentIndex].write_mask;
+            writeMask = maskValue != 0 ? static_cast<sg_color_mask>(maskValue & SG_COLORMASK_RGBA) : SG_COLORMASK_NONE;
+            pd.m_hasColorWriteMask[attachmentIndex] = true;
+            SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_COLORWRITEENABLE%d, value=0x%x, "
+                              "attachment=%d, writeMask=0x%x)",
+                attachmentIndex == 0 ? 0 : 168 + Inline::saturateInt32(attachmentIndex), maskValue,
+                Inline::saturateInt32(attachmentIndex), writeMask);
+        }
+    };
     sg_pipeline_desc &desc = pd.m_body;
     switch (key) {
     case 7: { /* D3DRS_ZENABLE */
@@ -1568,18 +1579,7 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         break;
     }
     case 168: { /* D3DRS_COLORWRITEENABLE  */
-        const bool enabled = value != 0;
-        sg_color_mask &writeMask = desc.colors[0].write_mask;
-        if (enabled) {
-            if (writeMask == _SG_COLORMASK_DEFAULT) {
-                writeMask = SG_COLORMASK_RGBA;
-            }
-        }
-        else {
-            writeMask = SG_COLORMASK_NONE;
-        }
-        pd.m_hasColorWriteMask = true;
-        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_COLORWRITEENABLE, value=%d)", writeMask);
+        setColorWriteMask(0, value);
         break;
     }
     case 171: { /* D3DRS_BLENDOP */
@@ -1615,6 +1615,18 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         pd.m_stencilBack.m_hasCompareFunc = true;
         SG_INSERT_MARKERF(
             "effect::RenderState::convertPipeline(key=D3DRS_CCW_STENCILFUNC, value=%d)", desc.stencil.back.compare);
+        break;
+    }
+    case 190: { /* D3DRS_COLORWRITEENABLE1 */
+        setColorWriteMask(1, value);
+        break;
+    }
+    case 191: { /* D3DRS_COLORWRITEENABLE2 */
+        setColorWriteMask(2, value);
+        break;
+    }
+    case 192: { /* D3DRS_COLORWRITEENABLE3 */
+        setColorWriteMask(3, value);
         break;
     }
     case 206: { /* D3DRS_SEPARATEALPHABLENDENABLE */
