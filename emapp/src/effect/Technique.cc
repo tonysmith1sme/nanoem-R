@@ -611,6 +611,17 @@ void
 Technique::overrideDepthState(
     const PipelineDescriptor &pd, const sg_depth_state &src, sg_depth_state &dst) NANOEM_DECL_NOEXCEPT
 {
+    const bool hasDepthEnabled = pd.m_hasDepthEnabled;
+    if (hasDepthEnabled && !pd.m_depthEnabled) {
+        dst.compare = SG_COMPAREFUNC_ALWAYS;
+        dst.write_enabled = false;
+        SG_INSERT_MARKERF("effect::Technique::overrideDepthState(depthEnabled=false, depthCompareFunc=%s, "
+                          "depthWriteEnabled=%s)",
+            EnumStringifyUtils::toString(dst.compare), EnumStringifyUtils::toString(dst.write_enabled));
+        return;
+    }
+    SG_INSERT_MARKERF("effect::Technique::overrideDepthState(depthEnabled=%s, wasSet=%s)",
+        EnumStringifyUtils::toString(!hasDepthEnabled || pd.m_depthEnabled), EnumStringifyUtils::toString(hasDepthEnabled));
     const bool hasDepthCompareFunc = pd.m_hasDepthCompareFunc;
     if (!hasDepthCompareFunc) {
         const bool hasDepthCompareFuncSet = src.compare != _SG_COMPAREFUNC_DEFAULT;

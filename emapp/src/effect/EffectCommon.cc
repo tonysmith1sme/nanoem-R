@@ -103,6 +103,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasBlendOpRGB(false)
     , m_hasBlendOpAlpha(false)
     , m_hasColorWriteMask(false)
+    , m_hasDepthEnabled(false)
+    , m_depthEnabled(true)
     , m_hasDepthCompareFunc(false)
     , m_hasDepthWriteEnabled(false)
     , m_hasStencilEnabled(false)
@@ -124,6 +126,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasBlendOpRGB(source.m_hasBlendOpRGB)
     , m_hasBlendOpAlpha(source.m_hasBlendOpAlpha)
     , m_hasColorWriteMask(source.m_hasColorWriteMask)
+    , m_hasDepthEnabled(source.m_hasDepthEnabled)
+    , m_depthEnabled(source.m_depthEnabled)
     , m_hasDepthCompareFunc(source.m_hasDepthCompareFunc)
     , m_hasDepthWriteEnabled(source.m_hasDepthWriteEnabled)
     , m_hasStencilEnabled(source.m_hasStencilEnabled)
@@ -1376,8 +1380,15 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     sg_pipeline_desc &desc = pd.m_body;
     switch (key) {
     case 7: { /* D3DRS_ZENABLE */
-        SG_INSERT_MARKERF(
-            "effect::RenderState::convertPipeline(key=D3DRS_ZENABLE, value=%d)", desc.depth.write_enabled);
+        pd.m_hasDepthEnabled = true;
+        pd.m_depthEnabled = value != 0;
+        if (!pd.m_depthEnabled) {
+            desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = false;
+        }
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ZENABLE, enabled=%s, depthCompare=%d, "
+                          "depthWrite=%s)",
+            pd.m_depthEnabled ? "true" : "false", desc.depth.compare, desc.depth.write_enabled ? "true" : "false");
         break;
     }
     case 8: { /* D3DFILLMODE */
