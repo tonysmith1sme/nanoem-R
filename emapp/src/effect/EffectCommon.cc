@@ -116,6 +116,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasDepthWriteEnabled(false)
     , m_hasDepthBias(false)
     , m_hasDepthBiasSlopeScale(false)
+    , m_hasScissorTestEnabled(false)
+    , m_scissorTestEnabled(true)
     , m_hasStencilEnabled(false)
     , m_hasStencilRef(false)
     , m_hasStencilReadMask(false)
@@ -149,6 +151,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasDepthWriteEnabled(source.m_hasDepthWriteEnabled)
     , m_hasDepthBias(source.m_hasDepthBias)
     , m_hasDepthBiasSlopeScale(source.m_hasDepthBiasSlopeScale)
+    , m_hasScissorTestEnabled(source.m_hasScissorTestEnabled)
+    , m_scissorTestEnabled(source.m_scissorTestEnabled)
     , m_hasStencilEnabled(source.m_hasStencilEnabled)
     , m_hasStencilRef(source.m_hasStencilRef)
     , m_hasStencilReadMask(source.m_hasStencilReadMask)
@@ -1599,6 +1603,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         pd.m_hasBlendOpRGB = true;
         SG_INSERT_MARKERF(
             "effect::RenderState::convertPipeline(key=D3DRS_BLENDOP, value=%d)", desc.colors[0].blend.op_rgb);
+        break;
+    }
+    case 174: { /* D3DRS_SCISSORTESTENABLE */
+        pd.m_hasScissorTestEnabled = true;
+        pd.m_scissorTestEnabled = value != 0;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SCISSORTESTENABLE, enabled=%s)",
+            pd.m_scissorTestEnabled ? "true" : "false");
         break;
     }
     case 175: { /* D3DRS_SLOPESCALEDEPTHBIAS */
