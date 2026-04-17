@@ -102,6 +102,12 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasBlendDestFactorAlpha(false)
     , m_hasBlendOpRGB(false)
     , m_hasBlendOpAlpha(false)
+    , m_hasAlphaTestEnabled(false)
+    , m_alphaTestEnabled(false)
+    , m_hasAlphaTestCompareFunc(false)
+    , m_alphaTestCompareFunc(_SG_COMPAREFUNC_DEFAULT)
+    , m_hasAlphaTestReference(false)
+    , m_alphaTestReference(0)
     , m_hasColorWriteMask(false)
     , m_hasDepthEnabled(false)
     , m_depthEnabled(true)
@@ -125,6 +131,12 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasBlendDestFactorAlpha(source.m_hasBlendDestFactorAlpha)
     , m_hasBlendOpRGB(source.m_hasBlendOpRGB)
     , m_hasBlendOpAlpha(source.m_hasBlendOpAlpha)
+    , m_hasAlphaTestEnabled(source.m_hasAlphaTestEnabled)
+    , m_alphaTestEnabled(source.m_alphaTestEnabled)
+    , m_hasAlphaTestCompareFunc(source.m_hasAlphaTestCompareFunc)
+    , m_alphaTestCompareFunc(source.m_alphaTestCompareFunc)
+    , m_hasAlphaTestReference(source.m_hasAlphaTestReference)
+    , m_alphaTestReference(source.m_alphaTestReference)
     , m_hasColorWriteMask(source.m_hasColorWriteMask)
     , m_hasDepthEnabled(source.m_hasDepthEnabled)
     , m_depthEnabled(source.m_depthEnabled)
@@ -1415,6 +1427,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
             "effect::RenderState::convertPipeline(key=D3DRS_ZWRITEENABLE, value=%d)", desc.depth.write_enabled);
         break;
     }
+    case 15: { /* D3DRS_ALPHATESTENABLE */
+        pd.m_hasAlphaTestEnabled = true;
+        pd.m_alphaTestEnabled = value != 0;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ALPHATESTENABLE, enabled=%s)",
+            pd.m_alphaTestEnabled ? "true" : "false");
+        break;
+    }
     case 19: { /* D3DRS_SRCBLEND */
         convertBlendFactor(value, desc.colors[0].blend.src_factor_rgb);
         pd.m_hasBlendSourceFactorRGB = true;
@@ -1459,8 +1478,17 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         break;
     }
     case 24: { /* D3DRS_ALPHAREF */
-        desc.alpha_to_coverage_enabled = true;
-        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ALPHAREF, value=%d)", value);
+        pd.m_hasAlphaTestReference = true;
+        pd.m_alphaTestReference = nanoem_u8_t(glm::clamp(value, 0u, 0xffu));
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ALPHAREF, value=%d)",
+            pd.m_alphaTestReference);
+        break;
+    }
+    case 25: { /* D3DRS_ALPHAFUNC */
+        convertCompareFunc(value, pd.m_alphaTestCompareFunc);
+        pd.m_hasAlphaTestCompareFunc = true;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ALPHAFUNC, value=%d)",
+            pd.m_alphaTestCompareFunc);
         break;
     }
     case 27: { /* D3DRS_ALPHABLENDENABLE */

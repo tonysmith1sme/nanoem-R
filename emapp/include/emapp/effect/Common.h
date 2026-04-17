@@ -61,6 +61,12 @@ struct PipelineDescriptor {
     bool m_hasBlendDestFactorAlpha;
     bool m_hasBlendOpRGB;
     bool m_hasBlendOpAlpha;
+    bool m_hasAlphaTestEnabled;
+    bool m_alphaTestEnabled;
+    bool m_hasAlphaTestCompareFunc;
+    sg_compare_func m_alphaTestCompareFunc;
+    bool m_hasAlphaTestReference;
+    nanoem_u8_t m_alphaTestReference;
     bool m_hasColorWriteMask;
     bool m_hasDepthEnabled;
     bool m_depthEnabled;

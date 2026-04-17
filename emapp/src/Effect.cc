@@ -1788,6 +1788,12 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             nameConstString(), techniquePtr->name, passPtr->name);
                     }
                     else if (!error.hasReason()) {
+                        if (pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) {
+                            m_logger->log("Pass \"%s/%s/%s\" enables alpha test (func=%d, ref=%d) but shader-side "
+                                          "alpha test emulation is not implemented yet on this backend",
+                                nameConstString(), techniquePtr->name, passPtr->name, pd.m_alphaTestCompareFunc,
+                                pd.m_alphaTestReference);
+                        }
                         shaderDescription.attrs[0] = sg_shader_attr_desc { "a_position", "SV_POSITION", 0 };
                         shaderDescription.attrs[1] = sg_shader_attr_desc { "a_normal", "NORMAL", 0 };
                         shaderDescription.attrs[2] = sg_shader_attr_desc { "a_texcoord0", "TEXCOORD", 0 };
