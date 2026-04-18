@@ -41,6 +41,21 @@ resolveCullMode(nanoem_u8_t value, sg_face_winding faceWinding) NANOEM_DECL_NOEX
     }
 }
 
+static sg_blend_factor
+resolveAlphaBlendFactor(sg_blend_factor value) NANOEM_DECL_NOEXCEPT
+{
+    switch (value) {
+    case SG_BLENDFACTOR_BLEND_COLOR:
+        return SG_BLENDFACTOR_BLEND_ALPHA;
+    case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:
+        return SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA;
+    case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:
+        return SG_BLENDFACTOR_ONE;
+    default:
+        return value;
+    }
+}
+
 class EnumStringifyUtils : private NonCopyable {
 public:
     static const char *toString(sg_blend_op value) NANOEM_DECL_NOEXCEPT;
@@ -628,7 +643,7 @@ Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttac
         EnumStringifyUtils::toString(separateAlphaBlendEnabled), EnumStringifyUtils::toString(hasSeparateAlphaBlendEnabled));
     const bool hasBlendSourceFactorAlpha = pd.m_hasBlendSourceFactorAlpha;
     if (!separateAlphaBlendEnabled) {
-        dst.src_factor_alpha = dst.src_factor_rgb;
+        dst.src_factor_alpha = resolveAlphaBlendFactor(dst.src_factor_rgb);
     }
     else if (!hasBlendSourceFactorAlpha) {
         dst.src_factor_alpha =
@@ -638,7 +653,7 @@ Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttac
         EnumStringifyUtils::toString(dst.src_factor_alpha), EnumStringifyUtils::toString(hasBlendSourceFactorAlpha));
     const bool hasBlendDestFactorAlpha = pd.m_hasBlendDestFactorAlpha;
     if (!separateAlphaBlendEnabled) {
-        dst.dst_factor_alpha = dst.dst_factor_rgb;
+        dst.dst_factor_alpha = resolveAlphaBlendFactor(dst.dst_factor_rgb);
     }
     else if (!hasBlendDestFactorAlpha) {
         dst.dst_factor_alpha =
