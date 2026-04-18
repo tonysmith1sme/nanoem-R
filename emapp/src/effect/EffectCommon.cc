@@ -126,6 +126,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_alphaTestReference(0)
     , m_hasSRGBWriteEnabled(false)
     , m_srgbWriteEnabled(false)
+    , m_hasCullMode(false)
+    , m_cullMode(0)
     , m_hasDepthEnabled(false)
     , m_depthEnabled(true)
     , m_hasDepthCompareFunc(false)
@@ -166,6 +168,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_alphaTestReference(source.m_alphaTestReference)
     , m_hasSRGBWriteEnabled(source.m_hasSRGBWriteEnabled)
     , m_srgbWriteEnabled(source.m_srgbWriteEnabled)
+    , m_hasCullMode(source.m_hasCullMode)
+    , m_cullMode(source.m_cullMode)
     , m_hasDepthEnabled(source.m_hasDepthEnabled)
     , m_depthEnabled(source.m_depthEnabled)
     , m_hasDepthCompareFunc(source.m_hasDepthCompareFunc)
@@ -1598,6 +1602,8 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         break;
     }
     case 22: { /* D3DRS_CULLMODE */
+        pd.m_hasCullMode = true;
+        pd.m_cullMode = nanoem_u8_t(value);
         switch (value) {
         case 1: { /* D3DCULL_NONE */
             desc.cull_mode = SG_CULLMODE_NONE;
