@@ -195,9 +195,18 @@ appendCommonHLSLDefines(String &value)
     value.append("#define mediump\n");
     value.append("#define middlep\n");
     value.append("#define lowp\n");
+    value.append("#define half float\n");
+    value.append("#define half2 float2\n");
+    value.append("#define half3 float3\n");
+    value.append("#define half4 float4\n");
+    value.append("#define fixed float\n");
+    value.append("#define fixed2 float2\n");
+    value.append("#define fixed3 float3\n");
+    value.append("#define fixed4 float4\n");
     value.append("#define vec2 float2\n");
     value.append("#define vec3 float3\n");
     value.append("#define vec4 float4\n");
+    value.append("#define mat2 float2x2\n");
     value.append("#define ivec2 int2\n");
     value.append("#define ivec3 int3\n");
     value.append("#define ivec4 int4\n");
@@ -211,6 +220,25 @@ appendCommonHLSLDefines(String &value)
     value.append("#define mod fmod\n");
     value.append("#define texture2D(s, v) s##_texture.Sample(s, (v).xy)\n");
     value.append("#define texture2DLod(s, v) s##_texture.SampleLevel(s, (v).xy, (v).w)\n");
+    value.append("#define tex2D(s, v) s##_texture.Sample(s, (v).xy)\n");
+    value.append("#define tex2Dbias(s, v) s##_texture.SampleBias(s, (v).xy, (v).w)\n");
+    value.append("#define tex2Dlod(s, v) s##_texture.SampleLevel(s, (v).xy, (v).w)\n");
+    value.append("#define tex2Dproj(s, v) s##_texture.Sample(s, (v).xy / (v).w)\n");
+    value.append("#define texCUBE(s, v) s##_texture.Sample(s, (v).xyz)\n");
+    value.append("#define texCUBElod(s, v) s##_texture.SampleLevel(s, (v).xyz, (v).w)\n");
+    value.append("#define tex3D(s, v) s##_texture.Sample(s, (v).xyz)\n");
+    value.append("#define tex3Dlod(s, v) s##_texture.SampleLevel(s, (v).xyz, (v).w)\n");
+    value.append("#define tex1D(s, v) s##_texture.Sample(s, float2((v), 0.0))\n");
+    value.append("#define tex1Dlod(s, v) s##_texture.SampleLevel(s, float2((v).x, 0.0), (v).w)\n");
+}
+
+static void
+replaceFragmentDataReferences(String &value)
+{
+    replaceAllString(value, "gl_FragData[0]", "output.o_color0");
+    replaceAllString(value, "gl_FragData[1]", "output.o_color1");
+    replaceAllString(value, "gl_FragData[2]", "output.o_color2");
+    replaceAllString(value, "gl_FragData[3]", "output.o_color3");
 }
 
 static void
@@ -300,11 +328,20 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
         }
         replaceAllString(current, "void main()", isVertexShader ? "VS_OUTPUT main(VS_INPUT input)" : "PS_OUTPUT main(PS_INPUT input)");
         replaceAllString(current, "void main(void)", isVertexShader ? "VS_OUTPUT main(VS_INPUT input)" : "PS_OUTPUT main(PS_INPUT input)");
+        replaceFragmentDataReferences(current);
         replaceAllString(current, "gl_FragColor", "output.o_color0");
-        replaceAllString(current, "gl_FragData", "output.o_color");
         replaceAllString(current, "vec2", "float2");
         replaceAllString(current, "vec3", "float3");
         replaceAllString(current, "vec4", "float4");
+        replaceAllString(current, "half2", "float2");
+        replaceAllString(current, "half3", "float3");
+        replaceAllString(current, "half4", "float4");
+        replaceAllString(current, "half", "float");
+        replaceAllString(current, "fixed2", "float2");
+        replaceAllString(current, "fixed3", "float3");
+        replaceAllString(current, "fixed4", "float4");
+        replaceAllString(current, "fixed", "float");
+        replaceAllString(current, "mat2", "float2x2");
         replaceAllString(current, "mat3", "float3x3");
         replaceAllString(current, "mat4", "float4x4");
         replaceAllString(current, "fract", "frac");
@@ -716,7 +753,12 @@ createHLSLShader(const Fx9__Effect__Dx9ms__Shader *shaderPtr, sg_shader_desc &de
             appendField(newShaderCode, "float4", fields[i]);
         }
         newShaderCode.append("};\n");
-        newShaderCode.append("struct PS_OUTPUT {\n    float4 o_color0 : SV_Target0;\n};\n");
+        newShaderCode.append("struct PS_OUTPUT {\n");
+        newShaderCode.append("    float4 o_color0 : SV_Target0;\n");
+        newShaderCode.append("    float4 o_color1 : SV_Target1;\n");
+        newShaderCode.append("    float4 o_color2 : SV_Target2;\n");
+        newShaderCode.append("    float4 o_color3 : SV_Target3;\n");
+        newShaderCode.append("};\n");
         appendUniformBufferDeclaration(shaderPtr, "ps_uniforms_vec", newShaderCode);
         appendSamplerDeclarations(shaderPtr, newShaderCode);
         appendProcessedHLSLBody(shaderPtr, false, newShaderCode);
