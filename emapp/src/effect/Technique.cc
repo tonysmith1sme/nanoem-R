@@ -562,7 +562,7 @@ Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttac
     sg_blend_state &dst = cdst.blend;
     const bool hasBlendEnabled = pd.m_hasBlendEnabled;
     if (!hasBlendEnabled) {
-        dst.enabled = true;
+        dst.enabled = src.enabled;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(enabled=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.enabled), EnumStringifyUtils::toString(hasBlendEnabled));
