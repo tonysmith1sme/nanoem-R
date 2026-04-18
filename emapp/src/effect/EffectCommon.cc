@@ -1818,7 +1818,10 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 207: { /* D3DRS_SRCBLENDALPHA */
         convertBlendFactor(value, desc.colors[0].blend.src_factor_alpha);
-        if (value == 14) {
+        if (value == 11) {
+            desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        }
+        else if (value == 14) {
             desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_BLEND_ALPHA;
         }
         else if (value == 15) {
@@ -1831,7 +1834,10 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 208: { /* D3DRS_DESTBLENDALPHA */
         convertBlendFactor(value, desc.colors[0].blend.dst_factor_alpha);
-        if (value == 14) {
+        if (value == 11) {
+            desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+        }
+        else if (value == 14) {
             desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_BLEND_ALPHA;
         }
         else if (value == 15) {
