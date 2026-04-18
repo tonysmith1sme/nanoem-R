@@ -64,6 +64,20 @@ resolveAlphaBlendFactor(sg_blend_factor value) NANOEM_DECL_NOEXCEPT
     }
 }
 
+static sg_compare_func
+resolveStencilCompareFunc(const sg_stencil_face_state &value, bool useD3DDefaults) NANOEM_DECL_NOEXCEPT
+{
+    return value.compare != _SG_COMPAREFUNC_DEFAULT
+        ? value.compare
+        : (useD3DDefaults ? SG_COMPAREFUNC_ALWAYS : value.compare);
+}
+
+static sg_stencil_op
+resolveStencilOp(sg_stencil_op value, bool useD3DDefaults) NANOEM_DECL_NOEXCEPT
+{
+    return value != _SG_STENCILOP_DEFAULT ? value : (useD3DDefaults ? SG_STENCILOP_KEEP : value);
+}
+
 class EnumStringifyUtils : private NonCopyable {
 public:
     static const char *toString(sg_blend_op value) NANOEM_DECL_NOEXCEPT;
@@ -742,6 +756,7 @@ void
 Technique::overrideStencilState(
     const PipelineDescriptor &pd, const sg_stencil_state &src, sg_stencil_state &dst) NANOEM_DECL_NOEXCEPT
 {
+    const bool useD3DDefaults = pd.m_hasStencilEnabled && pd.m_body.stencil.enabled;
     const bool hasStencilEnabled = pd.m_hasStencilEnabled;
     if (!hasStencilEnabled) {
         dst.enabled = src.enabled;
@@ -756,17 +771,23 @@ Technique::overrideStencilState(
         EnumStringifyUtils::toString(hasStencilRef));
     const bool hasStencilReadMask = pd.m_hasStencilReadMask;
     if (!hasStencilReadMask) {
-        dst.read_mask = src.read_mask;
+        dst.read_mask = src.read_mask != 0 || !useD3DDefaults ? src.read_mask : 0xff;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideStencilState(stencilReadMask=0x%x, wasSet=%s)", dst.read_mask,
         EnumStringifyUtils::toString(hasStencilReadMask));
     const bool hasStencilWriteMask = pd.m_hasStencilWriteMask;
     if (!hasStencilWriteMask) {
-        dst.write_mask = src.write_mask;
+        dst.write_mask = src.write_mask != 0 || !useD3DDefaults ? src.write_mask : 0xff;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideStencilState(stencilWriteMask=0x%x, wasSet=%s)", dst.write_mask,
         EnumStringifyUtils::toString(hasStencilWriteMask));
     overrideStencilFaceState(pd.m_stencilFront, src.front, dst.front);
+    if (useD3DDefaults) {
+        dst.front.compare = resolveStencilCompareFunc(dst.front, true);
+        dst.front.pass_op = resolveStencilOp(dst.front.pass_op, true);
+        dst.front.fail_op = resolveStencilOp(dst.front.fail_op, true);
+        dst.front.depth_fail_op = resolveStencilOp(dst.front.depth_fail_op, true);
+    }
     const bool hasTwoSidedStencilMode = pd.m_hasTwoSidedStencilMode;
     const bool twoSidedStencilMode = hasTwoSidedStencilMode
         ? pd.m_twoSidedStencilMode
@@ -774,6 +795,12 @@ Technique::overrideStencilState(
             src.front.depth_fail_op != src.back.depth_fail_op || src.front.pass_op != src.back.pass_op;
     if (twoSidedStencilMode) {
         overrideStencilFaceState(pd.m_stencilBack, src.back, dst.back);
+        if (useD3DDefaults) {
+            dst.back.compare = resolveStencilCompareFunc(dst.back, true);
+            dst.back.pass_op = resolveStencilOp(dst.back.pass_op, true);
+            dst.back.fail_op = resolveStencilOp(dst.back.fail_op, true);
+            dst.back.depth_fail_op = resolveStencilOp(dst.back.depth_fail_op, true);
+        }
     }
     else {
         dst.back = dst.front;
