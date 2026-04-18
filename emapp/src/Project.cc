@@ -6329,10 +6329,18 @@ Project::matchDrawableEffect(const IDrawable *drawable, const Effect *ownerEffec
             filename = fileURI.absolutePath();
         }
         if (!filename.empty()) {
+            const String basename(URI::lastPathComponent(filename));
             result = StringUtils::equalsIgnoreCase(expr.c_str(), filename.c_str());
+            if (!result && !basename.empty()) {
+                result = StringUtils::equalsIgnoreCase(expr.c_str(), basename.c_str());
+            }
             if (!result) {
                 const String exprLC(StringUtils::toLowerCase(expr)), filenameLC(StringUtils::toLowerCase(filename));
                 result = ::wildcardcmp(exprLC.c_str(), filenameLC.c_str()) != 0;
+                if (!result && !basename.empty()) {
+                    const String basenameLC(StringUtils::toLowerCase(basename));
+                    result = ::wildcardcmp(exprLC.c_str(), basenameLC.c_str()) != 0;
+                }
             }
         }
     }
