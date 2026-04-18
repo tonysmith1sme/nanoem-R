@@ -187,10 +187,11 @@ replaceAllString(String &value, const char *from, const char *to)
     String rebuilt;
     const char *begin = value.c_str();
     const char *search = begin;
-    while (const char *target = bx::strFind(search, from)) {
-        rebuilt.append(search, target);
-        rebuilt.append(to, toLength);
-        search = target + fromLength;
+    bx::StringView target;
+    while (!(target = bx::strFind(search, from)).isEmpty()) {
+        rebuilt.append(search, target.getPtr());
+        rebuilt.append(to);
+        search = target.getPtr() + fromLength;
     }
     rebuilt.append(search, begin + value.size());
     value = rebuilt;
@@ -354,8 +355,8 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
         replaceAllString(current, "mat4", "float4x4");
         replaceAllString(current, "fract", "frac");
         replaceAllString(current, "mix", "lerp");
-        if (bx::strFind(current.c_str(), "main(") != nullptr) {
-            value.append(current);
+        if (!bx::strFind(current.c_str(), "main(").isEmpty()) {
+            value.append(current.c_str());
             value.append("\n");
             value.append(isVertexShader ? "    VS_OUTPUT output = (VS_OUTPUT) 0;\n" : "    PS_OUTPUT output = (PS_OUTPUT) 0;\n");
             braceDepth = 1;
@@ -373,7 +374,7 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
                 braceDepth--;
             }
         }
-        value.append(current);
+        value.append(current.c_str());
         value.append("\n");
     }
 }
