@@ -45,6 +45,14 @@ static sg_blend_factor
 resolveAlphaBlendFactor(sg_blend_factor value) NANOEM_DECL_NOEXCEPT
 {
     switch (value) {
+    case SG_BLENDFACTOR_SRC_COLOR:
+        return SG_BLENDFACTOR_SRC_ALPHA;
+    case SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR:
+        return SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    case SG_BLENDFACTOR_DST_COLOR:
+        return SG_BLENDFACTOR_DST_ALPHA;
+    case SG_BLENDFACTOR_ONE_MINUS_DST_COLOR:
+        return SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA;
     case SG_BLENDFACTOR_BLEND_COLOR:
         return SG_BLENDFACTOR_BLEND_ALPHA;
     case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:
