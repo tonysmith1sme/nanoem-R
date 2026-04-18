@@ -1485,6 +1485,24 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         u.m_uint = encoded;
         return u.m_float;
     };
+    const auto setBothSrcAlphaBlendFactors = [&pd](nanoem_u32_t blendValue, sg_blend_state &blendState) {
+        switch (blendValue) {
+        case 12: /* D3DBLEND_BOTHSRCALPHA */
+            blendState.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            blendState.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            pd.m_hasBlendSourceFactorRGB = true;
+            pd.m_hasBlendDestFactorRGB = true;
+            return true;
+        case 13: /* D3DBLEND_BOTHINVSRCALPHA */
+            blendState.src_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blendState.dst_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            pd.m_hasBlendSourceFactorRGB = true;
+            pd.m_hasBlendDestFactorRGB = true;
+            return true;
+        default:
+            return false;
+        }
+    };
     const auto setColorWriteMask = [&pd](nanoem_u32_t attachmentIndex, nanoem_u32_t maskValue) {
         if (attachmentIndex < SG_MAX_COLOR_ATTACHMENTS) {
             sg_color_mask &writeMask = pd.m_body.colors[attachmentIndex].write_mask;
@@ -1542,10 +1560,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         break;
     }
     case 19: { /* D3DRS_SRCBLEND */
-        convertBlendFactor(value, desc.colors[0].blend.src_factor_rgb);
-        pd.m_hasBlendSourceFactorRGB = true;
+        if (!setBothSrcAlphaBlendFactors(value, desc.colors[0].blend)) {
+            convertBlendFactor(value, desc.colors[0].blend.src_factor_rgb);
+            pd.m_hasBlendSourceFactorRGB = true;
+        }
         SG_INSERT_MARKERF(
-            "effect::RenderState::convertPipeline(key=D3DRS_SRCBLEND, value=%d)", desc.colors[0].blend.src_factor_rgb);
+            "effect::RenderState::convertPipeline(key=D3DRS_SRCBLEND, value=%d, src=%d, dst=%d)", value,
+            desc.colors[0].blend.src_factor_rgb, desc.colors[0].blend.dst_factor_rgb);
         break;
     }
     case 20: { /* D3DRS_DSTBLEND */
