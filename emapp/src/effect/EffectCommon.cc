@@ -80,6 +80,19 @@ setMipFilter(nanoem_u32_t value, sg_filter &filter) NANOEM_DECL_NOEXCEPT
     }
 }
 
+static void
+convertSRGBPixelFormat(bool enabled, sg_pixel_format &format) NANOEM_DECL_NOEXCEPT
+{
+    if (enabled) {
+        if (format == SG_PIXELFORMAT_RGBA8) {
+            format = SG_PIXELFORMAT_SRGB8A8;
+        }
+    }
+    else if (format == SG_PIXELFORMAT_SRGB8A8) {
+        format = SG_PIXELFORMAT_RGBA8;
+    }
+}
+
 } /* namespace anonymous */
 
 PipelineDescriptor::Stencil::Stencil()
@@ -1394,6 +1407,9 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
         break;
     }
     case 11: { /* D3DSAMP_SRGBTEXTURE */
+        convertSRGBPixelFormat(value != 0, desc.pixel_format);
+        SG_INSERT_MARKERF("effect::RenderState::convertSamplerState(key=D3DSAMP_SRGBTEXTURE, enabled=%s, format=%d)",
+            value != 0 ? "true" : "false", desc.pixel_format);
         break;
     }
     default:

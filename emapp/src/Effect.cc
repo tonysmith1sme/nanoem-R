@@ -113,6 +113,18 @@ static const char *const kScriptLoopGetIndexValueLiteral = "LoopGetIndex";
 static const char *const kScriptLoopEndValueLiteral = "LoopEnd";
 static const char *const kScriptDrawValueLiteral = "Draw";
 
+static sg_pixel_format
+resolveTexturePixelFormat(sg_pixel_format sourceFormat, sg_pixel_format requestedFormat) NANOEM_DECL_NOEXCEPT
+{
+    if (requestedFormat == SG_PIXELFORMAT_SRGB8A8 && sourceFormat == SG_PIXELFORMAT_RGBA8) {
+        return requestedFormat;
+    }
+    else if (requestedFormat == SG_PIXELFORMAT_RGBA8 && sourceFormat == SG_PIXELFORMAT_SRGB8A8) {
+        return requestedFormat;
+    }
+    return sourceFormat;
+}
+
 struct AttributeUsage {
     const char *m_name;
     int m_variant;
@@ -4713,7 +4725,9 @@ Effect::createImageResourceParameter(
     desc.width = imageSize.x;
     desc.height = imageSize.y;
     desc.num_slices = imageSize.z;
-    desc.pixel_format = determinePixelFormat(annotations, SG_PIXELFORMAT_RGBA8);
+    const sg_pixel_format defaultPixelFormat =
+        desc.pixel_format != _SG_PIXELFORMAT_DEFAULT ? desc.pixel_format : SG_PIXELFORMAT_RGBA8;
+    desc.pixel_format = determinePixelFormat(annotations, defaultPixelFormat);
     desc.type = determineImageType(annotations, parameter.m_type);
     if (desc.num_mipmaps == 0) {
         desc.num_mipmaps = determineMipLevels(annotations, size, SG_MAX_MIPMAPS);
@@ -4815,6 +4829,8 @@ Effect::createOverrideImage(const String &name, const IImageView *image, bool mi
         else if (originImageDescription.width > 0 && originImageDescription.height > 0) {
             const sg_image_desc &overridenImageDescription = it->second;
             sg_image_desc imageDescription(originImageDescription);
+            imageDescription.pixel_format =
+                resolveTexturePixelFormat(originImageDescription.pixel_format, overridenImageDescription.pixel_format);
             const sg_filter minFilterValue = overridenImageDescription.min_filter;
             const int numMipmaps = overridenImageDescription.num_mipmaps;
             if (mipmap && m_project->isMipmapEnabled() && numMipmaps != 1) {
@@ -5701,7 +5717,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
         ImageResourceParameter newParameter(parameter);
         newParameter.m_desc.width = desc.width;
         newParameter.m_desc.height = desc.height;
-        newParameter.m_desc.pixel_format = desc.pixel_format;
+        newParameter.m_desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
         createImageResource(data.ptr, data.size, newParameter);
         ImageLoader::releaseDecodedImageWithSTB(&decodedImagePtr);
     }
@@ -5714,6 +5730,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
             error = Error();
             if (image::DDS *dds = ImageLoader::decodeDDS(&reader, error)) {
                 dds->setImageDescription(desc);
+                desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
                 sg_image image = sg::make_image(&desc);
                 nanoem_delete(dds);
                 nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
@@ -5726,6 +5743,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
     else if (StringUtils::equalsIgnoreCase(fileURI.pathExtension().c_str(), "pfm")) {
         if (image::PFM *pfm = ImageLoader::decodePFM(bytes, error)) {
             pfm->setImageDescription(desc);
+            desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
             sg_image image = sg::make_image(&desc);
             nanoem_delete(pfm);
             nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
