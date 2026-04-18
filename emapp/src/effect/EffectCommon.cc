@@ -1394,6 +1394,14 @@ RenderState::convertCompareFunc(nanoem_u32_t value, sg_compare_func &func)
 void
 RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_desc &desc)
 {
+    const auto decodeFloatValue = [](nanoem_u32_t encoded) {
+        union {
+            nanoem_u32_t m_uint;
+            nanoem_f32_t m_float;
+        } u;
+        u.m_uint = encoded;
+        return u.m_float;
+    };
     const auto convertBorderColor = [](nanoem_u32_t color, sg_border_color &borderColor) {
         switch (color) {
         case 0x00000000u:
@@ -1458,8 +1466,9 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
     }
     case 8: { /* D3DSAMP_MIPMAPLODBIAS */
         /* sokol doesn't expose per-image LOD bias, preserve current behavior */
+        const nanoem_f32_t lodBias = decodeFloatValue(value);
         SG_INSERT_MARKERF(
-            "effect::RenderState::convertSamplerState(key=D3DSAMP_MIPMAPLODBIAS, value=%d, ignored)", value);
+            "effect::RenderState::convertSamplerState(key=D3DSAMP_MIPMAPLODBIAS, value=%f, ignored)", lodBias);
         break;
     }
     case 9: { /* D3DSAMP_MAXMIPLEVEL */
@@ -1739,7 +1748,7 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
         convertStencilOp(value, desc.stencil.back.fail_op);
         pd.m_stencilBack.m_hasFailOp = true;
         SG_INSERT_MARKERF(
-            "effect::RenderState::convertPipeline(key=D3DRS_CCW_STENCILFAIL, value=%d)", desc.stencil.back.pass_op);
+            "effect::RenderState::convertPipeline(key=D3DRS_CCW_STENCILFAIL, value=%d)", desc.stencil.back.fail_op);
         break;
     }
     case 187: { /* D3DRS_CCW_STENCILZFAIL */
