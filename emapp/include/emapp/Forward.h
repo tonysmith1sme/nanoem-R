@@ -1037,6 +1037,8 @@ typedef sg_image(APIENTRY *PFN_sgx_make_image)(const sg_image_desc *desc);
 extern PFN_sgx_make_image make_image;
 typedef sg_image_desc(APIENTRY *PFN_sgx_query_image_defaults)(const sg_image_desc *desc);
 extern PFN_sgx_query_image_defaults query_image_defaults;
+typedef sg_image_desc(APIENTRY *PFN_sgx_query_image_desc)(sg_image img);
+extern PFN_sgx_query_image_desc query_image_desc;
 typedef sg_image_info(APIENTRY *PFN_sgx_query_image_info)(sg_image img);
 extern PFN_sgx_query_image_info query_image_info;
 typedef sg_limits(APIENTRY *PFN_sgx_query_limits)(void);
