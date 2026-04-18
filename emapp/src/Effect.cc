@@ -148,7 +148,8 @@ public:
     static void setRegisterIndex(const Fx9__Effect__Symbol *symbolPtr, RegisterIndexMap &registerIndices);
     static void attachShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techniqueName,
         const char *passName, sg_shader_stage_desc &desc, String &newShaderCode, Error &error);
-    static bool injectAlphaTestShaderSource(const Fx9__Effect__Shader *shaderPtr, const PipelineDescriptor &pd,
+    static bool injectPixelShaderOutputStateShaderSource(const Fx9__Effect__Shader *shaderPtr,
+        const PipelineDescriptor &pd,
         const char *techniqueName, const char *passName, sg_shader_stage_desc &desc, String &newShaderCode,
         Error &error);
     static void retrieveShaderSymbols(const Fx9__Effect__Shader *shaderPtr, RegisterIndexMap &registerIndices,
@@ -282,7 +283,7 @@ buildAlphaTestCondition(const PipelineDescriptor &pd, const char *alphaExpr, Str
 }
 
 static bool
-injectAlphaTestAssignmentBlock(
+injectPixelShaderOutputStateAssignmentBlock(
     Fx9__Effect__Shader__BodyCase bodyCase, const PipelineDescriptor &pd, String &newShaderCode)
 {
     static const char *kTargetLiteral = "_RESERVED_IDENTIFIER_FIXUP_gl_FragData[0] = ";
@@ -296,29 +297,59 @@ injectAlphaTestAssignmentBlock(
     if (!expressionEnd) {
         return false;
     }
-    String condition;
-    if (!buildAlphaTestCondition(pd, "nanoem_alpha_test_color.a", condition)) {
-        return false;
-    }
     const String originalExpression(expression, expressionEnd - expression);
     String replacement;
+    const bool hasAlphaTest = pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled;
+    const bool hasSRGBWrite = pd.m_hasSRGBWriteEnabled && pd.m_srgbWriteEnabled;
+    String condition;
+    if (hasAlphaTest && !buildAlphaTestCondition(pd, "nanoem_output_color.a", condition)) {
+        return false;
+    }
     if (bodyCase == FX9__EFFECT__SHADER__BODY_HLSL) {
-        replacement.append("float4 nanoem_alpha_test_color = ");
+        replacement.append("float4 nanoem_output_color = ");
         replacement.append(originalExpression.c_str());
-        replacement.append(";\n    if (!(");
-        replacement.append(condition.c_str());
-        replacement.append(")) {\n        discard;\n    }\n    ");
+        replacement.append(";\n");
+        if (hasAlphaTest) {
+            replacement.append("    if (!(");
+            replacement.append(condition.c_str());
+            replacement.append(")) {\n        discard;\n    }\n");
+        }
+        if (hasSRGBWrite) {
+            replacement.append("    float3 nanoem_output_linear = saturate(nanoem_output_color.rgb);\n"
+                               "    nanoem_output_color.rgb = float3(\n"
+                               "        nanoem_output_linear.x <= 0.0031308f ? nanoem_output_linear.x * 12.92f : "
+                               "1.055f * pow(nanoem_output_linear.x, 1.0f / 2.4f) - 0.055f,\n"
+                               "        nanoem_output_linear.y <= 0.0031308f ? nanoem_output_linear.y * 12.92f : "
+                               "1.055f * pow(nanoem_output_linear.y, 1.0f / 2.4f) - 0.055f,\n"
+                               "        nanoem_output_linear.z <= 0.0031308f ? nanoem_output_linear.z * 12.92f : "
+                               "1.055f * pow(nanoem_output_linear.z, 1.0f / 2.4f) - 0.055f);\n");
+        }
+        replacement.append("    ");
         replacement.append(kTargetLiteral);
-        replacement.append("nanoem_alpha_test_color");
+        replacement.append("nanoem_output_color");
     }
     else if (bodyCase == FX9__EFFECT__SHADER__BODY_GLSL) {
-        replacement.append("vec4 nanoem_alpha_test_color = ");
+        replacement.append("vec4 nanoem_output_color = ");
         replacement.append(originalExpression.c_str());
-        replacement.append(";\n    if (!(");
-        replacement.append(condition.c_str());
-        replacement.append(")) {\n        discard;\n    }\n    ");
+        replacement.append(";\n");
+        if (hasAlphaTest) {
+            replacement.append("    if (!(");
+            replacement.append(condition.c_str());
+            replacement.append(")) {\n        discard;\n    }\n");
+        }
+        if (hasSRGBWrite) {
+            replacement.append("    vec3 nanoem_output_linear = clamp(nanoem_output_color.rgb, 0.0, 1.0);\n"
+                               "    nanoem_output_color.rgb = vec3(\n"
+                               "        nanoem_output_linear.x <= 0.0031308 ? nanoem_output_linear.x * 12.92 : "
+                               "1.055 * pow(nanoem_output_linear.x, 1.0 / 2.4) - 0.055,\n"
+                               "        nanoem_output_linear.y <= 0.0031308 ? nanoem_output_linear.y * 12.92 : "
+                               "1.055 * pow(nanoem_output_linear.y, 1.0 / 2.4) - 0.055,\n"
+                               "        nanoem_output_linear.z <= 0.0031308 ? nanoem_output_linear.z * 12.92 : "
+                               "1.055 * pow(nanoem_output_linear.z, 1.0 / 2.4) - 0.055);\n");
+        }
+        replacement.append("    ");
         replacement.append(kTargetLiteral);
-        replacement.append("nanoem_alpha_test_color");
+        replacement.append("nanoem_output_color");
     }
     else {
         return false;
@@ -890,11 +921,13 @@ PrivateEffectUtils::attachShaderSource(const Fx9__Effect__Shader *shaderPtr, con
 }
 
 bool
-PrivateEffectUtils::injectAlphaTestShaderSource(const Fx9__Effect__Shader *shaderPtr, const PipelineDescriptor &pd,
+PrivateEffectUtils::injectPixelShaderOutputStateShaderSource(const Fx9__Effect__Shader *shaderPtr,
+    const PipelineDescriptor &pd,
     const char *techniqueName, const char *passName, sg_shader_stage_desc &desc, String &newShaderCode, Error &error)
 {
-    if (!(pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) || error.hasReason() ||
-        shaderPtr->type != FX9__EFFECT__SHADER__TYPE__ST_PIXEL) {
+    const bool hasAlphaTest = pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled;
+    const bool hasSRGBWrite = pd.m_hasSRGBWriteEnabled && pd.m_srgbWriteEnabled;
+    if ((!hasAlphaTest && !hasSRGBWrite) || error.hasReason() || shaderPtr->type != FX9__EFFECT__SHADER__TYPE__ST_PIXEL) {
         return true;
     }
     const Fx9__Effect__Shader__BodyCase bodyCase = shaderPtr->body_case;
@@ -906,7 +939,7 @@ PrivateEffectUtils::injectAlphaTestShaderSource(const Fx9__Effect__Shader *shade
         appendShaderVariablesHeaderComment(shaderPtr, newShaderCode);
         newShaderCode.append(shaderPtr->hlsl);
     }
-    if (!injectAlphaTestAssignmentBlock(bodyCase, pd, newShaderCode)) {
+    if (!injectPixelShaderOutputStateAssignmentBlock(bodyCase, pd, newShaderCode)) {
         return false;
     }
     if (bodyCase == FX9__EFFECT__SHADER__BODY_HLSL) {
@@ -1926,13 +1959,17 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             shaderDescription.fs.uniform_blocks[0].uniforms[0].name = name;
                         }
                         if (!error.hasReason()) {
-                            const bool alphaTestInjected = PrivateEffectUtils::injectAlphaTestShaderSource(pixelShader,
+                            const bool outputStateInjected =
+                                PrivateEffectUtils::injectPixelShaderOutputStateShaderSource(pixelShader,
                                 pd, techniquePtr->name, passPtr->name, shaderDescription.fs, pixelShaderCode, error);
-                            if (!alphaTestInjected && pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) {
-                                m_logger->log("Pass \"%s/%s/%s\" enables alpha test (func=%d, ref=%d) but source "
-                                              "injection for shader-side alpha test emulation failed",
-                                    nameConstString(), techniquePtr->name, passPtr->name, pd.m_alphaTestCompareFunc,
-                                    pd.m_alphaTestReference);
+                            if (!outputStateInjected &&
+                                ((pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled) ||
+                                    (pd.m_hasSRGBWriteEnabled && pd.m_srgbWriteEnabled))) {
+                                m_logger->log("Pass \"%s/%s/%s\" enables pixel shader output state emulation "
+                                              "(alphaTest=%s, srgbWrite=%s) but source injection failed",
+                                    nameConstString(), techniquePtr->name, passPtr->name,
+                                    pd.m_hasAlphaTestEnabled && pd.m_alphaTestEnabled ? "true" : "false",
+                                    pd.m_hasSRGBWriteEnabled && pd.m_srgbWriteEnabled ? "true" : "false");
                             }
                         }
                         break;
