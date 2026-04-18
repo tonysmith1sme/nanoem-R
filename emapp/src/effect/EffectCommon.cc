@@ -115,6 +115,7 @@ PipelineDescriptor::PipelineDescriptor()
     , m_hasBlendDestFactorAlpha(false)
     , m_hasBlendOpRGB(false)
     , m_hasBlendOpAlpha(false)
+    , m_hasBlendColor(false)
     , m_hasSeparateAlphaBlendEnabled(false)
     , m_separateAlphaBlendEnabled(false)
     , m_hasAlphaTestEnabled(false)
@@ -154,6 +155,7 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasBlendDestFactorAlpha(source.m_hasBlendDestFactorAlpha)
     , m_hasBlendOpRGB(source.m_hasBlendOpRGB)
     , m_hasBlendOpAlpha(source.m_hasBlendOpAlpha)
+    , m_hasBlendColor(source.m_hasBlendColor)
     , m_hasSeparateAlphaBlendEnabled(source.m_hasSeparateAlphaBlendEnabled)
     , m_separateAlphaBlendEnabled(source.m_separateAlphaBlendEnabled)
     , m_hasAlphaTestEnabled(source.m_hasAlphaTestEnabled)
@@ -1217,6 +1219,14 @@ RenderState::convertBlendFactor(nanoem_u32_t value, sg_blend_factor &desc)
         desc = SG_BLENDFACTOR_SRC_ALPHA_SATURATED;
         break;
     }
+    case 14: { /* D3DBLEND_BLENDFACTOR */
+        desc = SG_BLENDFACTOR_BLEND_COLOR;
+        break;
+    }
+    case 15: { /* D3DBLEND_INVBLENDFACTOR */
+        desc = SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR;
+        break;
+    }
     default:
         break;
     }
@@ -1730,6 +1740,18 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 192: { /* D3DRS_COLORWRITEENABLE3 */
         setColorWriteMask(3, value);
+        break;
+    }
+    case 193: { /* D3DRS_BLENDFACTOR */
+        const nanoem_f32_t kScaleFactor = 1.0f / 255.0f;
+        desc.blend_color.r = nanoem_u8_t((value >> 16) & 0xff) * kScaleFactor;
+        desc.blend_color.g = nanoem_u8_t((value >> 8) & 0xff) * kScaleFactor;
+        desc.blend_color.b = nanoem_u8_t(value & 0xff) * kScaleFactor;
+        desc.blend_color.a = nanoem_u8_t((value >> 24) & 0xff) * kScaleFactor;
+        pd.m_hasBlendColor = true;
+        SG_INSERT_MARKERF(
+            "effect::RenderState::convertPipeline(key=D3DRS_BLENDFACTOR, value=0x%x, color=(%f,%f,%f,%f))", value,
+            desc.blend_color.r, desc.blend_color.g, desc.blend_color.b, desc.blend_color.a);
         break;
     }
     case 194: { /* D3DRS_SRGBWRITEENABLE */
