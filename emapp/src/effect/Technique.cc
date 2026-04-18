@@ -582,7 +582,10 @@ Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttac
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(dstFactorRGB=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.dst_factor_rgb), EnumStringifyUtils::toString(hasBlendDestFactorRGB));
     const bool hasSeparateAlphaBlendEnabled = pd.m_hasSeparateAlphaBlendEnabled;
-    const bool separateAlphaBlendEnabled = hasSeparateAlphaBlendEnabled ? pd.m_separateAlphaBlendEnabled : false;
+    const bool separateAlphaBlendEnabled = hasSeparateAlphaBlendEnabled
+        ? pd.m_separateAlphaBlendEnabled
+        : src.src_factor_alpha != src.src_factor_rgb || src.dst_factor_alpha != src.dst_factor_rgb ||
+            src.op_alpha != src.op_rgb;
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(separateAlphaBlendEnabled=%s, wasSet=%s)",
         EnumStringifyUtils::toString(separateAlphaBlendEnabled), EnumStringifyUtils::toString(hasSeparateAlphaBlendEnabled));
     const bool hasBlendSourceFactorAlpha = pd.m_hasBlendSourceFactorAlpha;
