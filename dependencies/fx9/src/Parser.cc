@@ -2413,6 +2413,13 @@ ParserContext::setPointSizeAssignment(float value)
     m_pointSizeAssignment = value;
 }
 
+void
+ParserContext::setPointSizeRange(float minValue, float maxValue)
+{
+    m_pointSizeMin = minValue;
+    m_pointSizeMax = maxValue;
+}
+
 atom_t
 ParserContext::allocateIntermNode(TIntermNode *node)
 {
@@ -3683,11 +3690,18 @@ ParserContext::createBuiltInVertexShaderOutputAssignmentNode(const TFunction *fu
         if (newOutputType.isStruct()) {
             bodyNode = growVertexShaderOutputStructAssignment(newOutputType, outputVariableNode, bodyNode);
             if (m_pointSizeAssignment > 0.0f) {
+                float pointSize = m_pointSizeAssignment;
+                if (m_pointSizeMin > 0.0f) {
+                    pointSize = std::max(pointSize, m_pointSizeMin);
+                }
+                if (m_pointSizeMax > 0.0f) {
+                    pointSize = std::min(pointSize, m_pointSizeMax);
+                }
                 TType specType(EbtFloat);
                 specType.getQualifier().storage = EvqPointSize;
                 specType.getQualifier().builtIn = EbvPointSize;
                 TIntermTyped *valueNode =
-                    m_intermediate.addConstantUnion(m_pointSizeAssignment, EbtFloat, TSourceLoc(), true);
+                    m_intermediate.addConstantUnion(pointSize, EbtFloat, TSourceLoc(), true);
                 TString *variableName = newAnonymousVariableString();
                 m_context->declareVariable(initializerNode->getLoc(), *variableName, specType);
                 TIntermTyped *leftNode = m_context->handleVariable(initializerNode->getLoc(), variableName);
