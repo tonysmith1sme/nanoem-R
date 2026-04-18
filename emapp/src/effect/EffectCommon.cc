@@ -1266,7 +1266,7 @@ RenderState::convertWrap(nanoem_u32_t value, sg_wrap &wrap)
         break;
     }
     case 4: { /* D3DTADDRESS_BORDER */
-        wrap = SG_WRAP_CLAMP_TO_EDGE;
+        wrap = SG_WRAP_CLAMP_TO_BORDER;
         break;
     }
     default:
@@ -1379,6 +1379,25 @@ RenderState::convertCompareFunc(nanoem_u32_t value, sg_compare_func &func)
 void
 RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_desc &desc)
 {
+    const auto convertBorderColor = [](nanoem_u32_t color, sg_border_color &borderColor) {
+        switch (color) {
+        case 0x00000000u:
+            borderColor = SG_BORDERCOLOR_TRANSPARENT_BLACK;
+            break;
+        case 0xff000000u:
+            borderColor = SG_BORDERCOLOR_OPAQUE_BLACK;
+            break;
+        case 0xffffffffu:
+            borderColor = SG_BORDERCOLOR_OPAQUE_WHITE;
+            break;
+        default:
+            /* approximate unsupported arbitrary D3D border colors to the closest sokol preset */
+            borderColor = (color & 0x00ffffffu) != 0 ? SG_BORDERCOLOR_OPAQUE_WHITE
+                                                     : ((color & 0xff000000u) != 0 ? SG_BORDERCOLOR_OPAQUE_BLACK
+                                                                                    : SG_BORDERCOLOR_TRANSPARENT_BLACK);
+            break;
+        }
+    };
     switch (key) {
     case 1: { /* D3DSAMP_ADDRESSU */
         convertWrap(value, desc.wrap_u);
@@ -1393,6 +1412,10 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
         break;
     }
     case 4: { /* D3DSAMP_BORDERCOLOR */
+        convertBorderColor(value, desc.border_color);
+        SG_INSERT_MARKERF("effect::RenderState::convertSamplerState(key=D3DSAMP_BORDERCOLOR, value=0x%x, "
+                          "borderColor=%d)",
+            value, desc.border_color);
         break;
     }
     case 5: { /* D3DSAMP_MAGFILTER */
