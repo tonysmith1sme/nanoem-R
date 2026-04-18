@@ -1293,7 +1293,6 @@ RenderState::convertWrap(nanoem_u32_t value, sg_wrap &wrap)
 void
 RenderState::convertFilter(nanoem_u32_t value, sg_image_desc &desc, sg_filter &filter)
 {
-    BX_UNUSED_1(desc);
     switch (value) {
     case 2: { /* D3DTEXF_LINEAR */
         filter = SG_FILTER_LINEAR;
@@ -1301,6 +1300,7 @@ RenderState::convertFilter(nanoem_u32_t value, sg_image_desc &desc, sg_filter &f
     }
     case 3: { /* D3DTEXF_ANISOTROPIC */
         filter = SG_FILTER_LINEAR;
+        desc.max_anisotropy = glm::max(desc.max_anisotropy, 2u);
         break;
     }
     default:
