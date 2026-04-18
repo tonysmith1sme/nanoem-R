@@ -1067,7 +1067,7 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
             if (TIntermBinary *binaryNode = (*it2)->getAsBinaryNode()) {
                 const TIntermSymbol *keyNode = binaryNode->getLeft()->getAsSymbolNode();
                 const TString &key = keyNode->getName();
-                if (const TIntermTyped *valueNode = binaryNode->getRight()->getAsSymbolNode()) {
+                if (const TIntermTyped *valueNode = binaryNode->getRight()->getAsTyped()) {
                     TString canonicalizedName(keyNode->getName());
                     std::transform(key.begin(), key.end(), canonicalizedName.begin(), ::toupper);
                     auto it = m_parent->m_samplerStateEnumConversions.find(canonicalizedName.c_str());
@@ -1091,7 +1091,19 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
                         default:
                             if (const TIntermConstantUnion *constantUnionNode = valueNode->getAsConstantUnion()) {
                                 const TConstUnionArray &values = constantUnionNode->getConstArray();
-                                value = uint32_t(values[0].getIConst());
+                                switch (values[0].getType()) {
+                                case EbtBool:
+                                    value = values[0].getBConst() ? 1u : 0u;
+                                    break;
+                                case EbtFloat:
+                                case EbtFloat16:
+                                case EbtDouble:
+                                    value = uint32_t(values[0].getDConst());
+                                    break;
+                                default:
+                                    value = uint32_t(values[0].getIConst());
+                                    break;
+                                }
                             }
                             break;
                         }
