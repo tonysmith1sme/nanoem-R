@@ -34,6 +34,67 @@ using namespace glslang;
 #define FX9_TRACE_EXPR(expr)
 #endif
 
+namespace {
+
+static TString
+decodeTextSource(const char *data, size_t size)
+{
+#if defined(_WIN32)
+    if (size >= 3 && static_cast<unsigned char>(data[0]) == 0xef && static_cast<unsigned char>(data[1]) == 0xbb &&
+        static_cast<unsigned char>(data[2]) == 0xbf) {
+        return TString(data + 3, size - 3);
+    }
+    if (size >= 2) {
+        const unsigned char b0 = static_cast<unsigned char>(data[0]);
+        const unsigned char b1 = static_cast<unsigned char>(data[1]);
+        if ((b0 == 0xff && b1 == 0xfe) || (b0 == 0xfe && b1 == 0xff)) {
+            const bool littleEndian = b0 == 0xff;
+            const int numWideChars = int((size - 2) / 2);
+            if (numWideChars > 0) {
+                std::wstring wide;
+                wide.resize(numWideChars);
+                const unsigned char *ptr = reinterpret_cast<const unsigned char *>(data + 2);
+                for (int i = 0; i < numWideChars; i++) {
+                    const unsigned char lo = ptr[i * 2 + (littleEndian ? 0 : 1)];
+                    const unsigned char hi = ptr[i * 2 + (littleEndian ? 1 : 0)];
+                    wide[i] = wchar_t((hi << 8) | lo);
+                }
+                const int numBytes = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), int(wide.size()), nullptr, 0,
+                    nullptr, nullptr);
+                if (numBytes > 0) {
+                    std::string utf8;
+                    utf8.resize(numBytes);
+                    WideCharToMultiByte(
+                        CP_UTF8, 0, wide.c_str(), int(wide.size()), &utf8[0], numBytes, nullptr, nullptr);
+                    return TString(utf8.c_str(), utf8.size());
+                }
+            }
+        }
+    }
+    const int numUTF16Chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, data, int(size), nullptr, 0);
+    if (numUTF16Chars > 0) {
+        return TString(data, size);
+    }
+    const int numWideChars = MultiByteToWideChar(932, 0, data, int(size), nullptr, 0);
+    if (numWideChars > 0) {
+        std::wstring wide;
+        wide.resize(numWideChars);
+        MultiByteToWideChar(932, 0, data, int(size), &wide[0], numWideChars);
+        const int numBytes =
+            WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), int(wide.size()), nullptr, 0, nullptr, nullptr);
+        if (numBytes > 0) {
+            std::string utf8;
+            utf8.resize(numBytes);
+            WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), int(wide.size()), &utf8[0], numBytes, nullptr, nullptr);
+            return TString(utf8.c_str(), utf8.size());
+        }
+    }
+#endif
+    return TString(data, size);
+}
+
+} /* namespace anonymous */
+
 extern "C" {
 struct parser_t;
 parser_t *fx9LemonParserContextAlloc(void *(*mallocProc)(size_t));
@@ -351,7 +412,7 @@ ParserContext::IncluderContext::includeLocal(
                 DWORD numReadBytes = 0;
                 ::ReadFile(handle, bytes.data(), size, &numReadBytes, nullptr);
                 ::CloseHandle(handle);
-                TString *source = new TString(bytes.begin(), bytes.end());
+                TString *source = new TString(decodeTextSource(bytes.data(), bytes.size()));
                 m_sources.insert(std::make_pair(path, source));
                 m_includedSourePathList.push_back(normalized);
                 result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };
@@ -364,7 +425,7 @@ ParserContext::IncluderContext::includeLocal(
                 if (S_ISREG(st.st_mode)) {
                     std::vector<char> bytes(st.st_size);
                     ::read(fd, bytes.data(), bytes.size());
-                    TString *source = new TString(bytes.begin(), bytes.end());
+                    TString *source = new TString(decodeTextSource(bytes.data(), bytes.size()));
                     m_sources.insert(std::make_pair(path, source));
                     m_includedSourePathList.push_back(normalized);
                     result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };
