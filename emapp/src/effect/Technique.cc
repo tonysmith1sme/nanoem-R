@@ -625,7 +625,7 @@ Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttac
         dst.op_alpha = dst.op_rgb;
     }
     else if (!hasBlendOpAlpha) {
-        dst.op_alpha = src.op_alpha != _SG_BLENDOP_DEFAULT ? src.op_alpha : SG_BLENDOP_MAX;
+        dst.op_alpha = src.op_alpha != _SG_BLENDOP_DEFAULT ? src.op_alpha : SG_BLENDOP_ADD;
     }
     SG_INSERT_MARKERF("effect::Technique::overrideColorState(opAlpha=%s, wasSet=%s)",
         EnumStringifyUtils::toString(dst.op_alpha), EnumStringifyUtils::toString(hasBlendOpAlpha));
