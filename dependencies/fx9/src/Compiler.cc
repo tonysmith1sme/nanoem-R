@@ -1296,6 +1296,36 @@ Compiler::BasePassShader::convertAllPassStates(const ParserContext::Pass &pass)
     }
 }
 
+namespace {
+
+static void
+configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
+{
+    const auto decodeRenderStateFloatValue = [](uint32_t value) {
+        union {
+            uint32_t m_uint;
+            float m_float;
+        } u;
+        u.m_uint = value;
+        return u.m_float;
+    };
+    float pointSize = 0.0f;
+    for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
+        const Fx9__Effect__RenderState *state = message->render_states[i];
+        /* FILLMODE == POINT */
+        if (state->key == 8 && state->value == 1) {
+            pointSize = std::max(pointSize, 1.0f);
+        }
+        /* POINTSIZE */
+        else if (state->key == 154) {
+            pointSize = decodeRenderStateFloatValue(state->value);
+        }
+    }
+    parser.setPointSizeAssignment(pointSize);
+}
+
+} /* namespace anonymous */
+
 Compiler::DX9MSPassShader::DX9MSPassShader(
     Compiler *parent, const char *path, const glslang::TString &source, EffectProduct &effectProduct, void *opaque)
     : BasePassShader(parent, path, source, effectProduct, opaque)
@@ -1307,8 +1337,10 @@ Compiler::DX9MSPassShader::~DX9MSPassShader()
 }
 
 void
-Compiler::DX9MSPassShader::configureParserContext(ParserContext & /* parser */)
+Compiler::DX9MSPassShader::configureParserContext(ParserContext &parser)
 {
+    Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+    configurePointSizeAssignment(parser, message);
 }
 
 bool
@@ -1368,6 +1400,8 @@ Compiler::HLSLPassShader::~HLSLPassShader()
 void
 Compiler::HLSLPassShader::configureParserContext(ParserContext &parser)
 {
+    Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+    configurePointSizeAssignment(parser, message);
     parser.enableUniformBuffer();
     ParserContext::BuiltInLocationMap value;
     for (auto it : m_parent->m_vertexShaderInputLocations) {
@@ -1457,28 +1491,8 @@ Compiler::MSLPassShader::~MSLPassShader()
 void
 Compiler::MSLPassShader::configureParserContext(ParserContext &parser)
 {
-    const auto decodeRenderStateFloatValue = [](uint32_t value) {
-        union {
-            uint32_t m_uint;
-            float m_float;
-        } u;
-        u.m_uint = value;
-        return u.m_float;
-    };
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
-    float pointSize = 0.0f;
-    for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
-        const Fx9__Effect__RenderState *state = message->render_states[i];
-        /* FILLMODE == POINT */
-        if (state->key == 8 && state->value == 1) {
-            pointSize = std::max(pointSize, 1.0f);
-        }
-        /* POINTSIZE */
-        else if (state->key == 154) {
-            pointSize = decodeRenderStateFloatValue(state->value);
-        }
-    }
-    parser.setPointSizeAssignment(pointSize);
+    configurePointSizeAssignment(parser, message);
     parser.enableUniformBuffer();
     parser.setVertexShaderInputMap(m_parent->m_vertexShaderInputLocations);
 }
