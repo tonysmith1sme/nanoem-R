@@ -1072,7 +1072,15 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
                     std::transform(key.begin(), key.end(), canonicalizedName.begin(), ::toupper);
                     auto it = m_parent->m_samplerStateEnumConversions.find(canonicalizedName.c_str());
                     if (it != m_parent->m_samplerStateEnumConversions.end()) {
-                        const auto resolveConstantValue = [](const TIntermTyped *node, uint32_t &value) {
+                        const auto encodeFloatValue = [](float input) {
+                            union {
+                                float m_float;
+                                uint32_t m_uint;
+                            } u;
+                            u.m_float = input;
+                            return u.m_uint;
+                        };
+                        const auto resolveConstantValue = [&encodeFloatValue](const TIntermTyped *node, uint32_t &value) {
                             if (const TIntermConstantUnion *constantUnionNode = node->getAsConstantUnion()) {
                                 const TConstUnionArray &values = constantUnionNode->getConstArray();
                                 switch (values[0].getType()) {
@@ -1081,8 +1089,10 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
                                     break;
                                 case EbtFloat:
                                 case EbtFloat16:
+                                    value = encodeFloatValue(values[0].getDConst());
+                                    break;
                                 case EbtDouble:
-                                    value = uint32_t(values[0].getDConst());
+                                    value = encodeFloatValue(float(values[0].getDConst()));
                                     break;
                                 default:
                                     value = uint32_t(values[0].getIConst());
