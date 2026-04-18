@@ -707,7 +707,10 @@ Technique::overrideStencilState(
         EnumStringifyUtils::toString(hasStencilWriteMask));
     overrideStencilFaceState(pd.m_stencilFront, src.front, dst.front);
     const bool hasTwoSidedStencilMode = pd.m_hasTwoSidedStencilMode;
-    const bool twoSidedStencilMode = hasTwoSidedStencilMode ? pd.m_twoSidedStencilMode : false;
+    const bool twoSidedStencilMode = hasTwoSidedStencilMode
+        ? pd.m_twoSidedStencilMode
+        : src.front.compare != src.back.compare || src.front.fail_op != src.back.fail_op ||
+            src.front.depth_fail_op != src.back.depth_fail_op || src.front.pass_op != src.back.pass_op;
     if (twoSidedStencilMode) {
         overrideStencilFaceState(pd.m_stencilBack, src.back, dst.back);
     }
