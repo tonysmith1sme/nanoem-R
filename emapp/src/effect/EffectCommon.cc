@@ -123,6 +123,8 @@ PipelineDescriptor::PipelineDescriptor()
     , m_alphaTestCompareFunc(_SG_COMPAREFUNC_DEFAULT)
     , m_hasAlphaTestReference(false)
     , m_alphaTestReference(0)
+    , m_hasSRGBWriteEnabled(false)
+    , m_srgbWriteEnabled(false)
     , m_hasDepthEnabled(false)
     , m_depthEnabled(true)
     , m_hasDepthCompareFunc(false)
@@ -160,6 +162,8 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_alphaTestCompareFunc(source.m_alphaTestCompareFunc)
     , m_hasAlphaTestReference(source.m_hasAlphaTestReference)
     , m_alphaTestReference(source.m_alphaTestReference)
+    , m_hasSRGBWriteEnabled(source.m_hasSRGBWriteEnabled)
+    , m_srgbWriteEnabled(source.m_srgbWriteEnabled)
     , m_hasDepthEnabled(source.m_hasDepthEnabled)
     , m_depthEnabled(source.m_depthEnabled)
     , m_hasDepthCompareFunc(source.m_hasDepthCompareFunc)
@@ -1684,6 +1688,13 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 192: { /* D3DRS_COLORWRITEENABLE3 */
         setColorWriteMask(3, value);
+        break;
+    }
+    case 194: { /* D3DRS_SRGBWRITEENABLE */
+        pd.m_hasSRGBWriteEnabled = true;
+        pd.m_srgbWriteEnabled = value != 0;
+        SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SRGBWRITEENABLE, enabled=%s)",
+            pd.m_srgbWriteEnabled ? "true" : "false");
         break;
     }
     case 195: { /* D3DRS_DEPTHBIAS */
