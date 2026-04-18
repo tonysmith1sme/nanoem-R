@@ -1643,14 +1643,6 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     case 27: { /* D3DRS_ALPHABLENDENABLE */
         sg_blend_state &bs = desc.colors[0].blend;
         bs.enabled = value;
-        if (value != 0) {
-            if (bs.src_factor_rgb == _SG_BLENDFACTOR_DEFAULT) {
-                bs.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-            }
-            if (bs.dst_factor_rgb == _SG_BLENDFACTOR_DEFAULT) {
-                bs.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-            }
-        }
         pd.m_hasBlendEnabled = true;
         SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ALPHABLENDENABLE, value=%d)", value);
         break;
