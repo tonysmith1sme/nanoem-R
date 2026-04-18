@@ -3104,19 +3104,27 @@ Project::getScriptExternalRenderPassColorImageDescription(
 
 bool
 Project::getRenderPassColorImageDescription(
-    sg_pass /* pass */, sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT
+    sg_pass pass, sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT
 {
-    RenderPassBundleMap::const_iterator it = m_renderPassBundleMap.find(m_currentRenderPass.id);
+    RenderPassBundleMap::const_iterator it = m_renderPassBundleMap.find(pass.id);
     bool found = it != m_renderPassBundleMap.end();
     if (found) {
         const RenderPassBundle &desc = it->second;
         const PixelFormat &format = desc.m_format;
-        id.pixel_format = format.colorPixelFormat(0);
-        id.sample_count = format.numSamples();
-        pd.color_attachments[0].image = desc.m_desciption.color_attachments[0].image;
-        const Vector2UI16 imageSize(deviceScaleUniformedViewportImageSize());
-        id.width = imageSize.x;
-        id.height = imageSize.y;
+        const sg_image colorImage = desc.m_desciption.color_attachments[0].image;
+        id = sg::is_valid(colorImage) && sg::query_image_desc ? sg::query_image_desc(colorImage) : sg_image_desc();
+        if (id.pixel_format == _SG_PIXELFORMAT_DEFAULT) {
+            id.pixel_format = format.colorPixelFormat(0);
+        }
+        if (id.sample_count == 0) {
+            id.sample_count = format.numSamples();
+        }
+        if (id.width == 0 || id.height == 0) {
+            const Vector2UI16 imageSize(deviceScaleUniformedViewportImageSize());
+            id.width = imageSize.x;
+            id.height = imageSize.y;
+        }
+        pd.color_attachments[0].image = colorImage;
     }
     return found;
 }

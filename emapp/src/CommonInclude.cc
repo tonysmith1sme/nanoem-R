@@ -36,6 +36,7 @@ extern sg_features APIENTRY sgx_query_features(void);
 extern sg_image APIENTRY sgx_alloc_image(void);
 extern sg_image APIENTRY sgx_make_image(const sg_image_desc *desc);
 extern sg_image_desc APIENTRY sgx_query_image_defaults(const sg_image_desc *desc);
+extern sg_image_desc APIENTRY sgx_query_image_desc(sg_image img);
 extern sg_image_info APIENTRY sgx_query_image_info(sg_image img);
 extern sg_limits APIENTRY sgx_query_limits(void);
 extern sg_pass APIENTRY sgx_alloc_pass(void);
@@ -221,6 +222,7 @@ PFN_sgx_query_buffer_will_overflow query_buffer_will_overflow = nullptr;
 PFN_sgx_query_desc query_desc = nullptr;
 PFN_sgx_query_features query_features = nullptr;
 PFN_sgx_query_image_defaults query_image_defaults = nullptr;
+PFN_sgx_query_image_desc query_image_desc = nullptr;
 PFN_sgx_query_image_info query_image_info = nullptr;
 PFN_sgx_query_image_state query_image_state = nullptr;
 PFN_sgx_query_limits query_limits = nullptr;
@@ -321,6 +323,7 @@ openSharedLibrary(const char *dllPath)
     query_desc = sgx_query_desc;
     query_features = sgx_query_features;
     query_image_defaults = sgx_query_image_defaults;
+    query_image_desc = sgx_query_image_desc;
     query_image_info = sgx_query_image_info;
     query_image_state = sgx_query_image_state;
     query_limits = sgx_query_limits;
@@ -424,6 +427,7 @@ openSharedLibrary(const char *dllPath)
         query_features = reinterpret_cast<PFN_sgx_query_features>(bx::dlsym(handle, "sgx_query_features"));
         query_image_defaults =
             reinterpret_cast<PFN_sgx_query_image_defaults>(bx::dlsym(handle, "sgx_query_image_defaults"));
+        query_image_desc = reinterpret_cast<PFN_sgx_query_image_desc>(bx::dlsym(handle, "sgx_query_image_desc"));
         query_image_info = reinterpret_cast<PFN_sgx_query_image_info>(bx::dlsym(handle, "sgx_query_image_info"));
         query_image_state = reinterpret_cast<PFN_sgx_query_image_state>(bx::dlsym(handle, "sgx_query_image_state"));
         query_limits = reinterpret_cast<PFN_sgx_query_limits>(bx::dlsym(handle, "sgx_query_limits"));
