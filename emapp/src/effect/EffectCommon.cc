@@ -1278,13 +1278,14 @@ RenderState::convertWrap(nanoem_u32_t value, sg_wrap &wrap)
 void
 RenderState::convertFilter(nanoem_u32_t value, sg_image_desc &desc, sg_filter &filter)
 {
+    BX_UNUSED_1(desc);
     switch (value) {
     case 2: { /* D3DTEXF_LINEAR */
         filter = SG_FILTER_LINEAR;
         break;
     }
     case 3: { /* D3DTEXF_ANISOTROPIC */
-        desc.max_anisotropy = glm::clamp(value, 1u, 16u);
+        filter = SG_FILTER_LINEAR;
         break;
     }
     default:
@@ -1408,6 +1409,24 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
             /* set actual mipmap levels later */
             desc.num_mipmaps = 0;
         }
+        break;
+    }
+    case 8: { /* D3DSAMP_MIPMAPLODBIAS */
+        /* sokol doesn't expose per-image LOD bias, preserve current behavior */
+        SG_INSERT_MARKERF(
+            "effect::RenderState::convertSamplerState(key=D3DSAMP_MIPMAPLODBIAS, value=%d, ignored)", value);
+        break;
+    }
+    case 9: { /* D3DSAMP_MAXMIPLEVEL */
+        desc.min_lod = static_cast<nanoem_f32_t>(value);
+        SG_INSERT_MARKERF("effect::RenderState::convertSamplerState(key=D3DSAMP_MAXMIPLEVEL, min_lod=%f)",
+            desc.min_lod);
+        break;
+    }
+    case 10: { /* D3DSAMP_MAXANISOTROPY */
+        desc.max_anisotropy = glm::clamp(value, 1u, 16u);
+        SG_INSERT_MARKERF("effect::RenderState::convertSamplerState(key=D3DSAMP_MAXANISOTROPY, value=%d)",
+            desc.max_anisotropy);
         break;
     }
     case 11: { /* D3DSAMP_SRGBTEXTURE */
