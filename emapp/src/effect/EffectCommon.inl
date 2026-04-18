@@ -22,9 +22,28 @@ convertPipeline(const TPass *passPtr, PipelineDescriptor &desc)
 {
     SG_PUSH_GROUPF("effect::convertPipeline(size=%d)", passPtr->n_render_states);
     const size_t numRenderStates = passPtr->n_render_states;
-    for (size_t i = 0; i < numRenderStates; i++) {
-        const TState *state = passPtr->render_states[i];
-        effect::RenderState::convertPipeline(state->key, state->value, desc);
+    nanoem_u32_t lowerBound = 0;
+    while (true) {
+        nanoem_u32_t nextKey = UINT32_MAX;
+        for (size_t i = 0; i < numRenderStates; i++) {
+            const TState *state = passPtr->render_states[i];
+            if (state->key >= lowerBound && state->key < nextKey) {
+                nextKey = state->key;
+            }
+        }
+        if (nextKey == UINT32_MAX) {
+            break;
+        }
+        for (size_t i = 0; i < numRenderStates; i++) {
+            const TState *state = passPtr->render_states[i];
+            if (state->key == nextKey) {
+                effect::RenderState::convertPipeline(state->key, state->value, desc);
+            }
+        }
+        if (nextKey == UINT32_MAX) {
+            break;
+        }
+        lowerBound = nextKey + 1;
     }
     SG_POP_GROUP();
 }
@@ -43,9 +62,28 @@ convertImageDescription(const TTexture *texturePtr, sg_image_desc &desc)
     desc.max_anisotropy = 1;
     desc.min_lod = 0.0f;
     desc.max_lod = FLT_MAX;
-    for (size_t i = 0; i < numSamplerStates; i++) {
-        const TSamplerState *state = texturePtr->sampler_states[i];
-        effect::RenderState::convertSamplerState(state->key, state->value, desc);
+    nanoem_u32_t lowerBound = 0;
+    while (true) {
+        nanoem_u32_t nextKey = UINT32_MAX;
+        for (size_t i = 0; i < numSamplerStates; i++) {
+            const TSamplerState *state = texturePtr->sampler_states[i];
+            if (state->key >= lowerBound && state->key < nextKey) {
+                nextKey = state->key;
+            }
+        }
+        if (nextKey == UINT32_MAX) {
+            break;
+        }
+        for (size_t i = 0; i < numSamplerStates; i++) {
+            const TSamplerState *state = texturePtr->sampler_states[i];
+            if (state->key == nextKey) {
+                effect::RenderState::convertSamplerState(state->key, state->value, desc);
+            }
+        }
+        if (nextKey == UINT32_MAX) {
+            break;
+        }
+        lowerBound = nextKey + 1;
     }
 }
 
