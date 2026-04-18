@@ -26,6 +26,21 @@ isDefaultBlendState(const sg_blend_state &value) NANOEM_DECL_NOEXCEPT
         value.op_alpha == _SG_BLENDOP_DEFAULT;
 }
 
+static sg_cull_mode
+resolveCullMode(nanoem_u8_t value, sg_face_winding faceWinding) NANOEM_DECL_NOEXCEPT
+{
+    switch (value) {
+    case 1: /* D3DCULL_NONE */
+        return SG_CULLMODE_NONE;
+    case 2: /* D3DCULL_CW */
+        return faceWinding == SG_FACEWINDING_CCW ? SG_CULLMODE_BACK : SG_CULLMODE_FRONT;
+    case 3: /* D3DCULL_CCW */
+        return faceWinding == SG_FACEWINDING_CCW ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK;
+    default:
+        return _SG_CULLMODE_DEFAULT;
+    }
+}
+
 class EnumStringifyUtils : private NonCopyable {
 public:
     static const char *toString(sg_blend_op value) NANOEM_DECL_NOEXCEPT;
@@ -451,7 +466,12 @@ Technique::overrideObjectPipelineDescription(
         SG_INSERT_MARKERF(
             "effect::Technique::overrideObjectPipelineDescription(faceWinding=%d)", body.face_winding);
     }
-    if (body.cull_mode == _SG_CULLMODE_DEFAULT) {
+    if (pd.m_hasCullMode) {
+        body.cull_mode = resolveCullMode(pd.m_cullMode, body.face_winding);
+        SG_INSERT_MARKERF("effect::Technique::overrideObjectPipelineDescription(cullMode=%d, raw=%d, explicit=true)",
+            body.cull_mode, pd.m_cullMode);
+    }
+    else if (body.cull_mode == _SG_CULLMODE_DEFAULT) {
         body.cull_mode = m_pipelineDescription.cull_mode;
         SG_INSERT_MARKERF("effect::Technique::overrideObjectPipelineDescription(cullMode=%d)", body.cull_mode);
     }
@@ -479,7 +499,7 @@ Technique::overrideScenePipelineDescription(
     sg_pipeline_desc &body = pd.m_body;
     body.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
     body.face_winding = SG_FACEWINDING_CW;
-    body.cull_mode = SG_CULLMODE_BACK;
+    body.cull_mode = pd.m_hasCullMode ? resolveCullMode(pd.m_cullMode, body.face_winding) : SG_CULLMODE_BACK;
     if (!pd.m_hasBlendColor) {
         body.blend_color = m_pipelineDescription.blend_color;
     }

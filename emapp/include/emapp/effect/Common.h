@@ -73,6 +73,8 @@ struct PipelineDescriptor {
     bool m_hasColorWriteMask[SG_MAX_COLOR_ATTACHMENTS];
     bool m_hasSRGBWriteEnabled;
     bool m_srgbWriteEnabled;
+    bool m_hasCullMode;
+    nanoem_u8_t m_cullMode;
     bool m_hasDepthEnabled;
     bool m_depthEnabled;
     bool m_hasDepthCompareFunc;
