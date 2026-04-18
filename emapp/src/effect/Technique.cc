@@ -435,6 +435,13 @@ Technique::overrideObjectPipelineDescription(
     sg_pipeline_desc &body = pd.m_body;
     memcpy(&body.layout, &m_pipelineDescription.layout, sizeof(body.layout));
     body.index_type = m_pipelineDescription.index_type;
+    if (body.face_winding == _SG_FACEWINDING_DEFAULT) {
+        body.face_winding = m_pipelineDescription.face_winding != _SG_FACEWINDING_DEFAULT
+            ? m_pipelineDescription.face_winding
+            : SG_FACEWINDING_CW;
+        SG_INSERT_MARKERF(
+            "effect::Technique::overrideObjectPipelineDescription(faceWinding=%d)", body.face_winding);
+    }
     if (body.cull_mode == _SG_CULLMODE_DEFAULT) {
         body.cull_mode = m_pipelineDescription.cull_mode;
         SG_INSERT_MARKERF("effect::Technique::overrideObjectPipelineDescription(cullMode=%d)", body.cull_mode);
