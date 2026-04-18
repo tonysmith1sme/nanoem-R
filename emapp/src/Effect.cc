@@ -4672,6 +4672,9 @@ Effect::internalFindTechnique(const String &passType, nanoem_rsize_t numMaterial
             if (matchSubset && technique->match(materialPtr)) {
                 sg_pipeline_desc &desc = technique->mutablePipelineDescription();
                 Accessory::setStandardPipelineDescription(desc);
+                desc.face_winding = SG_FACEWINDING_CCW;
+                desc.cull_mode = SG_CULLMODE_NONE;
+                desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
                 if (passType == kPassTypeZplot) {
                     m_project->setCurrentRenderPass(m_project->shadowCamera()->pass());
                 }
@@ -4718,6 +4721,7 @@ Effect::internalFindTechnique(
                     desc.cull_mode =
                         nanoemModelMaterialIsCullingDisabled(material) ? SG_CULLMODE_NONE : SG_CULLMODE_BACK;
                 }
+                desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
                 if (nanoemModelMaterialIsPointDrawEnabled(material)) {
                     desc.primitive_type = SG_PRIMITIVETYPE_POINTS;
                 }
