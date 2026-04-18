@@ -34,6 +34,7 @@ public:
 
 private:
     std::unordered_map<std::string, int> m_keywordIdentifiers;
+    int m_previousToken;
 };
 
 } /* namespace fx9 */

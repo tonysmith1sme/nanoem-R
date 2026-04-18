@@ -17,6 +17,7 @@ namespace fx9 {
 LexerContext::LexerContext(
     TParseContextBase &parserContext, const std::string &rootFileName, TShader::Includer &includer)
     : TPpContext(parserContext, rootFileName, includer)
+    , m_previousToken('\n')
 {
     m_keywordIdentifiers.insert(std::make_pair("bool", TOKEN_BOOL));
     m_keywordIdentifiers.insert(std::make_pair("false", TOKEN_FALSE));
@@ -121,127 +122,192 @@ LexerContext::~LexerContext()
 int
 LexerContext::scan(const ParserContext *context, TPpToken &token)
 {
-    int lastTokenID = 0, tokenID = 0;
+    int tokenID = 0;
     while (1) {
-        lastTokenID = tokenID;
         tokenID = scanToken(&token);
         tokenID = tokenPaste(tokenID, token);
         switch (tokenID) {
         case '#': {
-            if (lastTokenID == 0 || lastTokenID == '\n') {
+            if (m_previousToken == '\n') {
                 tokenID = readCPPline(&token);
                 if (tokenID != -1) {
                     continue;
                 }
                 missingEndifCheck();
             }
+            TPpToken stringifiedToken;
+            int stringifiedTokenID = scanToken(&stringifiedToken);
+            while (stringifiedTokenID == ' ' || stringifiedTokenID == '\n' || stringifiedTokenID == '\r') {
+                stringifiedTokenID = scanToken(&stringifiedToken);
+            }
+            /* legacy MME effects rely on macro stringification such as #pass_ inside function-like macros */
+            if (stringifiedTokenID == PpAtomIdentifier || stringifiedTokenID == PpAtomConstInt ||
+                stringifiedTokenID == PpAtomConstUint || stringifiedTokenID == PpAtomConstFloat ||
+                stringifiedTokenID == PpAtomConstFloat16 || stringifiedTokenID == PpAtomConstDouble ||
+                stringifiedTokenID == PpAtomConstString) {
+                token = stringifiedToken;
+                snprintf(token.name, sizeof(token.name), "\"%s\"", stringifiedToken.name);
+                m_previousToken = PpAtomConstString;
+                return TOKEN_STRING;
+            }
             return 0;
         }
         case '\n':
         case '\r':
+            m_previousToken = '\n';
             continue;
         case ';':
+            m_previousToken = tokenID;
             return TOKEN_SEMICOLON;
         case ',':
+            m_previousToken = tokenID;
             return TOKEN_COMMA;
         case ':':
+            m_previousToken = tokenID;
             return TOKEN_COLON;
         case '=':
+            m_previousToken = tokenID;
             return TOKEN_ASSIGN;
         case '(':
+            m_previousToken = tokenID;
             return TOKEN_LPAREN;
         case ')':
+            m_previousToken = tokenID;
             return TOKEN_RPAREN;
         case '.':
+            m_previousToken = tokenID;
             return TOKEN_DOT;
         case '!':
+            m_previousToken = tokenID;
             return TOKEN_EXCLAMATION;
         case '-':
+            m_previousToken = tokenID;
             return TOKEN_MINUS;
         case '~':
+            m_previousToken = tokenID;
             return TOKEN_TILDE;
         case '+':
+            m_previousToken = tokenID;
             return TOKEN_PLUS;
         case '*':
+            m_previousToken = tokenID;
             return TOKEN_STAR;
         case '/':
+            m_previousToken = tokenID;
             return TOKEN_SLASH;
         case '%':
+            m_previousToken = tokenID;
             return TOKEN_PERCENT;
         case '<':
+            m_previousToken = tokenID;
             return TOKEN_LT;
         case '>':
+            m_previousToken = tokenID;
             return TOKEN_GT;
         case '|':
+            m_previousToken = tokenID;
             return TOKEN_OR;
         case '^':
+            m_previousToken = tokenID;
             return TOKEN_XOR;
         case '&':
+            m_previousToken = tokenID;
             return TOKEN_AND;
         case '?':
+            m_previousToken = tokenID;
             return TOKEN_QUESTION;
         case '[':
+            m_previousToken = tokenID;
             return TOKEN_LBRACKET;
         case ']':
+            m_previousToken = tokenID;
             return TOKEN_RBRACKET;
         case '{':
+            m_previousToken = tokenID;
             return TOKEN_LBRACE;
         case '}':
+            m_previousToken = tokenID;
             return TOKEN_RBRACE;
         case '\\':
             return 0;
         case PPAtomAddAssign:
+            m_previousToken = tokenID;
             return TOKEN_ADDASSIGN;
         case PPAtomSubAssign:
+            m_previousToken = tokenID;
             return TOKEN_SUBASSIGN;
         case PPAtomMulAssign:
+            m_previousToken = tokenID;
             return TOKEN_MULASSIGN;
         case PPAtomDivAssign:
+            m_previousToken = tokenID;
             return TOKEN_DIVASSIGN;
         case PPAtomModAssign:
+            m_previousToken = tokenID;
             return TOKEN_MODASSIGN;
         case PpAtomRight:
+            m_previousToken = tokenID;
             return TOKEN_LSHIFT;
         case PpAtomLeft:
+            m_previousToken = tokenID;
             return TOKEN_RSHIFT;
         case PpAtomRightAssign:
+            m_previousToken = tokenID;
             return TOKEN_LSHIFTASSIGN;
         case PpAtomLeftAssign:
+            m_previousToken = tokenID;
             return TOKEN_RSHIFTASSIGN;
         case PpAtomAndAssign:
+            m_previousToken = tokenID;
             return TOKEN_ANDASSIGN;
         case PpAtomOrAssign:
+            m_previousToken = tokenID;
             return TOKEN_ORASSIGN;
         case PpAtomXorAssign:
+            m_previousToken = tokenID;
             return TOKEN_XORASSIGN;
         case PpAtomAnd:
+            m_previousToken = tokenID;
             return TOKEN_ANDAND;
         case PpAtomOr:
+            m_previousToken = tokenID;
             return TOKEN_OROR;
         case PpAtomXor:
+            m_previousToken = tokenID;
             return TOKEN_XOR;
         case PpAtomEQ:
+            m_previousToken = tokenID;
             return TOKEN_EQ;
         case PpAtomGE:
+            m_previousToken = tokenID;
             return TOKEN_GE;
         case PpAtomNE:
+            m_previousToken = tokenID;
             return TOKEN_NE;
         case PpAtomLE:
+            m_previousToken = tokenID;
             return TOKEN_LE;
         case PpAtomDecrement:
+            m_previousToken = tokenID;
             return TOKEN_MINUSMINUS;
         case PpAtomIncrement:
+            m_previousToken = tokenID;
             return TOKEN_PLUSPLUS;
         case PpAtomConstInt:
+            m_previousToken = tokenID;
             return TOKEN_INT_LIT;
         case PpAtomConstUint:
+            m_previousToken = tokenID;
             return TOKEN_INT_LIT;
         case PpAtomConstFloat:
         case PpAtomConstFloat16:
+            m_previousToken = tokenID;
             return TOKEN_FLOAT_LIT;
         case PpAtomConstDouble:
+            m_previousToken = tokenID;
             return TOKEN_FLOAT_LIT;
         case PpAtomConstString:
+            m_previousToken = tokenID;
             return TOKEN_STRING;
         case PpAtomIdentifier: {
             switch (MacroExpand(&token, false, true)) {
@@ -255,12 +321,15 @@ LexerContext::scan(const ParserContext *context, TPpToken &token)
             }
             auto it = m_keywordIdentifiers.find(token.name);
             if (it != m_keywordIdentifiers.end()) {
+                m_previousToken = tokenID;
                 return it->second;
             }
             else if (context->isUserDefinedType(token.name)) {
+                m_previousToken = tokenID;
                 return TOKEN_TYPE_NAME;
             }
             else {
+                m_previousToken = tokenID;
                 return TOKEN_ID;
             }
         }
