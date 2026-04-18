@@ -183,7 +183,7 @@ public:
 };
 
 static void
-compileHLSLShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techniqueName, const char *passName,
+compileHLSLShaderSource(Fx9__Effect__Shader__Type shaderType, const char *techniqueName, const char *passName,
     sg_shader_stage_desc &desc, String &newShaderCode, Error &error)
 {
 #if BX_PLATFORM_WINDOWS
@@ -193,7 +193,7 @@ compileHLSLShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techni
     newFilename.append("_");
     newFilename.append(passName);
     const char *shaderProfile = nullptr;
-    switch (shaderPtr->type) {
+    switch (shaderType) {
     case FX9__EFFECT__SHADER__TYPE__ST_PIXEL: {
         newFilename.append("_PS.hlsl");
         shaderProfile = "ps_4_1";
@@ -236,8 +236,15 @@ compileHLSLShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techni
         error = Error("Failed to load D3DCompile family dll.", 0, Error::kDomainTypeOS);
     }
 #else
-    BX_UNUSED_6(shaderPtr, techniqueName, passName, desc, newShaderCode, error);
+    BX_UNUSED_6(shaderType, techniqueName, passName, desc, newShaderCode, error);
 #endif
+}
+
+static void
+compileHLSLShaderSource(const Fx9__Effect__Shader *shaderPtr, const char *techniqueName, const char *passName,
+    sg_shader_stage_desc &desc, String &newShaderCode, Error &error)
+{
+    compileHLSLShaderSource(shaderPtr->type, techniqueName, passName, desc, newShaderCode, error);
 }
 
 static bool
@@ -1140,6 +1147,8 @@ namespace dx9ms {
 /* DX9MS */
 void createShader(const Fx9__Effect__Dx9ms__Shader *shaderPtr, sg_shader_desc &desc, String &newShaderCode,
     StringMap &shaderOutputVariables);
+void createHLSLShader(const Fx9__Effect__Dx9ms__Shader *shaderPtr, sg_shader_desc &desc, String &newShaderCode,
+    StringMap &shaderOutputVariables);
 void retrieveShaderSymbols(const Fx9__Effect__Dx9ms__Shader *shaderPtr, RegisterIndexMap &registerIndices,
     UniformBufferOffsetMap &uniformBufferOffsetMap);
 void retrievePixelShaderSamplers(const Fx9__Effect__Dx9ms__Pass *pass, sg_shader_image_desc *pixelShaderSamplers,
@@ -1852,7 +1861,7 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                     /* for old compatibility */
                     case FX9__EFFECT__PASS__IMPLEMENTATION_IMPLEMENTATION_DX9MS: {
                         const sg_backend backend = sg::query_backend();
-                        if (backend == SG_BACKEND_GLCORE33) {
+                        if (backend == SG_BACKEND_GLCORE33 || backend == SG_BACKEND_D3D11) {
                             const Fx9__Effect__Dx9ms__Pass *dx9ms = passPtr->implementation_dx9ms;
                             shaderOutputVariables.clear();
                             const Fx9__Effect__Dx9ms__Shader *vertexShader = dx9ms->vertex_shader;
@@ -1867,17 +1876,27 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             PrivateEffectUtils::appendShaderVariablesHeaderComment<Fx9__Effect__Dx9ms__Shader,
                                 Fx9__Effect__Dx9ms__Symbol, Fx9__Effect__Dx9ms__Uniform, Fx9__Effect__Dx9ms__Attribute>(
                                 vertexShader, preshaders.vertex, vertexShaderHeaderComment);
-                            vertexShaderCode.append("#version 150\n"
-                                                    "#define highp\n"
-                                                    "#define middlep\n"
-                                                    "#define lowp\n"
-                                                    "#define attribute in\n"
-                                                    "#define varying out\n"
-                                                    "#define texture2D(s, v) texture((s), (v))\n"
-                                                    "#define vs_o0 gl_Position\n");
+                            if (backend == SG_BACKEND_GLCORE33) {
+                                vertexShaderCode.append("#version 150\n"
+                                                        "#define highp\n"
+                                                        "#define middlep\n"
+                                                        "#define lowp\n"
+                                                        "#define attribute in\n"
+                                                        "#define varying out\n"
+                                                        "#define texture2D(s, v) texture((s), (v))\n"
+                                                        "#define vs_o0 gl_Position\n");
+                            }
                             vertexShaderCode.append(vertexShaderHeaderComment.c_str());
-                            dx9ms::createShader(
-                                vertexShader, shaderDescription, vertexShaderCode, shaderOutputVariables);
+                            if (backend == SG_BACKEND_D3D11) {
+                                dx9ms::createHLSLShader(
+                                    vertexShader, shaderDescription, vertexShaderCode, shaderOutputVariables);
+                                compileHLSLShaderSource(FX9__EFFECT__SHADER__TYPE__ST_VERTEX, techniquePtr->name,
+                                    passPtr->name, shaderDescription.vs, vertexShaderCode, error);
+                            }
+                            else {
+                                dx9ms::createShader(
+                                    vertexShader, shaderDescription, vertexShaderCode, shaderOutputVariables);
+                            }
                             const Fx9__Effect__Dx9ms__Shader *pixelShader = dx9ms->pixel_shader;
                             dx9ms::parsePreshader(pixelShader, preshaders.pixel,
                                 m_globalUniformPtr->m_preshaderPixelShaderBuffer, passRegisterIndices.m_pixelPreshader);
@@ -1889,18 +1908,29 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             PrivateEffectUtils::appendShaderVariablesHeaderComment<Fx9__Effect__Dx9ms__Shader,
                                 Fx9__Effect__Dx9ms__Symbol, Fx9__Effect__Dx9ms__Uniform, Fx9__Effect__Dx9ms__Attribute>(
                                 pixelShader, preshaders.pixel, pixelShaderHeaderComment);
-                            pixelShaderCode.append("#version 150\n"
-                                                   "#define highp\n"
-                                                   "#define middlep\n"
-                                                   "#define lowp\n"
-                                                   "#define varying in\n"
-                                                   "#define texture2D(s, v) texture((s), (v))\n"
-                                                   "#define texture2DLod(s, v) texture((s), (v))\n"
-                                                   "#define gl_FragColor o_color0\n"
-                                                   "out vec4 o_color0;\n");
+                            if (backend == SG_BACKEND_GLCORE33) {
+                                pixelShaderCode.append("#version 150\n"
+                                                       "#define highp\n"
+                                                       "#define middlep\n"
+                                                       "#define lowp\n"
+                                                       "#define varying in\n"
+                                                       "#define texture2D(s, v) texture((s), (v))\n"
+                                                       "#define texture2DLod(s, v) texture((s), (v))\n"
+                                                       "#define gl_FragColor o_color0\n"
+                                                       "out vec4 o_color0;\n");
+                            }
                             pixelShaderCode.append(pixelShaderHeaderComment.c_str());
-                            dx9ms::createShader(pixelShader, shaderDescription, pixelShaderCode, shaderOutputVariables);
-                            if (shaderDescription.vs.source && shaderDescription.fs.source) {
+                            if (backend == SG_BACKEND_D3D11) {
+                                dx9ms::createHLSLShader(
+                                    pixelShader, shaderDescription, pixelShaderCode, shaderOutputVariables);
+                                compileHLSLShaderSource(FX9__EFFECT__SHADER__TYPE__ST_PIXEL, techniquePtr->name,
+                                    passPtr->name, shaderDescription.fs, pixelShaderCode, error);
+                            }
+                            else {
+                                dx9ms::createShader(
+                                    pixelShader, shaderDescription, pixelShaderCode, shaderOutputVariables);
+                            }
+                            if (PrivateEffectUtils::hasShaderSource(shaderDescription) && !error.hasReason()) {
                                 convertPipeline<Fx9__Effect__Dx9ms__Pass, Fx9__Effect__Dx9ms__RenderState>(
                                     passPtr->implementation_dx9ms, pd);
                                 /* DX9MS's uniform name was [pv]s_uniforms_vec (not "[pv]s_uniforms_vec4") */
@@ -1913,8 +1943,8 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                             }
                         }
                         else {
-                            error = Error("This effect cannot be compiled due to the renderer is not OpenGL",
-                                "Change the renderer to OpenGL or enable effect plugin and load the origin",
+                            error = Error("This effect cannot be compiled due to the renderer is neither OpenGL nor Direct3D11",
+                                "Change the renderer to OpenGL/Direct3D11 or enable effect plugin and load the origin",
                                 Error::kDomainTypeApplication);
                             i = numTechniques;
                         }
