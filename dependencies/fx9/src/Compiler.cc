@@ -49,6 +49,48 @@ using namespace glslang;
 
 namespace {
 
+static bool
+isValidUTF8(const char *data, size_t size)
+{
+    const unsigned char *ptr = reinterpret_cast<const unsigned char *>(data);
+    size_t i = 0;
+    while (i < size) {
+        const unsigned char c = ptr[i];
+        if (c <= 0x7f) {
+            i++;
+        }
+        else if ((c & 0xe0) == 0xc0) {
+            if (i + 1 >= size || (ptr[i + 1] & 0xc0) != 0x80 || c < 0xc2) {
+                return false;
+            }
+            i += 2;
+        }
+        else if ((c & 0xf0) == 0xe0) {
+            if (i + 2 >= size || (ptr[i + 1] & 0xc0) != 0x80 || (ptr[i + 2] & 0xc0) != 0x80) {
+                return false;
+            }
+            if ((c == 0xe0 && ptr[i + 1] < 0xa0) || (c == 0xed && ptr[i + 1] >= 0xa0)) {
+                return false;
+            }
+            i += 3;
+        }
+        else if ((c & 0xf8) == 0xf0) {
+            if (i + 3 >= size || (ptr[i + 1] & 0xc0) != 0x80 || (ptr[i + 2] & 0xc0) != 0x80 ||
+                (ptr[i + 3] & 0xc0) != 0x80) {
+                return false;
+            }
+            if ((c == 0xf0 && ptr[i + 1] < 0x90) || (c > 0xf4) || (c == 0xf4 && ptr[i + 1] >= 0x90)) {
+                return false;
+            }
+            i += 4;
+        }
+        else {
+            return false;
+        }
+    }
+    return true;
+}
+
 static std::string
 decodeTextSource(const char *data, size_t size)
 {
@@ -2493,8 +2535,14 @@ Compiler::convertAnnotation(const TString &name, const TIntermNode *value, void 
                 }
             }
             if (!concatString.empty()) {
-                annotationPtr->value_case = FX9__EFFECT__ANNOTATION__VALUE_SVAL;
-                copyString(concatString, &annotationPtr->sval);
+                if (isValidUTF8(concatString.c_str(), concatString.size())) {
+                    annotationPtr->value_case = FX9__EFFECT__ANNOTATION__VALUE_SVAL_UTF8;
+                    copyString(concatString, &annotationPtr->sval_utf8);
+                }
+                else {
+                    annotationPtr->value_case = FX9__EFFECT__ANNOTATION__VALUE_SVAL;
+                    copyString(concatString, &annotationPtr->sval);
+                }
             }
             else if (!values.empty()) {
                 switch (values[0]->getType().getBasicType()) {

@@ -3,10 +3,10 @@ float model_scaling : CONTROLOBJECT < string name = "test.pmx"; >;
 float3 model_offset_3 : CONTROLOBJECT < string name = "test.pmx"; >;
 float4 model_offset_4 : CONTROLOBJECT < string name = "test.pmx"; >;
 float4x4 model_world_matrix : CONTROLOBJECT < string name = "test.pmx"; >;
-float3 model_bone_3 : CONTROLOBJECT < string name = "test.pmx"; string item = "ƒZƒ“ƒ^["; >;
-float4 model_bone_4 : CONTROLOBJECT < string name = "test.pmx"; string item = "ƒZƒ“ƒ^["; >;
-float4x4 model_bone_4x4 : CONTROLOBJECT < string name = "test.pmx"; string item = "ƒZƒ“ƒ^["; >;
-float model_morph : CONTROLOBJECT < string name = "test.pmx"; string item = "‚ "; >;
+float3 model_bone_3 : CONTROLOBJECT < string name = "test.pmx"; string item = "ã‚»ãƒ³ã‚¿ãƒ¼"; >;
+float4 model_bone_4 : CONTROLOBJECT < string name = "test.pmx"; string item = "ã‚»ãƒ³ã‚¿ãƒ¼"; >;
+float4x4 model_bone_4x4 : CONTROLOBJECT < string name = "test.pmx"; string item = "ã‚»ãƒ³ã‚¿ãƒ¼"; >;
+float model_morph : CONTROLOBJECT < string name = "test.pmx"; string item = "ã‚"; >;
 /* below variables cannot be available */
 float model_x : CONTROLOBJECT < string name = "test.pmx"; string item = "X"; >;
 float model_y : CONTROLOBJECT < string name = "test.pmx"; string item = "Y"; >;
