@@ -241,6 +241,7 @@ public:
     void setPixelShaderInputMap(const BuiltInLocationMap &value);
     void setPointSizeAssignment(float value);
     void setPointSizeRange(float minValue, float maxValue);
+    void setPointSpriteEnabled(bool value);
 
     atom_t allocateIntermNode(TIntermNode *node);
     atom_t acceptTrueLiteral(const LexerToken *token);
@@ -490,6 +491,7 @@ private:
     float m_pointSizeAssignment = 0.0f;
     float m_pointSizeMin = 0.0f;
     float m_pointSizeMax = 0.0f;
+    bool m_pointSpriteEnabled = false;
     int m_uniqueID = 1;
     bool m_enableAcceptingVariable = true;
     bool m_enableUniformBuffer = false;

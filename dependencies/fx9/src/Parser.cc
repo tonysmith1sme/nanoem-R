@@ -2420,6 +2420,12 @@ ParserContext::setPointSizeRange(float minValue, float maxValue)
     m_pointSizeMax = maxValue;
 }
 
+void
+ParserContext::setPointSpriteEnabled(bool value)
+{
+    m_pointSpriteEnabled = value;
+}
+
 atom_t
 ParserContext::allocateIntermNode(TIntermNode *node)
 {
@@ -3537,10 +3543,15 @@ ParserContext::addPixelShaderEntryPointFunctionArgument(
         break;
     }
     default:
+        if (m_pointSpriteEnabled && (builtIn == EbvTexCoord || builtIn == EbvMultiTexCoord0)) {
+            builtIn = EbvPointCoord;
+            storageQualifier = EvqPointCoord;
+        }
         break;
     }
     if (storageQualifier != EvqTemporary) {
-        TType type(EbtFloat, storageQualifier, 4);
+        const int vectorSize = storageQualifier == EvqPointCoord ? 2 : 4;
+        TType type(EbtFloat, storageQualifier, vectorSize);
         type.getQualifier().builtIn = builtIn;
         TString *name = newAnonymousVariableString();
         m_context->declareVariable(TSourceLoc(), *name, type);
