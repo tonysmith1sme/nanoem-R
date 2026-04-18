@@ -1619,9 +1619,7 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 23: { /* D3DRS_ZFUNC */
         sg_depth_state &ds = desc.depth;
-        if (ds.compare == _SG_COMPAREFUNC_DEFAULT) {
-            convertCompareFunc(value, ds.compare);
-        }
+        convertCompareFunc(value, ds.compare);
         pd.m_hasDepthCompareFunc = true;
         SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_ZFUNC, value=%d)", ds.compare);
         break;
