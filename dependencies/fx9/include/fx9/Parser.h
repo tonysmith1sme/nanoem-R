@@ -242,6 +242,7 @@ public:
     void setPointSizeAssignment(float value);
     void setPointSizeRange(float minValue, float maxValue);
     void setPointSpriteEnabled(bool value);
+    void setPointScaleState(bool enabled, float a, float b, float c);
 
     atom_t allocateIntermNode(TIntermNode *node);
     atom_t acceptTrueLiteral(const LexerToken *token);
@@ -392,6 +393,10 @@ private:
         glslang::TBuiltInVariable builtIn, glslang::TIntermAggregate *bodyNode, glslang::TIntermTyped *dereferenceNode);
     glslang::TIntermAggregate *growVertexShaderOutputStructAssignment(const glslang::TType &newOutputType,
         glslang::TIntermTyped *outputVariableNode, glslang::TIntermAggregate *bodyNode);
+    glslang::TIntermTyped *findPointSizeDistanceNode(
+        const glslang::TType &outputType, glslang::TIntermTyped *outputVariableNode);
+    TIntermNode *createPointSizeAssignmentNode(
+        const glslang::TType &outputType, glslang::TIntermTyped *outputVariableNode, const glslang::TSourceLoc &loc);
     TIntermNode *createBuiltInVertexShaderOutputAssignmentNode(
         const glslang::TFunction *function, glslang::TIntermTyped *outputCallNode);
     TIntermNode *createBuiltInPixelShaderOutputAssignmentNode(
@@ -492,6 +497,10 @@ private:
     float m_pointSizeMin = 0.0f;
     float m_pointSizeMax = 0.0f;
     bool m_pointSpriteEnabled = false;
+    bool m_pointScaleEnabled = false;
+    float m_pointScaleA = 1.0f;
+    float m_pointScaleB = 0.0f;
+    float m_pointScaleC = 0.0f;
     int m_uniqueID = 1;
     bool m_enableAcceptingVariable = true;
     bool m_enableUniformBuffer = false;

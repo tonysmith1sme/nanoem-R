@@ -2426,6 +2426,15 @@ ParserContext::setPointSpriteEnabled(bool value)
     m_pointSpriteEnabled = value;
 }
 
+void
+ParserContext::setPointScaleState(bool enabled, float a, float b, float c)
+{
+    m_pointScaleEnabled = enabled;
+    m_pointScaleA = a;
+    m_pointScaleB = b;
+    m_pointScaleC = c;
+}
+
 atom_t
 ParserContext::allocateIntermNode(TIntermNode *node)
 {
@@ -3685,6 +3694,92 @@ ParserContext::growVertexShaderOutputStructAssignment(
     return bodyNode;
 }
 
+TIntermTyped *
+ParserContext::findPointSizeDistanceNode(const TType &outputType, TIntermTyped *outputVariableNode)
+{
+    TIntermTyped *positionNode = nullptr;
+    if (outputType.isStruct()) {
+        const TTypeList *fields = outputType.getStruct();
+        for (auto it = fields->begin(), end = fields->end(); it != end; ++it) {
+            const TType *fieldType = it->type;
+            const TBuiltInVariable builtIn = findBuiltInFromStructMember(outputType, *fieldType);
+            if (builtIn == EbvVertex) {
+                positionNode =
+                    m_context->handleDotDereference(TSourceLoc(), outputVariableNode, fieldType->getFieldName());
+                break;
+            }
+        }
+    }
+    else if (outputType.isVector()) {
+        const TQualifier &q = outputType.getQualifier();
+        if (q.builtIn == EbvVertex || q.declaredBuiltIn == EbvVertex) {
+            positionNode = outputVariableNode;
+        }
+    }
+    if (positionNode && positionNode->getType().isVector() && positionNode->getType().getVectorSize() >= 4) {
+        TIntermTyped *distanceNode = indexVectorNode(positionNode, 3);
+        return m_intermediate.addBuiltInFunctionCall(TSourceLoc(), EOpAbs, true, distanceNode, TType(EbtFloat));
+    }
+    return nullptr;
+}
+
+TIntermNode *
+ParserContext::createPointSizeAssignmentNode(
+    const TType &outputType, TIntermTyped *outputVariableNode, const TSourceLoc &loc)
+{
+    if (m_pointSizeAssignment <= 0.0f) {
+        return nullptr;
+    }
+    auto clampMinValue = [this, &loc](TIntermTyped *valueNode, float minValue) -> TIntermTyped * {
+        TIntermTyped *minNode = m_intermediate.addConstantUnion(minValue, EbtFloat, loc, true);
+        TIntermTyped *condNode = m_intermediate.addBinaryMath(EOpLessThan, valueNode, minNode, loc);
+        TIntermTyped *selectionNode = m_intermediate.addSelection(condNode, minNode, valueNode, loc);
+        selectionNode->setType(TType(EbtFloat));
+        return selectionNode;
+    };
+    auto clampMaxValue = [this, &loc](TIntermTyped *valueNode, float maxValue) -> TIntermTyped * {
+        TIntermTyped *maxNode = m_intermediate.addConstantUnion(maxValue, EbtFloat, loc, true);
+        TIntermTyped *condNode = m_intermediate.addBinaryMath(EOpGreaterThan, valueNode, maxNode, loc);
+        TIntermTyped *selectionNode = m_intermediate.addSelection(condNode, maxNode, valueNode, loc);
+        selectionNode->setType(TType(EbtFloat));
+        return selectionNode;
+    };
+    TIntermTyped *valueNode = m_intermediate.addConstantUnion(m_pointSizeAssignment, EbtFloat, loc, true);
+    if (m_pointScaleEnabled) {
+        if (TIntermTyped *distanceNode = findPointSizeDistanceNode(outputType, outputVariableNode)) {
+            TIntermTyped *distanceSquaredNode = m_intermediate.addBinaryMath(EOpMul, distanceNode, distanceNode, loc);
+            TIntermTyped *denominatorNode = m_intermediate.addConstantUnion(m_pointScaleA, EbtFloat, loc, true);
+            if (m_pointScaleB != 0.0f) {
+                TIntermTyped *scaleBNode = m_intermediate.addConstantUnion(m_pointScaleB, EbtFloat, loc, true);
+                TIntermTyped *termNode = m_intermediate.addBinaryMath(EOpMul, scaleBNode, distanceNode, loc);
+                denominatorNode = m_intermediate.addBinaryMath(EOpAdd, denominatorNode, termNode, loc);
+            }
+            if (m_pointScaleC != 0.0f) {
+                TIntermTyped *scaleCNode = m_intermediate.addConstantUnion(m_pointScaleC, EbtFloat, loc, true);
+                TIntermTyped *termNode = m_intermediate.addBinaryMath(EOpMul, scaleCNode, distanceSquaredNode, loc);
+                denominatorNode = m_intermediate.addBinaryMath(EOpAdd, denominatorNode, termNode, loc);
+            }
+            denominatorNode = clampMinValue(denominatorNode, 0.000001f);
+            TIntermTyped *inverseSqrtNode = m_intermediate.addBuiltInFunctionCall(
+                loc, EOpInverseSqrt, true, denominatorNode, TType(EbtFloat));
+            valueNode = m_intermediate.addBinaryMath(EOpMul, valueNode, inverseSqrtNode, loc);
+        }
+    }
+    if (m_pointSizeMin > 0.0f) {
+        valueNode = clampMinValue(valueNode, m_pointSizeMin);
+    }
+    if (m_pointSizeMax > 0.0f) {
+        valueNode = clampMaxValue(valueNode, m_pointSizeMax);
+    }
+    TType specType(EbtFloat);
+    specType.getQualifier().storage = EvqPointSize;
+    specType.getQualifier().builtIn = EbvPointSize;
+    TString *variableName = newAnonymousVariableString();
+    m_context->declareVariable(loc, *variableName, specType);
+    TIntermTyped *leftNode = m_context->handleVariable(loc, variableName);
+    return m_intermediate.addAssign(EOpAssign, leftNode, valueNode, loc);
+}
+
 TIntermNode *
 ParserContext::createBuiltInVertexShaderOutputAssignmentNode(const TFunction *function, TIntermTyped *outputCallNode)
 {
@@ -3700,31 +3795,15 @@ ParserContext::createBuiltInVertexShaderOutputAssignmentNode(const TFunction *fu
     if (TIntermTyped *outputVariableNode = assignmentNode->getAsTyped()) {
         if (newOutputType.isStruct()) {
             bodyNode = growVertexShaderOutputStructAssignment(newOutputType, outputVariableNode, bodyNode);
-            if (m_pointSizeAssignment > 0.0f) {
-                float pointSize = m_pointSizeAssignment;
-                if (m_pointSizeMin > 0.0f) {
-                    pointSize = std::max(pointSize, m_pointSizeMin);
-                }
-                if (m_pointSizeMax > 0.0f) {
-                    pointSize = std::min(pointSize, m_pointSizeMax);
-                }
-                TType specType(EbtFloat);
-                specType.getQualifier().storage = EvqPointSize;
-                specType.getQualifier().builtIn = EbvPointSize;
-                TIntermTyped *valueNode =
-                    m_intermediate.addConstantUnion(pointSize, EbtFloat, TSourceLoc(), true);
-                TString *variableName = newAnonymousVariableString();
-                m_context->declareVariable(initializerNode->getLoc(), *variableName, specType);
-                TIntermTyped *leftNode = m_context->handleVariable(initializerNode->getLoc(), variableName);
-                TIntermTyped *innerAssignmentNode =
-                    m_intermediate.addAssign(EOpAssign, leftNode, valueNode, TSourceLoc());
-                bodyNode = m_intermediate.growAggregate(bodyNode, innerAssignmentNode);
-            }
         }
         else if (newOutputType.isVector()) {
             const TType &functionType = function->getType();
             const TBuiltInVariable builtIn = functionType.getQualifier().builtIn;
             bodyNode = growVertexShaderBuiltInVariableAssignment(functionType, builtIn, bodyNode, outputCallNode);
+        }
+        if (TIntermNode *pointSizeAssignmentNode =
+                createPointSizeAssignmentNode(newOutputType, outputVariableNode, initializerNode->getLoc())) {
+            bodyNode = m_intermediate.growAggregate(bodyNode, pointSizeAssignmentNode);
         }
     }
     bodyNode->setOperator(EOpSequence);

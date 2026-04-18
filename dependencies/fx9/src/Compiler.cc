@@ -1312,7 +1312,11 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
     float pointSize = 0.0f;
     float pointSizeMin = 0.0f;
     float pointSizeMax = 0.0f;
+    float pointScaleA = 1.0f;
+    float pointScaleB = 0.0f;
+    float pointScaleC = 0.0f;
     bool pointSpriteEnabled = false;
+    bool pointScaleEnabled = false;
     for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
         const Fx9__Effect__RenderState *state = message->render_states[i];
         /* FILLMODE == POINT */
@@ -1332,10 +1336,23 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
         else if (state->key == 156) {
             pointSpriteEnabled = state->value != 0;
         }
+        else if (state->key == 157) {
+            pointScaleEnabled = state->value != 0;
+        }
+        else if (state->key == 158) {
+            pointScaleA = decodeRenderStateFloatValue(state->value);
+        }
+        else if (state->key == 159) {
+            pointScaleB = decodeRenderStateFloatValue(state->value);
+        }
+        else if (state->key == 160) {
+            pointScaleC = decodeRenderStateFloatValue(state->value);
+        }
     }
     parser.setPointSizeAssignment(pointSize);
     parser.setPointSizeRange(pointSizeMin, pointSizeMax);
     parser.setPointSpriteEnabled(pointSpriteEnabled);
+    parser.setPointScaleState(pointScaleEnabled, pointScaleA, pointScaleB, pointScaleC);
 }
 
 } /* namespace anonymous */
