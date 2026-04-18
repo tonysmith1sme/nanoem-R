@@ -1279,6 +1279,11 @@ RenderState::convertWrap(nanoem_u32_t value, sg_wrap &wrap)
         wrap = SG_WRAP_CLAMP_TO_BORDER;
         break;
     }
+    case 5: { /* D3DTADDRESS_MIRRORONCE */
+        /* sokol has no mirror-once mode, clamp is a safer approximation than repeat */
+        wrap = SG_WRAP_CLAMP_TO_EDGE;
+        break;
+    }
     default:
         wrap = SG_WRAP_REPEAT;
         break;
