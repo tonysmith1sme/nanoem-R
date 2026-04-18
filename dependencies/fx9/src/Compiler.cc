@@ -1072,24 +1072,8 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
                     std::transform(key.begin(), key.end(), canonicalizedName.begin(), ::toupper);
                     auto it = m_parent->m_samplerStateEnumConversions.find(canonicalizedName.c_str());
                     if (it != m_parent->m_samplerStateEnumConversions.end()) {
-                        uint32_t value = 0;
-                        switch (it->second) {
-                        case 1:
-                        case 2:
-                        case 3: {
-                            value = resolveSamplerStateValue(
-                                valueNode->getAsSymbolNode(), m_parent->m_samplerStateTextureAddressValueConversions);
-                            break;
-                        }
-                        case 5:
-                        case 6:
-                        case 7: {
-                            value = resolveSamplerStateValue(valueNode->getAsSymbolNode(),
-                                m_parent->m_samplerStateTextureFilterTypeValueConversions);
-                            break;
-                        }
-                        default:
-                            if (const TIntermConstantUnion *constantUnionNode = valueNode->getAsConstantUnion()) {
+                        const auto resolveConstantValue = [](const TIntermTyped *node, uint32_t &value) {
+                            if (const TIntermConstantUnion *constantUnionNode = node->getAsConstantUnion()) {
                                 const TConstUnionArray &values = constantUnionNode->getConstArray();
                                 switch (values[0].getType()) {
                                 case EbtBool:
@@ -1104,7 +1088,38 @@ Compiler::BasePassShader::convertAllSamplerStates(const TIntermAggregate *sample
                                     value = uint32_t(values[0].getIConst());
                                     break;
                                 }
+                                return true;
                             }
+                            return false;
+                        };
+                        uint32_t value = 0;
+                        switch (it->second) {
+                        case 1:
+                        case 2:
+                        case 3: {
+                            if (const TIntermSymbol *symbolNode = valueNode->getAsSymbolNode()) {
+                                value = resolveSamplerStateValue(
+                                    symbolNode, m_parent->m_samplerStateTextureAddressValueConversions);
+                            }
+                            else {
+                                resolveConstantValue(valueNode, value);
+                            }
+                            break;
+                        }
+                        case 5:
+                        case 6:
+                        case 7: {
+                            if (const TIntermSymbol *symbolNode = valueNode->getAsSymbolNode()) {
+                                value = resolveSamplerStateValue(
+                                    symbolNode, m_parent->m_samplerStateTextureFilterTypeValueConversions);
+                            }
+                            else {
+                                resolveConstantValue(valueNode, value);
+                            }
+                            break;
+                        }
+                        default:
+                            resolveConstantValue(valueNode, value);
                             break;
                         }
                         Fx9__Effect__SamplerState *samplerStatePtr;
