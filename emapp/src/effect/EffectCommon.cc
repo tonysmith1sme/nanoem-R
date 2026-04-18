@@ -1802,6 +1802,12 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 207: { /* D3DRS_SRCBLENDALPHA */
         convertBlendFactor(value, desc.colors[0].blend.src_factor_alpha);
+        if (value == 14) {
+            desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_BLEND_ALPHA;
+        }
+        else if (value == 15) {
+            desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA;
+        }
         pd.m_hasBlendSourceFactorAlpha = true;
         SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_SRCBLENDALPHA, value=%d)",
             desc.colors[0].blend.src_factor_alpha);
@@ -1809,6 +1815,12 @@ RenderState::convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescr
     }
     case 208: { /* D3DRS_DESTBLENDALPHA */
         convertBlendFactor(value, desc.colors[0].blend.dst_factor_alpha);
+        if (value == 14) {
+            desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_BLEND_ALPHA;
+        }
+        else if (value == 15) {
+            desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA;
+        }
         pd.m_hasBlendDestFactorAlpha = true;
         SG_INSERT_MARKERF("effect::RenderState::convertPipeline(key=D3DRS_DESTBLENDALPHA, value=%d)",
             desc.colors[0].blend.dst_factor_alpha);
