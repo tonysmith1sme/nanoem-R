@@ -36,6 +36,13 @@ convertImageDescription(const TTexture *texturePtr, sg_image_desc &desc)
     const size_t numSamplerStates = texturePtr->n_sampler_states;
     desc.mag_filter = desc.min_filter = SG_FILTER_LINEAR;
     desc.num_mipmaps = 1;
+    desc.wrap_u = SG_WRAP_REPEAT;
+    desc.wrap_v = SG_WRAP_REPEAT;
+    desc.wrap_w = SG_WRAP_REPEAT;
+    desc.border_color = SG_BORDERCOLOR_OPAQUE_BLACK;
+    desc.max_anisotropy = 1;
+    desc.min_lod = 0.0f;
+    desc.max_lod = FLT_MAX;
     for (size_t i = 0; i < numSamplerStates; i++) {
         const TSamplerState *state = texturePtr->sampler_states[i];
         effect::RenderState::convertSamplerState(state->key, state->value, desc);
