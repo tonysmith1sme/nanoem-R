@@ -148,6 +148,47 @@ decodeTextSource(const char *data, size_t size)
     return std::string(data, size);
 }
 
+static std::string
+toLowerASCII(const std::string &value)
+{
+    std::string normalized(value);
+    for (size_t i = 0, numChars = normalized.size(); i < numChars; i++) {
+        normalized[i] = static_cast<char>(tolower(static_cast<unsigned char>(normalized[i])));
+    }
+    return normalized;
+}
+
+static bool
+containsRayMMDPath(const std::string &path)
+{
+    return toLowerASCII(path).find("ray-mmd") != std::string::npos;
+}
+
+static bool
+endsWithIgnoreCase(const std::string &value, const char *suffix)
+{
+    const std::string valueLC(toLowerASCII(value)), suffixLC(toLowerASCII(std::string(suffix)));
+    return valueLC.size() >= suffixLC.size() &&
+        valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
+}
+
+static std::string
+patchRayMMDSource(const std::string &path, const std::string &source)
+{
+    if (!containsRayMMDPath(path)) {
+        return source;
+    }
+    std::string patched(source);
+    if (endsWithIgnoreCase(path, "ray.conf")) {
+        patched = std::regex_replace(
+            patched, std::regex("(^|\\n)([ \t]*#define[ \t]+FOG_ENABLE[ \t]+)1([ \t]*(?://[^\\n]*)?)"),
+            "$10$3");
+    }
+    patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
+        "sky*box*.*");
+    return patched;
+}
+
 static void
 getDefaultResourceLimit(TBuiltInResource &resources)
 {
@@ -2148,7 +2189,8 @@ Compiler::compile(const std::string &source, const char *filename, EffectProduct
         for (auto it = m_includeSourceData.begin(), end = m_includeSourceData.end(); it != end; ++it) {
             parser.addIncludeSource(it->first.c_str(), it->second.c_str());
         }
-        TString inputSource(source.cbegin(), source.cend());
+        const std::string patchedSource(patchRayMMDSource(filename ? filename : std::string(), source));
+        TString inputSource(patchedSource.cbegin(), patchedSource.cend());
         // ensure line feed to prevent "expected newline after header name"
         inputSource.append("\n");
         InstructionList instructions;

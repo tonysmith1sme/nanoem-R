@@ -330,6 +330,45 @@ TEST_CASE("effect_parameters_controlobjects_no_such_model", "[emapp][effect]")
     }
 }
 
+TEST_CASE("effect_parameters_controlobjects_ikbokeh_controller_probe", "[emapp][effect][probe]")
+{
+    TestScope scope;
+    {
+        ProjectPtr o = scope.createProject();
+        Model *controller = o.get()->m_project->createModel();
+        String path(NANOEM_TEST_FIXTURE_PATH);
+        path.append("/../../../MME/ikBokeh_v020a_SJ/ikBokehController.pmx");
+        FileReaderScope reader(o.get()->m_project->translator());
+        Error error;
+        const URI &fileURI = URI::createFromFilePath(path);
+        REQUIRE(reader.open(fileURI, error));
+        ByteArray bytes;
+        FileUtils::read(reader, bytes, error);
+        controller->setFileURI(fileURI);
+        REQUIRE(controller->load(bytes, error));
+        controller->setupAllBindings();
+        controller->createAllImages();
+        controller->upload();
+        Progress progress(o.get()->m_project, 0);
+        controller->loadAllImages(progress, error);
+        controller->setVisible(true);
+        REQUIRE(controller != nullptr);
+        INFO(controller->fileURI().absolutePathConstString());
+        REQUIRE(controller->fileURI().equalsToFilenameConstString("ikBokehController.pmx"));
+        o.get()->m_project->addModel(controller);
+        REQUIRE(o->allModels().size() == 1);
+        REQUIRE(o->allModels()[0]->fileURI().equalsToFilenameConstString("ikBokehController.pmx"));
+        REQUIRE(o.get()->m_project->findModelByFilename("ikBokehController.pmx") != nullptr);
+        Effect::NamedByteArrayMap uniformBuffer;
+        effectAccessoryEffectPass("effects/parameters/controlobjects/ikbokeh_probe.fx", o, uniformBuffer);
+        CHECK(uniformBuffer.size() == 4);
+        CHECK(extractFloat(uniformBuffer, "has_controller") == 1.0f);
+        CHECK(extractFloat(uniformBuffer, "test_mode") == 0.0f);
+        CHECK(extractFloat(uniformBuffer, "focus_distance") == 0.0f);
+        CHECK_THAT(extractVector3(uniformBuffer, "ctrl_position"), Equals(Vector3(0)));
+    }
+}
+
 TEST_CASE("effect_parameters_application", "[emapp][effect]")
 {
     TestScope scope;

@@ -14,6 +14,7 @@
 #include <Windows.h>
 #else
 #include <fcntl.h>
+#include <cctype>
 #include <float.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -91,6 +92,55 @@ decodeTextSource(const char *data, size_t size)
     }
 #endif
     return TString(data, size);
+}
+
+static std::string
+toLowerASCII(const std::string &value)
+{
+    std::string normalized(value);
+    for (size_t i = 0, numChars = normalized.size(); i < numChars; i++) {
+        normalized[i] = static_cast<char>(tolower(static_cast<unsigned char>(normalized[i])));
+    }
+    return normalized;
+}
+
+static bool
+containsRayMMDPath(const std::string &path)
+{
+    return toLowerASCII(path).find("ray-mmd") != std::string::npos;
+}
+
+static bool
+endsWithIgnoreCase(const std::string &value, const char *suffix)
+{
+    const std::string valueLC(toLowerASCII(value)), suffixLC(toLowerASCII(std::string(suffix)));
+    return valueLC.size() >= suffixLC.size() &&
+        valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
+}
+
+static void
+replaceAll(std::string &value, const std::string &from, const std::string &to)
+{
+    size_t offset = 0;
+    while ((offset = value.find(from, offset)) != std::string::npos) {
+        value.replace(offset, from.size(), to);
+        offset += to.size();
+    }
+}
+
+static std::string
+patchRayMMDSource(const std::string &path, const std::string &source)
+{
+    if (!containsRayMMDPath(path)) {
+        return source;
+    }
+    std::string patched(source);
+    if (endsWithIgnoreCase(path, "ray.conf")) {
+        replaceAll(patched, "#define FOG_ENABLE 1", "#define FOG_ENABLE 0");
+    }
+    replaceAll(patched, "Sky*box*.*", "sky*box*.*");
+    replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
+    return patched;
 }
 
 } /* namespace anonymous */
@@ -366,7 +416,8 @@ ParserContext::IncluderContext::addSource(const TString &path, const TString &so
 {
     TString normalized(path);
     PathUtils::normalize(normalized);
-    m_sources.insert(std::make_pair(normalized, new TString(source)));
+    const std::string patchedSource(patchRayMMDSource(normalized.c_str(), source.c_str()));
+    m_sources.insert(std::make_pair(normalized, new TString(patchedSource.c_str())));
     m_includedSourePathList.push_back(normalized);
 }
 
@@ -412,7 +463,9 @@ ParserContext::IncluderContext::includeLocal(
                 DWORD numReadBytes = 0;
                 ::ReadFile(handle, bytes.data(), size, &numReadBytes, nullptr);
                 ::CloseHandle(handle);
-                TString *source = new TString(decodeTextSource(bytes.data(), bytes.size()));
+                const std::string patchedSource(
+                    patchRayMMDSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                TString *source = new TString(patchedSource.c_str());
                 m_sources.insert(std::make_pair(path, source));
                 m_includedSourePathList.push_back(normalized);
                 result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };
@@ -425,7 +478,9 @@ ParserContext::IncluderContext::includeLocal(
                 if (S_ISREG(st.st_mode)) {
                     std::vector<char> bytes(st.st_size);
                     ::read(fd, bytes.data(), bytes.size());
-                    TString *source = new TString(decodeTextSource(bytes.data(), bytes.size()));
+                    const std::string patchedSource(
+                        patchRayMMDSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                    TString *source = new TString(patchedSource.c_str());
                     m_sources.insert(std::make_pair(path, source));
                     m_includedSourePathList.push_back(normalized);
                     result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };
