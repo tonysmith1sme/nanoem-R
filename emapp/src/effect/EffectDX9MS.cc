@@ -45,7 +45,7 @@ appendField(String &value, const char *type, const HLSLField &field)
     value.append("    ");
     value.append(type);
     value.append(" ");
-    value.append(field.m_name);
+    value.append(field.m_name.c_str());
     value.append(" : ");
     appendIndexedSemantic(value, field.m_semantic.c_str(), field.m_index);
     value.append(";\n");
@@ -180,12 +180,20 @@ replaceAllString(String &value, const char *from, const char *to)
     if (!from || !to) {
         return;
     }
-    String::size_type offset = 0;
-    const String source(from), dest(to);
-    while ((offset = value.find(source, offset)) != String::npos) {
-        value.replace(offset, source.size(), dest);
-        offset += dest.size();
+    const nanoem_rsize_t fromLength = StringUtils::length(from), toLength = StringUtils::length(to);
+    if (fromLength == 0) {
+        return;
     }
+    String rebuilt;
+    const char *begin = value.c_str();
+    const char *search = begin;
+    while (const char *target = bx::strFind(search, from)) {
+        rebuilt.append(search, target);
+        rebuilt.append(to, toLength);
+        search = target + fromLength;
+    }
+    rebuilt.append(search, begin + value.size());
+    value = rebuilt;
 }
 
 static void
@@ -261,7 +269,7 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
     while (!reader.isDone()) {
         const bx::StringView line = reader.next();
         const char *linePtr = line.getPtr();
-        String current(linePtr, line.getTerm());
+        String current(linePtr, line.getLength());
         if (current.empty() || *current.c_str() == '\r') {
             continue;
         }
@@ -321,7 +329,7 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
                 value.append("#define ");
                 value.append(variableName);
                 value.append(" ");
-                value.append(fieldName);
+                value.append(fieldName.c_str());
                 value.append("\n");
             }
             continue;
@@ -346,14 +354,14 @@ appendProcessedHLSLBody(const Fx9__Effect__Dx9ms__Shader *shaderPtr, bool isVert
         replaceAllString(current, "mat4", "float4x4");
         replaceAllString(current, "fract", "frac");
         replaceAllString(current, "mix", "lerp");
-        if (current.find("main(") != String::npos) {
+        if (bx::strFind(current.c_str(), "main(") != nullptr) {
             value.append(current);
             value.append("\n");
             value.append(isVertexShader ? "    VS_OUTPUT output = (VS_OUTPUT) 0;\n" : "    PS_OUTPUT output = (PS_OUTPUT) 0;\n");
             braceDepth = 1;
             continue;
         }
-        for (String::const_iterator it = current.begin(), end = current.end(); it != end; ++it) {
+        for (const char *it = current.c_str(), *end = it + current.size(); it != end; ++it) {
             if (*it == '{') {
                 braceDepth++;
             }
