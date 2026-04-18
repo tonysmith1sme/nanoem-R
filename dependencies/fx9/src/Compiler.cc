@@ -1310,6 +1310,8 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
         return u.m_float;
     };
     float pointSize = 0.0f;
+    float pointSizeMin = 0.0f;
+    float pointSizeMax = 0.0f;
     for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
         const Fx9__Effect__RenderState *state = message->render_states[i];
         /* FILLMODE == POINT */
@@ -1320,8 +1322,15 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
         else if (state->key == 154) {
             pointSize = decodeRenderStateFloatValue(state->value);
         }
+        else if (state->key == 155) {
+            pointSizeMin = decodeRenderStateFloatValue(state->value);
+        }
+        else if (state->key == 166) {
+            pointSizeMax = decodeRenderStateFloatValue(state->value);
+        }
     }
     parser.setPointSizeAssignment(pointSize);
+    parser.setPointSizeRange(pointSizeMin, pointSizeMax);
 }
 
 } /* namespace anonymous */

@@ -240,6 +240,7 @@ public:
     void setVertexShaderInputMap(const BuiltInLocationMap &value);
     void setPixelShaderInputMap(const BuiltInLocationMap &value);
     void setPointSizeAssignment(float value);
+    void setPointSizeRange(float minValue, float maxValue);
 
     atom_t allocateIntermNode(TIntermNode *node);
     atom_t acceptTrueLiteral(const LexerToken *token);
@@ -487,6 +488,8 @@ private:
     BuiltInLocationMap m_pixelShaderInputMap;
     size_t m_lastUniformRegisterIndex = 0;
     float m_pointSizeAssignment = 0.0f;
+    float m_pointSizeMin = 0.0f;
+    float m_pointSizeMax = 0.0f;
     int m_uniqueID = 1;
     bool m_enableAcceptingVariable = true;
     bool m_enableUniformBuffer = false;
