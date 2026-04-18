@@ -1447,6 +1447,13 @@ RenderState::convertSamplerState(nanoem_u32_t key, nanoem_u32_t value, sg_image_
             /* set actual mipmap levels later */
             desc.num_mipmaps = 0;
         }
+        else {
+            normalizeMinFilter(desc.min_filter);
+            desc.num_mipmaps = 1;
+        }
+        SG_INSERT_MARKERF("effect::RenderState::convertSamplerState(key=D3DSAMP_MIPFILTER, value=%d, minFilter=%d, "
+                          "numMipmaps=%d)",
+            value, desc.min_filter, desc.num_mipmaps);
         break;
     }
     case 8: { /* D3DSAMP_MIPMAPLODBIAS */
