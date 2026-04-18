@@ -17,6 +17,15 @@ namespace nanoem {
 namespace effect {
 namespace {
 
+static bool
+isDefaultBlendState(const sg_blend_state &value) NANOEM_DECL_NOEXCEPT
+{
+    return !value.enabled && value.src_factor_rgb == _SG_BLENDFACTOR_DEFAULT &&
+        value.dst_factor_rgb == _SG_BLENDFACTOR_DEFAULT && value.src_factor_alpha == _SG_BLENDFACTOR_DEFAULT &&
+        value.dst_factor_alpha == _SG_BLENDFACTOR_DEFAULT && value.op_rgb == _SG_BLENDOP_DEFAULT &&
+        value.op_alpha == _SG_BLENDOP_DEFAULT;
+}
+
 class EnumStringifyUtils : private NonCopyable {
 public:
     static const char *toString(sg_blend_op value) NANOEM_DECL_NOEXCEPT;
@@ -455,7 +464,7 @@ Technique::overrideObjectPipelineDescription(
         body.blend_color = m_pipelineDescription.blend_color;
     }
     for (nanoem_u32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], body.colors[i]);
+        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], m_pipelineDescription.colors[0], body.colors[i]);
     }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
@@ -487,7 +496,7 @@ Technique::overrideScenePipelineDescription(
     ld.attrs[6] = sg_vertex_attr_desc { 0, offsetof(sg::QuadVertexUnit, m_texcoord), SG_VERTEXFORMAT_FLOAT2 };
     ld.attrs[7] = sg_vertex_attr_desc { 0, offsetof(sg::QuadVertexUnit, m_position), SG_VERTEXFORMAT_FLOAT2 };
     for (nanoem_u32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
-        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], body.colors[i]);
+        overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], m_pipelineDescription.colors[0], body.colors[i]);
     }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
@@ -563,9 +572,11 @@ Technique::mutablePipelineDescription() NANOEM_DECL_NOEXCEPT
 
 void
 Technique::overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttachmentIndex,
-    const PipelineDescriptor &pd, const sg_color_state &csrc, sg_color_state &cdst) NANOEM_DECL_NOEXCEPT
+    const PipelineDescriptor &pd, const sg_color_state &csrc, const sg_color_state &cbase,
+    sg_color_state &cdst) NANOEM_DECL_NOEXCEPT
 {
-    const sg_blend_state &src = csrc.blend;
+    const sg_blend_state &src =
+        colorAttachmentIndex > 0 && isDefaultBlendState(csrc.blend) ? cbase.blend : csrc.blend;
     sg_blend_state &dst = cdst.blend;
     const bool hasBlendEnabled = pd.m_hasBlendEnabled;
     if (!hasBlendEnabled) {

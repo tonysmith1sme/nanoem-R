@@ -64,7 +64,8 @@ private:
     };
 
     static void overrideColorState(const IDrawable *drawable, nanoem_u32_t colorAttachmentIndex,
-        const PipelineDescriptor &pd, const sg_color_state &src, sg_color_state &dst) NANOEM_DECL_NOEXCEPT;
+        const PipelineDescriptor &pd, const sg_color_state &src, const sg_color_state &base,
+        sg_color_state &dst) NANOEM_DECL_NOEXCEPT;
     static void overrideDepthState(
         const PipelineDescriptor &pd, const sg_depth_state &src, sg_depth_state &dst) NANOEM_DECL_NOEXCEPT;
     static void overrideStencilState(
