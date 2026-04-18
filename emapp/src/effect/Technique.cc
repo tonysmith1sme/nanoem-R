@@ -444,6 +444,9 @@ Technique::overrideObjectPipelineDescription(
         SG_INSERT_MARKERF(
             "effect::Technique::overrideObjectPipelineDescription(primitiveType=%d)", body.primitive_type);
     }
+    if (!pd.m_hasBlendColor) {
+        body.blend_color = m_pipelineDescription.blend_color;
+    }
     for (nanoem_u32_t i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         overrideColorState(drawable, i, pd, m_pipelineDescription.colors[i], body.colors[i]);
     }
@@ -461,6 +464,9 @@ Technique::overrideScenePipelineDescription(
     body.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
     body.face_winding = SG_FACEWINDING_CW;
     body.cull_mode = SG_CULLMODE_BACK;
+    if (!pd.m_hasBlendColor) {
+        body.blend_color = m_pipelineDescription.blend_color;
+    }
     sg_layout_desc &ld = body.layout;
     Inline::clearZeroMemory(ld.attrs);
     ld.buffers[0].stride = sizeof(sg::QuadVertexUnit);

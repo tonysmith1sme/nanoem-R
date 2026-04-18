@@ -61,6 +61,7 @@ struct PipelineDescriptor {
     bool m_hasBlendDestFactorAlpha;
     bool m_hasBlendOpRGB;
     bool m_hasBlendOpAlpha;
+    bool m_hasBlendColor;
     bool m_hasSeparateAlphaBlendEnabled;
     bool m_separateAlphaBlendEnabled;
     bool m_hasAlphaTestEnabled;
