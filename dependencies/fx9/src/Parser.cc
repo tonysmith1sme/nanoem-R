@@ -20,6 +20,8 @@
 #include <unistd.h>
 #endif
 
+#include <unordered_map>
+
 /* GLSLang */
 #include "glslang/HLSL/hlslAttributes.h"
 #include "glslang/HLSL/hlslParseHelper.h"
@@ -141,6 +143,96 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     replaceAll(patched, "Sky*box*.*", "sky*box*.*");
     replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
     return patched;
+}
+
+static std::string
+trimASCII(const std::string &value)
+{
+    size_t begin = 0, end = value.size();
+    while (begin < end && isspace(static_cast<unsigned char>(value[begin]))) {
+        begin++;
+    }
+    while (end > begin && isspace(static_cast<unsigned char>(value[end - 1]))) {
+        end--;
+    }
+    return value.substr(begin, end - begin);
+}
+
+static bool
+parseMacroDirective(const std::string &line, const char *directive, std::string &name, std::string &substitution)
+{
+    size_t offset = 0;
+    while (offset < line.size() && isspace(static_cast<unsigned char>(line[offset]))) {
+        offset++;
+    }
+    if (offset >= line.size() || line[offset] != '#') {
+        return false;
+    }
+    offset++;
+    while (offset < line.size() && isspace(static_cast<unsigned char>(line[offset]))) {
+        offset++;
+    }
+    const size_t directiveLength = strlen(directive);
+    if (line.compare(offset, directiveLength, directive) != 0) {
+        return false;
+    }
+    offset += directiveLength;
+    if (offset < line.size() && !isspace(static_cast<unsigned char>(line[offset]))) {
+        return false;
+    }
+    while (offset < line.size() && isspace(static_cast<unsigned char>(line[offset]))) {
+        offset++;
+    }
+    const size_t nameOffset = offset;
+    if (offset < line.size() && (isalpha(static_cast<unsigned char>(line[offset])) || line[offset] == '_')) {
+        offset++;
+        while (offset < line.size()) {
+            const unsigned char c = static_cast<unsigned char>(line[offset]);
+            if (!(isalnum(c) || c == '_')) {
+                break;
+            }
+            offset++;
+        }
+        name.assign(line, nameOffset, offset - nameOffset);
+        substitution = trimASCII(line.substr(offset));
+        return !name.empty();
+    }
+    return false;
+}
+
+static std::string
+patchLegacyEffectSource(const std::string &path, const std::string &source)
+{
+    std::string patched(patchRayMMDSource(path, source)), result;
+    std::unordered_map<std::string, std::string> macroSubstitutions;
+    size_t offset = 0;
+    while (offset <= patched.size()) {
+        const size_t end = patched.find('\n', offset);
+        const bool hasLineFeed = end != std::string::npos;
+        const std::string line(hasLineFeed ? patched.substr(offset, end - offset) : patched.substr(offset));
+        std::string name, substitution;
+        if (parseMacroDirective(line, "undef", name, substitution)) {
+            macroSubstitutions.erase(name);
+        }
+        else if (parseMacroDirective(line, "define", name, substitution)) {
+            const auto it = macroSubstitutions.find(name);
+            if (it != macroSubstitutions.end() && it->second != substitution) {
+                result.append("#undef ");
+                result.append(name);
+                result.push_back('\n');
+            }
+            macroSubstitutions[name] = substitution;
+        }
+        result.append(line);
+        if (hasLineFeed) {
+            result.push_back('\n');
+            offset = end + 1;
+        }
+        else {
+            break;
+        }
+    }
+    return result;
 }
 
 } /* namespace anonymous */
@@ -416,7 +508,7 @@ ParserContext::IncluderContext::addSource(const TString &path, const TString &so
 {
     TString normalized(path);
     PathUtils::normalize(normalized);
-    const std::string patchedSource(patchRayMMDSource(normalized.c_str(), source.c_str()));
+    const std::string patchedSource(patchLegacyEffectSource(normalized.c_str(), source.c_str()));
     m_sources.insert(std::make_pair(normalized, new TString(patchedSource.c_str())));
     m_includedSourePathList.push_back(normalized);
 }
@@ -464,7 +556,7 @@ ParserContext::IncluderContext::includeLocal(
                 ::ReadFile(handle, bytes.data(), size, &numReadBytes, nullptr);
                 ::CloseHandle(handle);
                 const std::string patchedSource(
-                    patchRayMMDSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                    patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
                 TString *source = new TString(patchedSource.c_str());
                 m_sources.insert(std::make_pair(path, source));
                 m_includedSourePathList.push_back(normalized);
@@ -479,7 +571,7 @@ ParserContext::IncluderContext::includeLocal(
                     std::vector<char> bytes(st.st_size);
                     ::read(fd, bytes.data(), bytes.size());
                     const std::string patchedSource(
-                        patchRayMMDSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                        patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
                     TString *source = new TString(patchedSource.c_str());
                     m_sources.insert(std::make_pair(path, source));
                     m_includedSourePathList.push_back(normalized);
