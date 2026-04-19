@@ -18,6 +18,7 @@
 #endif
 
 #include <regex>
+#include <sstream>
 #include <unordered_map>
 
 /* GLSLang */
@@ -187,6 +188,12 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
+    patched = std::regex_replace(patched,
+        std::regex(R"(float2\s+SHKernel\s*\[\s*6\s*\]\s*\[\s*9\s*\])", std::regex_constants::icase),
+        "float2 SHKernel[54]");
+    patched = std::regex_replace(patched,
+        std::regex(R"(SHKernel\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\])", std::regex_constants::icase),
+        "SHKernel[(($1) * 9) + ($2)]");
     return patched;
 }
 
