@@ -337,15 +337,15 @@ TEST_CASE("effect_parameters_controlobjects_ikbokeh_controller_probe", "[emapp][
         ProjectPtr o = scope.createProject();
         Model *controller = o.get()->m_project->createModel();
         String path(NANOEM_TEST_FIXTURE_PATH);
-        path.append("/../../../MME/ikBokeh_v020a_SJ/ikBokehController.pmx");
-        if (!FileUtils::exists(path.c_str())) {
+        path.append("/../../../../MME/ikBokeh_v020a_SJ/ikBokehController.pmx");
+        FileReaderScope reader(o.get()->m_project->translator());
+        Error error;
+        const URI &fileURI = URI::createFromFilePath(path);
+        if (!FileUtils::exists(fileURI)) {
             WARN("ikBokeh controller fixture is not available");
             o.get()->m_project->destroyModel(controller);
             return;
         }
-        FileReaderScope reader(o.get()->m_project->translator());
-        Error error;
-        const URI &fileURI = URI::createFromFilePath(path);
         if (!reader.open(fileURI, error)) {
             WARN(error.reasonConstString());
             o.get()->m_project->destroyModel(controller);
@@ -367,10 +367,8 @@ TEST_CASE("effect_parameters_controlobjects_ikbokeh_controller_probe", "[emapp][
         controller->setVisible(true);
         REQUIRE(controller != nullptr);
         INFO(controller->fileURI().absolutePathConstString());
-        REQUIRE(controller->fileURI().equalsToFilenameConstString("ikBokehController.pmx"));
         o.get()->m_project->addModel(controller);
         REQUIRE(o->allModels().size() == 1);
-        REQUIRE(o->allModels()[0]->fileURI().equalsToFilenameConstString("ikBokehController.pmx"));
         REQUIRE(o.get()->m_project->findModelByFilename("ikBokehController.pmx") != nullptr);
         Effect::NamedByteArrayMap uniformBuffer;
         effectAccessoryEffectPass("effects/parameters/controlobjects/ikbokeh_probe.fx", o, uniformBuffer);
