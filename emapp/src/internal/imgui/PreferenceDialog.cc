@@ -26,7 +26,8 @@ struct LazyReloadFontCommand : ImGuiWindow::ILazyExecutionCommand {
     void
     execute(Project *project) NANOEM_DECL_OVERRIDE
     {
-        m_parent->setFontPointSize(ImGuiWindow::kFontSize * project->windowDevicePixelRatio());
+        BX_UNUSED_1(project);
+        m_parent->setFontPointSize(ImGuiWindow::kFontSize);
     }
     void
     destroy(Project *project) NANOEM_DECL_OVERRIDE
