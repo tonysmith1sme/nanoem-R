@@ -186,6 +186,18 @@ isRayMMDMainEffectSourcePath(const std::string &path)
     return normalized.find("ray-mmd") != std::string::npos && normalized.find("/main/main.fxsub") != std::string::npos;
 }
 
+static bool
+isRayMMDShaderSourcePath(const std::string &path)
+{
+    std::string normalized(toLowerASCII(path));
+    for (size_t i = 0, numChars = normalized.size(); i < numChars; i++) {
+        if (normalized[i] == '\\') {
+            normalized[i] = '/';
+        }
+    }
+    return normalized.find("ray-mmd") != std::string::npos && normalized.find("/shader/") != std::string::npos;
+}
+
 static std::string
 replaceRayMMDIntegerDefine(
     const std::string &source, const char *name, int value, const std::regex_constants::syntax_option_type flags)
@@ -194,6 +206,35 @@ replaceRayMMDIntegerDefine(
     pattern << "(^|\\n)([ \\t]*#define[ \\t]+" << name << "[ \\t]+)[0-9]+([ \\t]*(?://[^\\n]*)?)";
     replacement << "$1$2" << value << "$3";
     return std::regex_replace(source, std::regex(pattern.str(), flags), replacement.str());
+}
+
+static std::string
+patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &source)
+{
+    if (!isRayMMDShaderSourcePath(path) || source.find("NANOEM_OUTPUT_SHADER_LANGUAGE_MSL") == std::string::npos) {
+        return source;
+    }
+    std::string patched(source);
+    patched = std::regex_replace(patched, std::regex(R"(\[\s*unroll\s*\])", std::regex_constants::icase), "[loop]");
+    patched = std::regex_replace(patched, std::regex(R"(#\s*define\s+SSDO_UNROLL\s+\[\s*unroll\s*\])",
+                                          std::regex_constants::icase),
+        "#define SSDO_UNROLL [loop]");
+    patched = std::regex_replace(patched, std::regex(R"(#\s*define\s+SSDO_UNROLL\s*(?:\r?\n))",
+                                          std::regex_constants::icase),
+        "#define SSDO_UNROLL [loop]\n");
+    patched = std::regex_replace(patched,
+        std::regex(R"(#\s*define\s+SSR_SAMPLER_COUNT\s+64\b)", std::regex_constants::icase),
+        "#define SSR_SAMPLER_COUNT 48");
+    patched = std::regex_replace(patched,
+        std::regex(R"(#\s*define\s+SSR_SAMPLER_COUNT\s+128\b)", std::regex_constants::icase),
+        "#define SSR_SAMPLER_COUNT 64");
+    patched = std::regex_replace(patched,
+        std::regex(R"(#\s*define\s+SHADOW_POISSON_COUNT\s+25\b)", std::regex_constants::icase),
+        "#define SHADOW_POISSON_COUNT 16");
+    patched = std::regex_replace(patched,
+        std::regex(R"(#\s*define\s+SHADOW_BLUR_COUNT\s+6\b)", std::regex_constants::icase),
+        "#define SHADOW_BLUR_COUNT 4");
+    return patched;
 }
 
 static std::string
@@ -207,11 +248,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
         patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
@@ -226,6 +262,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             std::regex(R"(return\s+float4\s*\(\s*GetSpecularHighlight\s*\(\s*normal\s*,\s*coord\s*\)\s*,\s*0\s*\)\s*;)"),
             "return float4(MaterialDiffuse.rgb * alpha, alpha);");
     }
+    patched = patchRayMMDMetalHeavySamplingSource(path, patched);
     return patched;
 }
 
