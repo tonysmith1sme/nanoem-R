@@ -238,6 +238,29 @@ patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &
 }
 
 static std::string
+patchRayMMDConfigurationInclude(const std::string &source)
+{
+    static const char *kRayMMDMetalConfigurationOverride =
+        "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
+        "#undef FOG_ENABLE\n"
+        "#define FOG_ENABLE 0\n"
+        "#undef SUN_SHADOW_QUALITY\n"
+        "#define SUN_SHADOW_QUALITY 2\n"
+        "#undef SSDO_QUALITY\n"
+        "#define SSDO_QUALITY 0\n"
+        "#undef SSR_QUALITY\n"
+        "#define SSR_QUALITY 0\n"
+        "#undef SSSS_QUALITY\n"
+        "#define SSSS_QUALITY 0\n"
+        "#undef HDR_BLOOM_MODE\n"
+        "#define HDR_BLOOM_MODE 0\n"
+        "#endif\n";
+    return std::regex_replace(source,
+        std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
+        std::string("$1") + kRayMMDMetalConfigurationOverride);
+}
+
+static std::string
 patchRayMMDSource(const std::string &path, const std::string &source)
 {
     if (!containsRayMMDPath(path)) {
@@ -248,7 +271,13 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
         patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
     }
+    patched = patchRayMMDConfigurationInclude(patched);
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
     patched = std::regex_replace(patched,
