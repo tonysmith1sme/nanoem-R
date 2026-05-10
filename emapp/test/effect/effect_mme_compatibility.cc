@@ -75,6 +75,7 @@ TEST_CASE("effect_mme_hlsl_compiles_selected_samples", "[emapp][effect][probe]")
     static const char *kSamplePaths[] = {
         "Diffusion7/Diffusion.fx",
         "AnimeScreenTex_v1.0/A-screen.fx",
+        "LightBloom/LightBloom with DirtMap.fx",
         "msUnsharp/msUnsharp.fx",
         "ikBokeh_v020a_SJ/ikBokeh.fx",
         "ikDiffusion/ikDiffusion/Diffusion1/ikDiffusion1.fx",

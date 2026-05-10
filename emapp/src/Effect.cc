@@ -6244,14 +6244,16 @@ Effect::setRenderTargetColorImageDescription(const IDrawable *drawable, size_t r
         m_currentRenderTargetPassDescription.color_attachments[renderTargetIndex].image = { SG_INVALID_ID };
         if (renderTargetIndex == 0) {
             Inline::clearZeroMemory(destColorImageDescription);
-            int numSamples = destColorImageDescription.sample_count;
+            int numSamples = m_project->sampleCount();
             if (!m_project->getOriginOffscreenRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription) &&
                 !m_project->getScriptExternalRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription)) {
                 m_project->getViewportRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription);
-                numSamples = m_project->sampleCount();
+            }
+            else if (destColorImageDescription.sample_count > 0) {
+                numSamples = destColorImageDescription.sample_count;
             }
             m_currentRenderTargetPixelFormat.setColorPixelFormat(destColorImageDescription.pixel_format, 0);
             m_currentRenderTargetPixelFormat.setNumSamples(numSamples);
