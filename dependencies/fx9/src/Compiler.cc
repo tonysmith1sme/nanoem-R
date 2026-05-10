@@ -187,6 +187,16 @@ isRayMMDMainEffectSourcePath(const std::string &path)
 }
 
 static std::string
+replaceRayMMDIntegerDefine(
+    const std::string &source, const char *name, int value, const std::regex_constants::syntax_option_type flags)
+{
+    std::ostringstream pattern, replacement;
+    pattern << "(^|\\n)([ \\t]*#define[ \\t]+" << name << "[ \\t]+)[0-9]+([ \\t]*(?://[^\\n]*)?)";
+    replacement << "$1$2" << value << "$3";
+    return std::regex_replace(source, std::regex(pattern.str(), flags), replacement.str());
+}
+
+static std::string
 patchRayMMDSource(const std::string &path, const std::string &source)
 {
     if (!containsRayMMDPath(path)) {
@@ -194,9 +204,14 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     }
     std::string patched(source);
     if (endsWithIgnoreCase(path, "ray.conf")) {
-        patched = std::regex_replace(
-            patched, std::regex("(^|\\n)([ \t]*#define[ \t]+FOG_ENABLE[ \t]+)1([ \t]*(?://[^\\n]*)?)"),
-            "$10$3");
+        const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
+            std::regex_constants::icase;
+        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");

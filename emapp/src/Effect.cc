@@ -4341,6 +4341,9 @@ Effect::handleRenderColorTargetSemantic(
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
             int sampleCount = enableAA ? project->sampleCount() : 1;
+            if (sg::is_backend_metal(sg::query_backend()) && sampleCount > 1) {
+                sampleCount = 1;
+            }
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             if (parameter.m_shared) {
                 project->setSharedRenderTargetImageContainer(name, self, container);
@@ -4495,6 +4498,9 @@ Effect::handleOffscreenRenderTargetSemantic(
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
             int sampleCount = enableAA ? project->sampleCount() : 1;
+            if (sg::is_backend_metal(sg::query_backend()) && sampleCount > 1) {
+                sampleCount = 1;
+            }
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             self->m_offscreenRenderTargetOptions.insert(tinystl::make_pair(name, option));
             if (parameter.m_shared) {
