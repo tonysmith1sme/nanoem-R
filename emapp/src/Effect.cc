@@ -4513,6 +4513,9 @@ void
 Effect::handleTextureValueSemantic(Effect *self, const TypedSemanticParameter &parameter, Progress & /* progress */)
 {
     if (parameter.m_type == kParameterTypeFloat4) {
+        if (sg::is_backend_metal(sg::query_backend())) {
+            return;
+        }
         AnnotationMap::const_iterator it = parameter.m_annotations.findAnnotation(kResourceNameKeyLiteral);
         if (it != parameter.m_annotations.end()) {
             self->m_textureValueUniforms.insert(parameter.m_name);
