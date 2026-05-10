@@ -82,6 +82,7 @@ TEST_CASE("effect_mme_hlsl_compiles_selected_samples", "[emapp][effect][probe]")
         "ikDiffusion/ikDiffusion/Diffusion2/ikDiffusion2.fx",
         "PostAdultShaderS2_v013/PostAdultShader.fx",
         "PostMovie夵曄/墿宯/嬥巺悵怓.fx",
+        "ray-mmd-1.5.2/Main/main.fx",
         "ray-mmd-1.5.2/ray.fx",
         "ray-mmd-1.5.2/Extension/FXAA/FXAA.fx",
         "ray-mmd-1.5.2/Materials/Toon/Toon.fx",

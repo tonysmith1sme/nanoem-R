@@ -174,6 +174,18 @@ endsWithIgnoreCase(const std::string &value, const char *suffix)
         valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
 }
 
+static bool
+isRayMMDMainEffectSourcePath(const std::string &path)
+{
+    std::string normalized(toLowerASCII(path));
+    for (size_t i = 0, numChars = normalized.size(); i < numChars; i++) {
+        if (normalized[i] == '\\') {
+            normalized[i] = '/';
+        }
+    }
+    return normalized.find("ray-mmd") != std::string::npos && normalized.find("/main/main.fxsub") != std::string::npos;
+}
+
 static std::string
 patchRayMMDSource(const std::string &path, const std::string &source)
 {
@@ -194,6 +206,11 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     patched = std::regex_replace(patched,
         std::regex(R"(SHKernel\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\])", std::regex_constants::icase),
         "SHKernel[(($1) * 9) + ($2)]");
+    if (isRayMMDMainEffectSourcePath(path)) {
+        patched = std::regex_replace(patched,
+            std::regex(R"(return\s+float4\s*\(\s*GetSpecularHighlight\s*\(\s*normal\s*,\s*coord\s*\)\s*,\s*0\s*\)\s*;)"),
+            "return float4(MaterialDiffuse.rgb * alpha, alpha);");
+    }
     return patched;
 }
 
