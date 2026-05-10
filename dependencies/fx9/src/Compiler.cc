@@ -211,7 +211,7 @@ replaceRayMMDIntegerDefine(
 static std::string
 patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &source)
 {
-    if (!isRayMMDShaderSourcePath(path) || source.find("NANOEM_OUTPUT_SHADER_LANGUAGE_MSL") == std::string::npos) {
+    if (!isRayMMDShaderSourcePath(path)) {
         return source;
     }
     std::string patched(source);
@@ -254,6 +254,12 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "#define SSSS_QUALITY 0\n"
         "#undef HDR_BLOOM_MODE\n"
         "#define HDR_BLOOM_MODE 0\n"
+        "#undef IBL_QUALITY\n"
+        "#define IBL_QUALITY 0\n"
+        "#undef MULTI_LIGHT_ENABLE\n"
+        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#undef OUTLINE_QUALITY\n"
+        "#define OUTLINE_QUALITY 1\n"
         "#endif\n";
     return std::regex_replace(source,
         std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
