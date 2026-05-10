@@ -928,6 +928,9 @@ image::DDS::findPixelFormat(const PixelFormat &value, const ExtendedHeader &exte
             if (value.testMask(0xffff, 0, 0, 0)) {
                 format = SG_PIXELFORMAT_R16;
             }
+            else if (value.testMask(0xff, 0, 0, 0xff00)) {
+                format = SG_PIXELFORMAT_RG8;
+            }
             break;
         }
         case 8: {
