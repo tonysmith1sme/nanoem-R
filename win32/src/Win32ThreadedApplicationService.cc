@@ -197,8 +197,9 @@ D3D11RendererCapability::suggestedSampleLevel(nanoem_u32_t value) const noexcept
 {
     uint32_t sampleCount = 1 << value, numQualityLevels;
     while (
-        FAILED(m_device->CheckMultisampleQualityLevels(DXGI_FORMAT_B8G8R8A8_UNORM, sampleCount, &numQualityLevels)) ||
-        numQualityLevels == 0) {
+        value > 0 &&
+        (FAILED(m_device->CheckMultisampleQualityLevels(DXGI_FORMAT_B8G8R8A8_UNORM, sampleCount, &numQualityLevels)) ||
+            numQualityLevels == 0)) {
         value--;
         sampleCount = 1 << value;
     }
@@ -681,6 +682,8 @@ Win32ThreadedApplicationService::handleSetupGraphicsEngine(sg_desc &desc)
 {
     ThreadedApplicationService::handleSetupGraphicsEngine(desc);
     if (m_nativeSwapChain && m_nativeSwapChainDescription) {
+        auto swapChainDesc = (const DXGI_SWAP_CHAIN_DESC *) m_nativeSwapChainDescription;
+        desc.context.sample_count = glm::max<UINT>(swapChainDesc->SampleDesc.Count, 1);
         auto &d3d11 = desc.context.d3d11;
         d3d11.device = m_nativeDevice;
         d3d11.device_context = m_nativeContext;

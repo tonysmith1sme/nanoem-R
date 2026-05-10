@@ -457,7 +457,7 @@ MetalRendererCapability::suggestedSampleLevel(nanoem_u32_t value) const noexcept
 {
     auto device = m_service->metalDevice();
     uint32_t sampleCount = 1 << value;
-    while (![device supportsTextureSampleCount:sampleCount]) {
+    while (value > 0 && ![device supportsTextureSampleCount:sampleCount]) {
         value--;
         sampleCount = 1 << value;
     }
@@ -1176,6 +1176,8 @@ void
 CocoaThreadedApplicationService::handleSetupGraphicsEngine(sg_desc &desc)
 {
     if (m_nativeDevice && m_nativeView) {
+        auto view = (__bridge MTKView *) m_nativeView;
+        desc.context.sample_count = glm::max<int>(view.sampleCount, 1);
         desc.context.metal.user_data = this;
         desc.context.metal.device = m_nativeDevice;
         desc.context.metal.renderpass_descriptor_cb = []() -> const void * { return nullptr; };
@@ -1490,13 +1492,15 @@ CocoaThreadedApplicationService::beginDefaultPass(
     if (backend == SG_BACKEND_METAL_MACOS) {
         auto it = m_colorImageDescriptions.find(windowID);
         auto beginPass = [this, windowID, width, height, sampleCount, &pa](sg_image_desc &desc) {
-            const bool needsUpdatingDepthImage = desc.width != width || desc.height != height;
+            const bool needsUpdatingDepthImage =
+                desc.width != width || desc.height != height || desc.sample_count != sampleCount;
             auto view = (__bridge MTKView *) m_nativeView;
             id<MTLTexture> texture = view.currentDrawable.texture;
             desc.width = width;
             desc.height = height;
             desc.pixel_format = resolveMetalPixelFormat();
             desc.render_target = true;
+            desc.sample_count = sampleCount;
             desc.mtl_textures[0] = (__bridge const void *) texture;
             if (Inline::isDebugLabelEnabled()) {
                 desc.label = "@nanoem/Metal/CurrentDrawable/Color";
