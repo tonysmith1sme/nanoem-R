@@ -711,6 +711,10 @@ function(cleanup_all_repositories)
   endforeach()
 endfunction()
 
+find_program(NANOEM_MAKE_PROGRAM NAMES ninja ninja-build
+             HINTS /usr/local/bin /opt/homebrew/bin /opt/local/bin)
+mark_as_advanced(NANOEM_MAKE_PROGRAM)
+
 set(ARCH_LIST $ENV{NANOEM_TARGET_ARCHITECTURES})
 if(NOT ARCH_LIST)
   if(APPLE)
@@ -757,6 +761,8 @@ foreach(arch_item ${ARCH_LIST})
   set(make_program $ENV{NANOEM_MAKE_PROGRAM})
   if(make_program)
     set(toolset_option "-DCMAKE_MAKE_PROGRAM=${make_program}")
+  elseif(NANOEM_MAKE_PROGRAM)
+    set(toolset_option "-DCMAKE_MAKE_PROGRAM=${NANOEM_MAKE_PROGRAM}")
   endif()
   if(WIN32)
     # https://docs.microsoft.com/en-us/cpp/build/reference/utf-8-set-source-and-executable-character-sets-to-utf-8
