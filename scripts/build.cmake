@@ -631,6 +631,7 @@ function(compile_all_repositories _generator _toolset_option _compiler _arch _co
     set(_macos_archs "${_arch}")
     if("${_arch}" STREQUAL "ub")
       set(_macos_archs "arm64\;x86_64")
+      set(OSX_TARGET "10.13")
     elseif("${_arch}" STREQUAL "arm64")
       set(OSX_TARGET "11.0")
     endif()

@@ -124,6 +124,7 @@ jobs:
           NANOEM_ENABLE_BUILD_FFMPEG: 1
           NANOEM_ENABLE_BUILD_ICU4C: 1
           NANOEM_ENABLE_BUILD_MIMALLOC: 1
+          NANOEM_TARGET_ARCHITECTURES: ub
       - name: build nanoem itself
         run: |
           mkdir -p ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
@@ -142,6 +143,8 @@ jobs:
             -DNANOEM_INSTALL_GIF_PLUGIN=OFF \
             -DNANOEM_INSTALL_LSMASH_PLUGIN=ON \
             -DNANOEM_TARGET_COMPILER=clang \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
             -GNinja \
             ../..
           cmake --build . --config release
