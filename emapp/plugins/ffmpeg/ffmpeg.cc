@@ -143,6 +143,7 @@ struct FFmpegEncoder {
             setDefaultAudioChannelLayout(m_audioCodecContext, std::max(m_numChannels, kMinimumNumChannels));
             m_audioCodecContext->time_base.num = 1;
             m_audioCodecContext->time_base.den = m_audioCodecContext->sample_rate;
+            m_audioStream->time_base = m_audioCodecContext->time_base;
             if (m_audioCodecID == AV_CODEC_ID_AAC) {
                 m_audioCodecContext->sample_fmt = codec && codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
                 m_audioCodecContext->bit_rate = 320000;
@@ -213,6 +214,7 @@ struct FFmpegEncoder {
             m_videoCodecContext->pix_fmt = m_videoPixelFormat;
             m_videoCodecContext->time_base.num = 1;
             m_videoCodecContext->time_base.den = static_cast<int>(m_fps);
+            m_videoStream->time_base = m_videoCodecContext->time_base;
             if (m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_MPEG4) {
                 m_videoCodecContext->gop_size = static_cast<int>(std::max(m_fps, nanoem_u32_t(1)) * 2);
                 m_videoCodecContext->max_b_frames = 2;
@@ -358,14 +360,9 @@ struct FFmpegEncoder {
                          m_resampleContext, &output.m_opaque->data[0], outputSampleCount, &dataPtr, inputSampleCount),
                 status) &&
             wrapCall(avcodec_send_frame(m_audioCodecContext, output), status)) {
-            AVPacket packet = {};
-            if (wrapCall(avcodec_receive_packet(m_audioCodecContext, &packet), status)) {
-                av_packet_rescale_ts(&packet, m_audioCodecContext->time_base, m_audioStream->time_base);
-                packet.stream_index = m_audioStream->index;
-                makeFailureReason(av_interleaved_write_frame(m_formatContext, &packet), status);
-                if (status && *status == NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
-                    m_nextAudioPTS += outputSampleCount;
-                }
+            drainAudioPackets(status);
+            if (status && *status == NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
+                m_nextAudioPTS += outputSampleCount;
             }
         }
     }
@@ -391,12 +388,7 @@ struct FFmpegEncoder {
         }
         sws_scale(m_scaleContext, dataPtr, lineSizePtr, 0, m_height, frame.m_opaque->data, frame.m_opaque->linesize);
         if (wrapCall(avcodec_send_frame(m_videoCodecContext, frame), status)) {
-            AVPacket packet = {};
-            if (wrapCall(avcodec_receive_packet(m_videoCodecContext, &packet), status)) {
-                av_packet_rescale_ts(&packet, m_videoCodecContext->time_base, m_videoStream->time_base);
-                packet.stream_index = m_videoStream->index;
-                makeFailureReason(av_interleaved_write_frame(m_formatContext, &packet), status);
-            }
+            drainVideoPackets(status);
         }
     }
     int
@@ -407,6 +399,7 @@ struct FFmpegEncoder {
     int
     close(nanoem_application_plugin_status_t *status)
     {
+        flushEncoders(status);
         if (m_formatContext) {
             makeFailureReason(av_write_trailer(m_formatContext), status);
         }
@@ -721,6 +714,51 @@ struct FFmpegEncoder {
     wrapCall(int rc, nanoem_application_plugin_status_t *status)
     {
         return makeFailureReason(rc, status) >= 0;
+    }
+    void
+    drainAudioPackets(nanoem_application_plugin_status_t *status)
+    {
+        drainPackets(m_audioCodecContext, m_audioStream, status);
+    }
+    void
+    drainVideoPackets(nanoem_application_plugin_status_t *status)
+    {
+        drainPackets(m_videoCodecContext, m_videoStream, status);
+    }
+    void
+    drainPackets(AVCodecContext *codec, AVStream *stream, nanoem_application_plugin_status_t *status)
+    {
+        AVPacket packet = {};
+        while (true) {
+            int rc = avcodec_receive_packet(codec, &packet);
+            if (rc == AVERROR(EAGAIN) || rc == AVERROR_EOF) {
+                break;
+            }
+            else if (!wrapCall(rc, status)) {
+                break;
+            }
+            av_packet_rescale_ts(&packet, codec->time_base, stream->time_base);
+            packet.stream_index = stream->index;
+            makeFailureReason(av_interleaved_write_frame(m_formatContext, &packet), status);
+            av_packet_unref(&packet);
+            if (status && *status != NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
+                break;
+            }
+        }
+    }
+    void
+    flushEncoders(nanoem_application_plugin_status_t *status)
+    {
+        if (m_audioCodecContext) {
+            if (wrapCall(avcodec_send_frame(m_audioCodecContext, nullptr), status)) {
+                drainAudioPackets(status);
+            }
+        }
+        if (m_videoCodecContext) {
+            if (wrapCall(avcodec_send_frame(m_videoCodecContext, nullptr), status)) {
+                drainVideoPackets(status);
+            }
+        }
     }
 
     struct ScopedAudioFrame {
