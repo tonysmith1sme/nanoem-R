@@ -6,6 +6,7 @@
 
 #define NOMINMAX
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -257,12 +258,14 @@ struct FFmpegEncoder {
     open(const char *filePath, nanoem_application_plugin_status_t *status)
     {
         bool succeeded = true;
-        avformat_alloc_output_context2(&m_formatContext, 0, 0, filePath);
+        const std::string actualFilePath = actualOutputFilePath(filePath);
+        const char *formatName = outputFormatName(actualFilePath);
+        avformat_alloc_output_context2(&m_formatContext, 0, formatName, actualFilePath.c_str());
         if (m_numChannels > 0 && m_numFrequency > 0) {
             succeeded = wrapCall(openAudioCodec(), status);
         }
         succeeded = succeeded && wrapCall(openVideoCodec(), status) &&
-            wrapCall(avio_open(&m_formatContext->pb, filePath, AVIO_FLAG_WRITE), status);
+            wrapCall(avio_open(&m_formatContext->pb, actualFilePath.c_str(), AVIO_FLAG_WRITE), status);
         if (succeeded && !wrapCall(avformat_write_header(m_formatContext, nullptr), status)) {
             avio_closep(&m_formatContext->pb);
             succeeded = false;
@@ -692,6 +695,53 @@ struct FFmpegEncoder {
             }
         }
         return 0;
+    }
+
+    std::string
+    actualOutputFilePath(const char *filePath) const
+    {
+        std::string value(filePath ? filePath : "");
+        const size_t index = outputPathExtensionIndex(value);
+        const std::string extension = outputPathExtension(value, index);
+        if ((m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_HEVC) && extension != "mp4" &&
+            extension != "mov") {
+            value = index != std::string::npos ? value.substr(0, index) : value;
+            value.append(".mp4");
+        }
+        else if (m_videoCodecID == AV_CODEC_ID_PRORES && extension != "mov") {
+            value = index != std::string::npos ? value.substr(0, index) : value;
+            value.append(".mov");
+        }
+        return value;
+    }
+    const char *
+    outputFormatName(const std::string &filePath) const
+    {
+        if (m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_HEVC) {
+            return outputPathExtension(filePath, outputPathExtensionIndex(filePath)) == "mov" ? "mov" : "mp4";
+        }
+        else if (m_videoCodecID == AV_CODEC_ID_PRORES) {
+            return "mov";
+        }
+        return nullptr;
+    }
+    size_t
+    outputPathExtensionIndex(const std::string &filePath) const
+    {
+        const size_t separatorIndex = filePath.find_last_of("/\\");
+        const size_t dotIndex = filePath.find_last_of('.');
+        return dotIndex != std::string::npos && (separatorIndex == std::string::npos || dotIndex > separatorIndex) ?
+            dotIndex :
+            std::string::npos;
+    }
+    std::string
+    outputPathExtension(const std::string &filePath, size_t index) const
+    {
+        std::string extension = index != std::string::npos ? filePath.substr(index + 1) : std::string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+        });
+        return extension;
     }
 
     void
@@ -1344,7 +1394,7 @@ const char *const *APIENTRY
 nanoemApplicationPluginEncoderGetAllAvailableVideoFormatExtensions(
     const nanoem_application_plugin_encoder_t * /* encoder */, nanoem_u32_t *length)
 {
-    static const char *kFormatExtensions[] = { "avi", "mp4", "mkv" };
+    static const char *kFormatExtensions[] = { "mp4", "mov", "mkv", "avi" };
     *length = sizeof(kFormatExtensions) / sizeof(kFormatExtensions[0]);
     return kFormatExtensions;
 }
