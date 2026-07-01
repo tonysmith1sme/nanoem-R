@@ -6,6 +6,7 @@
 
 #define NOMINMAX
 #include <algorithm>
+#include <string>
 #include <vector>
 
 #include "emapp/sdk/Decoder.h"
@@ -68,10 +69,10 @@ struct FFmpegEncoder {
         , m_resampleContext(nullptr)
         , m_scaleContext(nullptr)
         , m_tempAudioBuffer(nullptr)
-        , m_audioCodecID(AV_CODEC_ID_PCM_S16LE)
-        , m_videoCodecID(AV_CODEC_ID_RAWVIDEO)
-        , m_videoPixelFormat(AV_PIX_FMT_BGR24)
-        , m_videoBitrateMode(kVideoBitrateModeLossless)
+        , m_audioCodecID(defaultAudioCodecID())
+        , m_videoCodecID(defaultVideoCodecID())
+        , m_videoPixelFormat(defaultVideoPixelFormat(m_videoCodecID))
+        , m_videoBitrateMode(m_videoCodecID == AV_CODEC_ID_H264 ? kVideoBitrateModeVBR : kVideoBitrateModeLossless)
         , m_videoBitrateKbps(50000)
         , m_videoCRF(18)
         , m_fps(0)
@@ -95,7 +96,12 @@ struct FFmpegEncoder {
     openAudioCodec()
     {
         const AVCodec *codec = avcodec_find_encoder(m_audioCodecID);
+        if (!codec && m_audioCodecID != AV_CODEC_ID_PCM_S16LE) {
+            m_audioCodecID = AV_CODEC_ID_PCM_S16LE;
+            codec = avcodec_find_encoder(m_audioCodecID);
+        }
         if (!codec) {
+            snprintf(m_reason, sizeof(m_reason), "找不到可用的 FFmpeg 音频编码器");
             return AVERROR_ENCODER_NOT_FOUND;
         }
         if ((m_audioStream = avformat_new_stream(m_formatContext, codec)) != nullptr) {
@@ -151,7 +157,14 @@ struct FFmpegEncoder {
     openVideoCodec()
     {
         const AVCodec *codec = avcodec_find_encoder(m_videoCodecID);
+        if (!codec && m_videoCodecID != AV_CODEC_ID_RAWVIDEO) {
+            m_videoCodecID = AV_CODEC_ID_RAWVIDEO;
+            m_videoPixelFormat = defaultVideoPixelFormat(m_videoCodecID);
+            m_videoBitrateMode = kVideoBitrateModeLossless;
+            codec = avcodec_find_encoder(m_videoCodecID);
+        }
         if (!codec) {
+            snprintf(m_reason, sizeof(m_reason), "找不到可用的 FFmpeg 视频编码器");
             return AVERROR_ENCODER_NOT_FOUND;
         }
         if ((m_videoStream = avformat_new_stream(m_formatContext, codec)) != nullptr) {
@@ -161,7 +174,7 @@ struct FFmpegEncoder {
             m_videoCodecContext->pix_fmt = m_videoPixelFormat;
             m_videoCodecContext->time_base.num = 1;
             m_videoCodecContext->time_base.den = static_cast<int>(m_fps);
-            if (m_videoCodecID == AV_CODEC_ID_H264) {
+            if (m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_MPEG4) {
                 m_videoCodecContext->gop_size = static_cast<int>(std::max(m_fps, nanoem_u32_t(1)) * 2);
                 m_videoCodecContext->max_b_frames = 2;
                 applyVideoBitrateOptions();
@@ -390,9 +403,8 @@ struct FFmpegEncoder {
     void
     loadUIWindowLayout(nanoem_application_plugin_status_t *status)
     {
-        const char *audioCodecs[] = { "PCM", "AAC" };
-        const char *videoCodecs[] = { "Raw Video", "UT Codec Video", "H.264/AVC" };
-        const char *videoBitrateModes[] = { "Lossless/Codec Default", "VBR (CRF)", "CBR" };
+        updateAvailableCodecs();
+        const char *videoBitrateModes[] = { "无损/编码器默认", "VBR（CRF）", "CBR 固定码率" };
         const char *videoPixelFormats[] = {
             "RGB",
             "RGBA",
@@ -401,21 +413,19 @@ struct FFmpegEncoder {
             "YUV444P",
         };
         clearUIWindowLayout();
-        const nanoem_u32_t numVideoCodecs = sizeof(videoCodecs) / sizeof(videoCodecs[0]);
-        m_components.push_back(createLabel("Video Codec"));
-        m_components.push_back(createCombobox(kVideoCodecComponentID, videoCodecs, numVideoCodecs, 0));
+        m_components.push_back(createLabel("视频编码"));
+        m_components.push_back(createCombobox(kVideoCodecComponentID, m_videoCodecNames.data(), m_videoCodecNames.size(), selectedVideoCodecIndex()));
         const nanoem_u32_t numVideoBitrateModes = sizeof(videoBitrateModes) / sizeof(videoBitrateModes[0]);
-        m_components.push_back(createLabel("Video Bitrate Mode"));
+        m_components.push_back(createLabel("视频码率模式"));
         m_components.push_back(createCombobox(kVideoBitrateModeComponentID, videoBitrateModes, numVideoBitrateModes, 0));
-        m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "Video Bitrate (kbps)", m_videoBitrateKbps, 1000, 10000));
-        m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR Quality (CRF)", m_videoCRF, 0, 51));
+        m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "视频码率（kbps）", m_videoBitrateKbps, 1000, 10000));
+        m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR 质量（CRF）", m_videoCRF, 0, 51));
         const nanoem_u32_t numVideoPixelFormats = sizeof(videoPixelFormats) / sizeof(videoPixelFormats[0]);
-        m_components.push_back(createLabel("Video Pixel Format"));
+        m_components.push_back(createLabel("视频像素格式"));
         m_components.push_back(
             createCombobox(kVideoPixelFormatComponentID, videoPixelFormats, numVideoPixelFormats, 0));
-        const nanoem_u32_t numAudioCodecs = sizeof(audioCodecs) / sizeof(audioCodecs[0]);
-        m_components.push_back(createLabel("Audio Codec"));
-        m_components.push_back(createCombobox(kAudioCodecComponentID, audioCodecs, numAudioCodecs, 0));
+        m_components.push_back(createLabel("音频编码"));
+        m_components.push_back(createCombobox(kAudioCodecComponentID, m_audioCodecNames.data(), m_audioCodecNames.size(), selectedAudioCodecIndex()));
         nanoem_application_plugin_status_assign_success(status);
     }
     void
@@ -455,29 +465,15 @@ struct FFmpegEncoder {
         if (Nanoem__Application__Plugin__UIComponent *component =
                 nanoem__application__plugin__uicomponent__unpack(nullptr, length, data)) {
             if (StringUtils::equals(id, kAudioCodecComponentID)) {
-                switch (component->combo_box->selected_index) {
-                case 0:
-                    m_audioCodecID = AV_CODEC_ID_PCM_S16LE;
-                    break;
-                case 1:
-                    m_audioCodecID = AV_CODEC_ID_AAC;
-                    break;
+                if (component->combo_box->selected_index < m_audioCodecs.size()) {
+                    m_audioCodecID = m_audioCodecs[component->combo_box->selected_index].m_codecID;
                 }
             }
             else if (StringUtils::equals(id, kVideoCodecComponentID)) {
-                switch (component->combo_box->selected_index) {
-                case 0:
-                    m_videoPixelFormat = AV_PIX_FMT_BGR24;
-                    m_videoCodecID = AV_CODEC_ID_RAWVIDEO;
-                    break;
-                case 1:
-                    m_videoPixelFormat = AV_PIX_FMT_GBRP;
-                    m_videoCodecID = AV_CODEC_ID_UTVIDEO;
-                    break;
-                case 2:
-                    m_videoPixelFormat = AV_PIX_FMT_YUV420P;
-                    m_videoCodecID = AV_CODEC_ID_H264;
-                    break;
+                if (component->combo_box->selected_index < m_videoCodecs.size()) {
+                    m_videoCodecID = m_videoCodecs[component->combo_box->selected_index].m_codecID;
+                    m_videoPixelFormat = m_videoCodecs[component->combo_box->selected_index].m_pixelFormat;
+                    m_videoBitrateMode = m_videoCodecID == AV_CODEC_ID_H264 ? kVideoBitrateModeVBR : kVideoBitrateModeLossless;
                 }
             }
             else if (StringUtils::equals(id, kVideoBitrateModeComponentID)) {
@@ -542,6 +538,115 @@ struct FFmpegEncoder {
         kVideoBitrateModeCBR,
     };
 
+    struct AudioCodecItem {
+        const char *m_name;
+        AVCodecID m_codecID;
+    };
+
+    struct VideoCodecItem {
+        const char *m_name;
+        AVCodecID m_codecID;
+        AVPixelFormat m_pixelFormat;
+    };
+
+    static bool
+    hasEncoder(AVCodecID codecID)
+    {
+        return avcodec_find_encoder(codecID) != nullptr;
+    }
+
+    static AVCodecID
+    defaultAudioCodecID()
+    {
+        return hasEncoder(AV_CODEC_ID_AAC) ? AV_CODEC_ID_AAC : AV_CODEC_ID_PCM_S16LE;
+    }
+
+    static AVCodecID
+    defaultVideoCodecID()
+    {
+        if (hasEncoder(AV_CODEC_ID_H264)) {
+            return AV_CODEC_ID_H264;
+        }
+        else if (hasEncoder(AV_CODEC_ID_MPEG4)) {
+            return AV_CODEC_ID_MPEG4;
+        }
+        else if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
+            return AV_CODEC_ID_UTVIDEO;
+        }
+        else {
+            return AV_CODEC_ID_RAWVIDEO;
+        }
+    }
+
+    static AVPixelFormat
+    defaultVideoPixelFormat(AVCodecID codecID)
+    {
+        if (codecID == AV_CODEC_ID_H264 || codecID == AV_CODEC_ID_MPEG4) {
+            return AV_PIX_FMT_YUV420P;
+        }
+        else if (codecID == AV_CODEC_ID_UTVIDEO) {
+            return AV_PIX_FMT_GBRP;
+        }
+        else {
+            return AV_PIX_FMT_BGR24;
+        }
+    }
+
+    void
+    updateAvailableCodecs()
+    {
+        m_audioCodecs.clear();
+        m_videoCodecs.clear();
+        m_audioCodecNames.clear();
+        m_videoCodecNames.clear();
+        if (hasEncoder(AV_CODEC_ID_PCM_S16LE)) {
+            m_audioCodecs.push_back({ "PCM 原始音频", AV_CODEC_ID_PCM_S16LE });
+        }
+        if (hasEncoder(AV_CODEC_ID_AAC)) {
+            m_audioCodecs.push_back({ "AAC 音频", AV_CODEC_ID_AAC });
+        }
+        if (hasEncoder(AV_CODEC_ID_RAWVIDEO)) {
+            m_videoCodecs.push_back({ "原始视频", AV_CODEC_ID_RAWVIDEO, AV_PIX_FMT_BGR24 });
+        }
+        if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
+            m_videoCodecs.push_back({ "UT 视频编码", AV_CODEC_ID_UTVIDEO, AV_PIX_FMT_GBRP });
+        }
+        if (hasEncoder(AV_CODEC_ID_H264)) {
+            m_videoCodecs.push_back({ "H.264/AVC", AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P });
+        }
+        if (hasEncoder(AV_CODEC_ID_MPEG4)) {
+            m_videoCodecs.push_back({ "MPEG-4 视频", AV_CODEC_ID_MPEG4, AV_PIX_FMT_YUV420P });
+        }
+        for (const AudioCodecItem &item : m_audioCodecs) {
+            m_audioCodecNames.push_back(item.m_name);
+        }
+        for (const VideoCodecItem &item : m_videoCodecs) {
+            m_videoCodecNames.push_back(item.m_name);
+        }
+    }
+
+    nanoem_u32_t
+    selectedAudioCodecIndex() const
+    {
+        for (size_t i = 0; i < m_audioCodecs.size(); i++) {
+            if (m_audioCodecs[i].m_codecID == m_audioCodecID) {
+                return nanoem_u32_t(i);
+            }
+        }
+        return 0;
+    }
+
+    nanoem_u32_t
+    selectedVideoCodecIndex() const
+    {
+        for (size_t i = 0; i < m_videoCodecs.size(); i++) {
+            if (m_videoCodecs[i].m_codecID == m_videoCodecID) {
+                return nanoem_u32_t(i);
+            }
+        }
+        return 0;
+    }
+
     void
     applyVideoBitrateOptions()
     {
@@ -565,7 +670,9 @@ struct FFmpegEncoder {
             rc = 0;
         }
         else if (rc < 0) {
-            av_make_error_string(m_reason, sizeof(m_reason), rc);
+            if (strlen(m_reason) == 0) {
+                av_make_error_string(m_reason, sizeof(m_reason), rc);
+            }
             result = false;
         }
         if (status) {
@@ -626,9 +733,16 @@ struct FFmpegEncoder {
     };
 
     typedef std::vector<Nanoem__Application__Plugin__UIComponent *> ComponentList;
+    typedef std::vector<AudioCodecItem> AudioCodecList;
+    typedef std::vector<VideoCodecItem> VideoCodecList;
+    typedef std::vector<const char *> CodecNameList;
 
     char m_reason[1024];
     ComponentList m_components;
+    AudioCodecList m_audioCodecs;
+    VideoCodecList m_videoCodecs;
+    CodecNameList m_audioCodecNames;
+    CodecNameList m_videoCodecNames;
     AVFormatContext *m_formatContext;
     AVStream *m_audioStream;
     AVStream *m_videoStream;

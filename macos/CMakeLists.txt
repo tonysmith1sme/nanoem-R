@@ -152,6 +152,51 @@ if(TARGET plugin_ffmpeg)
     endif()
   endforeach()
 endif()
+get_property(ffmpeg_embed_libraries GLOBAL PROPERTY NANOEM_PROPERTY_INSTALL_FFMPEG_LIBS)
+if(ffmpeg_embed_libraries)
+  add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} ARGS -E make_directory "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks")
+  foreach(_item ${ffmpeg_embed_libraries})
+    get_filename_component(_name ${_item} NAME)
+    get_filename_component(_real_item ${_item} REALPATH)
+    get_filename_component(_real_directory ${_real_item} DIRECTORY)
+    set(_real_named_item "${_real_directory}/${_name}")
+    add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                       COMMAND ${CMAKE_COMMAND} ARGS -E copy_if_different "${_item}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks"
+                       COMMAND install_name_tool ARGS -id "@rpath/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}"
+                       COMMAND install_name_tool ARGS -change "${_item}" "@loader_path/../Frameworks/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
+    if(NOT "${_item}" STREQUAL "${_real_item}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_real_item}" "@loader_path/../Frameworks/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
+    endif()
+    if(NOT "${_item}" STREQUAL "${_real_named_item}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_real_named_item}" "@loader_path/../Frameworks/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
+    endif()
+    foreach(_dependency ${ffmpeg_embed_libraries})
+      get_filename_component(_dependency_name ${_dependency} NAME)
+      get_filename_component(_real_dependency ${_dependency} REALPATH)
+      get_filename_component(_real_dependency_directory ${_real_dependency} DIRECTORY)
+      set(_real_named_dependency "${_real_dependency_directory}/${_dependency_name}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_dependency}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      if(NOT "${_dependency}" STREQUAL "${_real_dependency}")
+        add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                           COMMAND install_name_tool ARGS -change "${_real_dependency}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      endif()
+      if(NOT "${_dependency}" STREQUAL "${_real_named_dependency}")
+        add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                           COMMAND install_name_tool ARGS -change "${_real_named_dependency}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      endif()
+    endforeach()
+  endforeach()
+endif()
+foreach(_item ${ffmpeg_embed_libraries})
+  if(NOT TARGET ${_item})
+    get_filename_component(_directory ${_item} DIRECTORY)
+    list(APPEND LIBRARY_PATHS ${_directory})
+  endif()
+endforeach()
 list(REMOVE_DUPLICATES LIBRARY_PATHS)
 install(CODE "
   include(BundleUtilities)
