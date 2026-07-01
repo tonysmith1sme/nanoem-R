@@ -51,6 +51,8 @@ RenderTargetMipmapGenerator::RenderTargetMipmapGenerator(Effect *effect, const c
         mipmapImageDesc.num_mipmaps = 1;
         mipmapImageDesc.width >>= i;
         mipmapImageDesc.height >>= i;
+        mipmapImageDesc.width = glm::max(mipmapImageDesc.width, 1);
+        mipmapImageDesc.height = glm::max(mipmapImageDesc.height, 1);
         if (Inline::isDebugLabelEnabled()) {
             StringUtils::format(
                 label, sizeof(label), "Effects/%s/%s/Mipmaps/%d/Color", effect->nameConstString(), name, i);
@@ -183,7 +185,7 @@ RenderTargetMipmapGenerator::generateAllMipmapImages(
         StringUtils::format(label, sizeof(label), "Effects/%s/%s/Mipmaps/Dest/%d", effect->nameConstString(), name, i);
         const char *destNamePtr = label;
         const sg::NamedPass dest(tinystl::make_pair(m_destPasses[offset], destNamePtr));
-        const Vector4 viewport(0, 0, colorImageDesc.width >> i, colorImageDesc.height >> i);
+        const Vector4 viewport(0, 0, glm::max(colorImageDesc.width >> i, 1), glm::max(colorImageDesc.height >> i, 1));
         m_project->setRenderPassName(dest.first, destNamePtr);
         m_blitter->blit(drawQueue, dest, sourceImage, kRectCoordinate, format, viewport);
     }

@@ -53,6 +53,8 @@ pfn_D3DCompile g_D3DCompile = nullptr;
 
 #include "bx/hash.h"
 
+#include <stdlib.h>
+
 namespace nanoem {
 namespace effect {
 namespace {
@@ -112,6 +114,62 @@ static const char *const kScriptLoopByCountValueLiteral = "LoopByCount";
 static const char *const kScriptLoopGetIndexValueLiteral = "LoopGetIndex";
 static const char *const kScriptLoopEndValueLiteral = "LoopEnd";
 static const char *const kScriptDrawValueLiteral = "Draw";
+
+static bool
+isMetalEffectResourceConstrained() NANOEM_DECL_NOEXCEPT
+{
+    const char *value = getenv("NANOEM_DISABLE_METAL_EFFECT_MEMORY_OPTIMIZATION");
+    return sg::is_backend_metal(sg::query_backend()) && (!value || StringUtils::equals(value, "0"));
+}
+
+static int
+metalEffectMaxRenderTargetSize() NANOEM_DECL_NOEXCEPT
+{
+    const char *value = getenv("NANOEM_EFFECT_METAL_MAX_RENDER_TARGET_SIZE");
+    const int size = value ? atoi(value) : 4096;
+    return glm::clamp(size, 1024, 8192);
+}
+
+static int
+metalEffectMaxRenderTargetMipmaps() NANOEM_DECL_NOEXCEPT
+{
+    const char *value = getenv("NANOEM_EFFECT_METAL_MAX_RENDER_TARGET_MIPMAPS");
+    const int numMipmaps = value ? atoi(value) : 1;
+    return glm::clamp(numMipmaps, 1, int(SG_MAX_MIPMAPS));
+}
+
+static Vector4
+constrainMetalEffectRenderTargetSize(const Vector4 &value, Vector2 &scaleFactor) NANOEM_DECL_NOEXCEPT
+{
+    Vector4 result(value);
+    if (isMetalEffectResourceConstrained()) {
+        const nanoem_f32_t maxSize = nanoem_f32_t(metalEffectMaxRenderTargetSize());
+        const nanoem_f32_t currentMaxSize = glm::max(result.x, result.y);
+        if (currentMaxSize > maxSize) {
+            const nanoem_f32_t ratio = maxSize / currentMaxSize;
+            result.x = glm::max(glm::floor(result.x * ratio), 1.0f);
+            result.y = glm::max(glm::floor(result.y * ratio), 1.0f);
+            if (scaleFactor.x > 0 && scaleFactor.y > 0) {
+                scaleFactor *= ratio;
+            }
+        }
+    }
+    return result;
+}
+
+static nanoem_u8_t
+constrainMetalEffectRenderTargetMipLevels(nanoem_u8_t value) NANOEM_DECL_NOEXCEPT
+{
+    return isMetalEffectResourceConstrained()
+        ? Inline::saturateInt32(glm::min(int(value), metalEffectMaxRenderTargetMipmaps()))
+        : value;
+}
+
+static int
+constrainMetalEffectSampleCount(int value) NANOEM_DECL_NOEXCEPT
+{
+    return isMetalEffectResourceConstrained() ? 1 : value;
+}
 
 static sg_pixel_format
 resolveTexturePixelFormat(sg_pixel_format sourceFormat, sg_pixel_format requestedFormat) NANOEM_DECL_NOEXCEPT
@@ -4329,21 +4387,20 @@ Effect::handleRenderColorTargetSemantic(
         else {
             Vector2 scaleFactor(0);
             const AnnotationMap &annotations = parameter.m_annotations;
-            const Vector4 size(
-                self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor));
+            const Vector4 size(constrainMetalEffectRenderTargetSize(
+                self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor),
+                scaleFactor));
             const sg_pixel_format format =
                 self->determinePixelFormat(annotations, self->m_project->viewportPixelFormat());
-            const nanoem_u8_t numMipLevels = self->determineMipLevels(annotations, size, 1);
+            const nanoem_u8_t numMipLevels =
+                constrainMetalEffectRenderTargetMipLevels(self->determineMipLevels(annotations, size, 1));
             bool enableAA = RenderTargetColorImageContainer::kAntialiasEnabled;
             AnnotationMap::const_iterator it2 = annotations.findAnnotation(kAntiAliasKeyLiteral);
             if (it2 != annotations.end()) {
                 enableAA = it2->second.toBool();
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
-            int sampleCount = enableAA ? project->sampleCount() : 1;
-            if (sg::is_backend_metal(sg::query_backend()) && sampleCount > 1) {
-                sampleCount = 1;
-            }
+            int sampleCount = constrainMetalEffectSampleCount(enableAA ? project->sampleCount() : 1);
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             if (parameter.m_shared) {
                 project->setSharedRenderTargetImageContainer(name, self, container);
@@ -4365,11 +4422,12 @@ Effect::handleRenderDepthStencilTargetSemantic(
     if (parameterType == kParameterTypeTexture || parameterType == kParameterTypeTexture2D) {
         Vector2 scaleFactor(0);
         const AnnotationMap &annotations = parameter.m_annotations;
-        const Vector4 size(
-            self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor));
+        const Vector4 size(constrainMetalEffectRenderTargetSize(
+            self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor), scaleFactor));
         const sg_pixel_format format =
             self->determineDepthStencilPixelFormat(annotations, SG_PIXELFORMAT_DEPTH_STENCIL);
-        const nanoem_u8_t numMipLevels = self->determineMipLevels(annotations, size, 1);
+        const nanoem_u8_t numMipLevels =
+            constrainMetalEffectRenderTargetMipLevels(self->determineMipLevels(annotations, size, 1));
         const String &name = parameter.m_name;
         bool enableAA = RenderTargetColorImageContainer::kAntialiasEnabled;
         RenderTargetDepthStencilImageContainer *container = nanoem_new(RenderTargetDepthStencilImageContainer(name));
@@ -4377,7 +4435,7 @@ Effect::handleRenderDepthStencilTargetSemantic(
         if (it != self->m_imageDescriptions.end()) {
             container->setImageDescription(it->second);
         }
-        int sampleCount = enableAA ? self->m_project->sampleCount() : 1;
+        int sampleCount = constrainMetalEffectSampleCount(enableAA ? self->m_project->sampleCount() : 1);
         container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
         self->m_renderTargetDepthStencilUniforms.insert(name);
         self->m_renderTargetDepthStencilImages.insert(tinystl::make_pair(name, container));
@@ -4452,10 +4510,12 @@ Effect::handleOffscreenRenderTargetSemantic(
         else {
             Vector2 scaleFactor(0);
             const AnnotationMap &annotations = parameter.m_annotations;
-            const Vector4 size(
-                self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor));
+            const Vector4 size(constrainMetalEffectRenderTargetSize(
+                self->determineImageSize(annotations, self->scaledViewportImageSize(Vector2(1)), scaleFactor),
+                scaleFactor));
             const sg_pixel_format format = self->determinePixelFormat(annotations, SG_PIXELFORMAT_RGBA8);
-            const nanoem_u8_t numMipLevels = self->determineMipLevels(annotations, size, 1);
+            const nanoem_u8_t numMipLevels =
+                constrainMetalEffectRenderTargetMipLevels(self->determineMipLevels(annotations, size, 1));
             AnnotationMap::const_iterator it;
             String description;
             Vector4 clearColor(Constants::kZeroV3, 1.0f);
@@ -4497,10 +4557,7 @@ Effect::handleOffscreenRenderTargetSemantic(
                 }
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
-            int sampleCount = enableAA ? project->sampleCount() : 1;
-            if (sg::is_backend_metal(sg::query_backend()) && sampleCount > 1) {
-                sampleCount = 1;
-            }
+            int sampleCount = constrainMetalEffectSampleCount(enableAA ? project->sampleCount() : 1);
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             self->m_offscreenRenderTargetOptions.insert(tinystl::make_pair(name, option));
             if (parameter.m_shared) {

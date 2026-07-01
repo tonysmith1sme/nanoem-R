@@ -221,8 +221,8 @@ RenderTargetColorImageContainer::resizeColorImageDescription(int width, int heig
     m_colorImageDescription.height = height;
     if (m_colorImageDescription.num_mipmaps > 1) {
         const Vector2 sizeF(width, height);
-        int maxMipLevels = glm::min(int(glm::log2(glm::max(sizeF.x, sizeF.y))), int(SG_MAX_MIPMAPS));
-        m_colorImageDescription.num_mipmaps = maxMipLevels;
+        const int maxMipLevels = glm::min(int(glm::log2(glm::max(sizeF.x, sizeF.y))), int(SG_MAX_MIPMAPS));
+        m_colorImageDescription.num_mipmaps = glm::min(m_colorImageDescription.num_mipmaps, maxMipLevels);
     }
 }
 
