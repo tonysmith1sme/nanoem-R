@@ -97,6 +97,7 @@ endif()
 
 # plugins
 get_property(_plugins GLOBAL PROPERTY NANOEM_PROPERTY_INSTALL_PLUGINS)
+get_property(ffmpeg_embed_libraries GLOBAL PROPERTY NANOEM_PROPERTY_INSTALL_FFMPEG_LIBS)
 if(NANOEM_ENABLE_STATIC_BUNDLE_PLUGIN)
   target_link_libraries(${NANOEM_EXECUTABLE_NAME} ${_plugins})
   if(${NANOEM_ENABLE_TEST_RUNNER_OSX})
@@ -115,6 +116,24 @@ else()
     add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                        COMMAND ${CMAKE_COMMAND} ARGS -E make_directory "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns"
                        COMMAND ${CMAKE_COMMAND} ARGS -E copy_if_different "$<TARGET_FILE:${_item}>" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/$<TARGET_FILE_NAME:${_item}>")
+    if("${_item}" STREQUAL "plugin_ffmpeg" AND ffmpeg_embed_libraries)
+      foreach(_dependency ${ffmpeg_embed_libraries})
+        get_filename_component(_dependency_name ${_dependency} NAME)
+        get_filename_component(_real_dependency ${_dependency} REALPATH)
+        get_filename_component(_real_dependency_directory ${_real_dependency} DIRECTORY)
+        get_filename_component(_real_dependency_name ${_real_dependency} NAME)
+        string(REGEX REPLACE "^([^.]*)\\.([0-9]+)\\..*\\.dylib$" "\\1.\\2.dylib" _real_dependency_major_name "${_real_dependency_name}")
+        set(_real_named_dependency "${_real_dependency_directory}/${_dependency_name}")
+        string(REPLACE "/install-root/lib" "/interm/${CMAKE_OSX_ARCHITECTURES}/install-root/lib" _intermediate_dependency_directory "${_real_dependency_directory}")
+        add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                           COMMAND install_name_tool ARGS -change "${_dependency}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib"
+                           COMMAND install_name_tool ARGS -change "${_real_dependency}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib"
+                           COMMAND install_name_tool ARGS -change "${_real_named_dependency}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib"
+                           COMMAND install_name_tool ARGS -change "${_real_dependency_directory}/${_real_dependency_major_name}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib"
+                           COMMAND install_name_tool ARGS -change "${_intermediate_dependency_directory}/${_real_dependency_major_name}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib"
+                           COMMAND install_name_tool ARGS -change "${_intermediate_dependency_directory}/${_real_dependency_name}" "@loader_path/../Frameworks/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
+      endforeach()
+    endif()
   endforeach()
 endif()
 
@@ -152,7 +171,6 @@ if(TARGET plugin_ffmpeg)
     endif()
   endforeach()
 endif()
-get_property(ffmpeg_embed_libraries GLOBAL PROPERTY NANOEM_PROPERTY_INSTALL_FFMPEG_LIBS)
 if(ffmpeg_embed_libraries)
   add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                      COMMAND ${CMAKE_COMMAND} ARGS -E make_directory "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks")
@@ -160,6 +178,7 @@ if(ffmpeg_embed_libraries)
     get_filename_component(_name ${_item} NAME)
     get_filename_component(_real_item ${_item} REALPATH)
     get_filename_component(_real_directory ${_real_item} DIRECTORY)
+    get_filename_component(_real_name ${_real_item} NAME)
     set(_real_named_item "${_real_directory}/${_name}")
     add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                        COMMAND ${CMAKE_COMMAND} ARGS -E copy_if_different "${_item}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks"
@@ -173,11 +192,18 @@ if(ffmpeg_embed_libraries)
       add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                          COMMAND install_name_tool ARGS -change "${_real_named_item}" "@loader_path/../Frameworks/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
     endif()
+    if(NOT "${_name}" STREQUAL "${_real_name}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_real_directory}/${_real_name}" "@loader_path/../Frameworks/${_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../PlugIns/plugin_ffmpeg.dylib")
+    endif()
     foreach(_dependency ${ffmpeg_embed_libraries})
       get_filename_component(_dependency_name ${_dependency} NAME)
       get_filename_component(_real_dependency ${_dependency} REALPATH)
       get_filename_component(_real_dependency_directory ${_real_dependency} DIRECTORY)
+      get_filename_component(_real_dependency_name ${_real_dependency} NAME)
+      string(REGEX REPLACE "^([^.]*)\\.([0-9]+)\\..*\\.dylib$" "\\1.\\2.dylib" _real_dependency_major_name "${_real_dependency_name}")
       set(_real_named_dependency "${_real_dependency_directory}/${_dependency_name}")
+      string(REPLACE "/install-root/lib" "/interm/${CMAKE_OSX_ARCHITECTURES}/install-root/lib" _intermediate_dependency_directory "${_real_dependency_directory}")
       add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                          COMMAND install_name_tool ARGS -change "${_dependency}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
       if(NOT "${_dependency}" STREQUAL "${_real_dependency}")
@@ -188,6 +214,16 @@ if(ffmpeg_embed_libraries)
         add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
                            COMMAND install_name_tool ARGS -change "${_real_named_dependency}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
       endif()
+      if(NOT "${_dependency_name}" STREQUAL "${_real_dependency_name}")
+        add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                           COMMAND install_name_tool ARGS -change "${_real_dependency_directory}/${_real_dependency_name}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      endif()
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_real_dependency_directory}/${_real_dependency_major_name}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_intermediate_dependency_directory}/${_real_dependency_major_name}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
+      add_custom_command(TARGET ${NANOEM_EXECUTABLE_NAME} POST_BUILD
+                         COMMAND install_name_tool ARGS -change "${_intermediate_dependency_directory}/${_real_dependency_name}" "@loader_path/${_dependency_name}" "$<TARGET_FILE_DIR:${NANOEM_EXECUTABLE_NAME}>/../Frameworks/${_name}")
     endforeach()
   endforeach()
 endif()

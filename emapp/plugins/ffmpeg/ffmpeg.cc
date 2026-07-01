@@ -32,6 +32,38 @@ namespace {
 
 using namespace nanoem::application::plugin;
 
+static int
+audioChannelCount(const AVCodecContext *codec)
+{
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+    return codec->ch_layout.nb_channels;
+#else
+    return codec->channels;
+#endif
+}
+
+static void
+setDefaultAudioChannelLayout(AVCodecContext *codec, int channels)
+{
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+    av_channel_layout_default(&codec->ch_layout, channels);
+#else
+    codec->channels = channels;
+    codec->channel_layout = av_get_default_channel_layout(channels);
+#endif
+}
+
+static void
+setAudioFrameChannelLayout(AVFrame *frame, const AVCodecParameters *parameters)
+{
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+    av_channel_layout_copy(&frame->ch_layout, &parameters->ch_layout);
+#else
+    frame->channel_layout = parameters->channel_layout;
+    frame->channels = parameters->channels;
+#endif
+}
+
 static void
 handleFFmpegLog(void *ptr, int level, const char *fmt, va_list vl)
 {
@@ -108,8 +140,7 @@ struct FFmpegEncoder {
             m_audioCodecContext = avcodec_alloc_context3(codec);
             m_audioCodecContext->sample_fmt = AV_SAMPLE_FMT_S16;
             m_audioCodecContext->sample_rate = std::max(m_numFrequency, kMinimumSampleRate);
-            m_audioCodecContext->channels = std::max(m_numChannels, kMinimumNumChannels);
-            m_audioCodecContext->channel_layout = av_get_default_channel_layout(m_audioCodecContext->channels);
+            setDefaultAudioChannelLayout(m_audioCodecContext, std::max(m_numChannels, kMinimumNumChannels));
             m_audioCodecContext->time_base.num = 1;
             m_audioCodecContext->time_base.den = m_audioCodecContext->sample_rate;
             if (m_audioCodecID == AV_CODEC_ID_AAC) {
@@ -142,9 +173,17 @@ struct FFmpegEncoder {
             if ((m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
                 m_audioCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             }
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+            AVChannelLayout inputChannelLayout;
+            av_channel_layout_default(&inputChannelLayout, m_numChannels);
+            swr_alloc_set_opts2(&m_resampleContext, &m_audioCodecContext->ch_layout, m_audioCodecContext->sample_fmt,
+                m_audioCodecContext->sample_rate, &inputChannelLayout, inputSampleFormat, m_numFrequency, 0, nullptr);
+            av_channel_layout_uninit(&inputChannelLayout);
+#else
             m_resampleContext = swr_alloc_set_opts(nullptr, m_audioCodecContext->channel_layout,
                 m_audioCodecContext->sample_fmt, m_audioCodecContext->sample_rate,
                 av_get_default_channel_layout(m_numChannels), inputSampleFormat, m_numFrequency, 0, nullptr);
+#endif
             swr_init(m_resampleContext);
         }
         int rc = avcodec_open2(m_audioCodecContext, codec, nullptr);
@@ -320,7 +359,6 @@ struct FFmpegEncoder {
                 status) &&
             wrapCall(avcodec_send_frame(m_audioCodecContext, output), status)) {
             AVPacket packet = {};
-            av_init_packet(&packet);
             if (wrapCall(avcodec_receive_packet(m_audioCodecContext, &packet), status)) {
                 av_packet_rescale_ts(&packet, m_audioCodecContext->time_base, m_audioStream->time_base);
                 packet.stream_index = m_audioStream->index;
@@ -354,7 +392,6 @@ struct FFmpegEncoder {
         sws_scale(m_scaleContext, dataPtr, lineSizePtr, 0, m_height, frame.m_opaque->data, frame.m_opaque->linesize);
         if (wrapCall(avcodec_send_frame(m_videoCodecContext, frame), status)) {
             AVPacket packet = {};
-            av_init_packet(&packet);
             if (wrapCall(avcodec_receive_packet(m_videoCodecContext, &packet), status)) {
                 av_packet_rescale_ts(&packet, m_videoCodecContext->time_base, m_videoStream->time_base);
                 packet.stream_index = m_videoStream->index;
@@ -374,11 +411,9 @@ struct FFmpegEncoder {
             makeFailureReason(av_write_trailer(m_formatContext), status);
         }
         if (m_audioCodecContext) {
-            makeFailureReason(avcodec_close(m_audioCodecContext), status);
             avcodec_free_context(&m_audioCodecContext);
         }
         if (m_videoCodecContext) {
-            makeFailureReason(avcodec_close(m_videoCodecContext), status);
             avcodec_free_context(&m_videoCodecContext);
         }
         if (m_resampleContext) {
@@ -473,7 +508,8 @@ struct FFmpegEncoder {
                 if (component->combo_box->selected_index < m_videoCodecs.size()) {
                     m_videoCodecID = m_videoCodecs[component->combo_box->selected_index].m_codecID;
                     m_videoPixelFormat = m_videoCodecs[component->combo_box->selected_index].m_pixelFormat;
-                    m_videoBitrateMode = m_videoCodecID == AV_CODEC_ID_H264 ? kVideoBitrateModeVBR : kVideoBitrateModeLossless;
+                    m_videoBitrateMode = m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_MPEG4 ?
+                        kVideoBitrateModeVBR : kVideoBitrateModeLossless;
                 }
             }
             else if (StringUtils::equals(id, kVideoBitrateModeComponentID)) {
@@ -502,10 +538,10 @@ struct FFmpegEncoder {
             else if (StringUtils::equals(id, kVideoPixelFormatComponentID)) {
                 switch (component->combo_box->selected_index) {
                 case 0:
-                    m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGR24 : AV_PIX_FMT_GBRP;
+                    m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGR24 : AV_PIX_FMT_YUV420P;
                     break;
                 case 1:
-                    m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGRA : AV_PIX_FMT_GBRAP;
+                    m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGRA : AV_PIX_FMT_YUV422P;
                     break;
                 case 2:
                     m_videoPixelFormat = AV_PIX_FMT_YUV420P;
@@ -567,11 +603,11 @@ struct FFmpegEncoder {
         if (hasEncoder(AV_CODEC_ID_H264)) {
             return AV_CODEC_ID_H264;
         }
-        else if (hasEncoder(AV_CODEC_ID_MPEG4)) {
-            return AV_CODEC_ID_MPEG4;
-        }
         else if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
             return AV_CODEC_ID_UTVIDEO;
+        }
+        else if (hasEncoder(AV_CODEC_ID_MPEG4)) {
+            return AV_CODEC_ID_MPEG4;
         }
         else {
             return AV_CODEC_ID_RAWVIDEO;
@@ -609,7 +645,7 @@ struct FFmpegEncoder {
             m_videoCodecs.push_back({ "原始视频", AV_CODEC_ID_RAWVIDEO, AV_PIX_FMT_BGR24 });
         }
         if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
-            m_videoCodecs.push_back({ "UT 视频编码", AV_CODEC_ID_UTVIDEO, AV_PIX_FMT_GBRP });
+                m_videoCodecs.push_back({ "UT 视频编码", AV_CODEC_ID_UTVIDEO, AV_PIX_FMT_GBRP });
         }
         if (hasEncoder(AV_CODEC_ID_H264)) {
             m_videoCodecs.push_back({ "H.264/AVC", AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P });
@@ -692,8 +728,7 @@ struct FFmpegEncoder {
             : m_opaque(av_frame_alloc())
         {
             m_opaque->format = parameters->format;
-            m_opaque->channel_layout = parameters->channel_layout;
-            m_opaque->channels = parameters->channels;
+            setAudioFrameChannelLayout(m_opaque, parameters);
             m_opaque->sample_rate = parameters->sample_rate;
             m_opaque->nb_samples = numSamplesPerFrame;
             m_opaque->pts = pts;
@@ -890,7 +925,7 @@ struct FFmpegDecoder {
             break;
         }
         case NANOEM_APPLICATION_PLUGIN_DECODER_AUDIO_FORMAT_NUM_CHANNELS: {
-            nanoem_u32_t channels = m_audioCodecContext ? nanoem_u32_t(m_audioCodecContext->channels) : 0;
+            nanoem_u32_t channels = m_audioCodecContext ? nanoem_u32_t(audioChannelCount(m_audioCodecContext)) : 0;
             Inline::assignOption(channels, value, size, status);
             break;
         }
@@ -1031,7 +1066,6 @@ struct FFmpegDecoder {
     decodeFrame(AVFormatContext *format, AVCodecContext *codec, int streamIndex, AVFrame *&frame, int &result)
     {
         AVPacket packet = {};
-        av_init_packet(&packet);
         while (true) {
             result = av_read_frame(format, &packet);
             if (result != 0) {
@@ -1061,8 +1095,9 @@ struct FFmpegDecoder {
     void
     closeAudio(nanoem_application_plugin_status_t *status)
     {
+        (void) status;
         if (m_audioCodecContext && m_audioStreamIndex >= 0) {
-            makeFailureReason(avcodec_close(m_audioCodecContext), status);
+            avcodec_free_context(&m_audioCodecContext);
             m_audioStreamIndex = -1;
         }
         avformat_close_input(&m_audioFormatContext);
@@ -1070,8 +1105,9 @@ struct FFmpegDecoder {
     void
     closeVideo(nanoem_application_plugin_status_t *status)
     {
+        (void) status;
         if (m_videoCodecContext && m_videoStreamIndex >= 0) {
-            makeFailureReason(avcodec_close(m_videoCodecContext), status);
+            avcodec_free_context(&m_videoCodecContext);
             m_videoStreamIndex = -1;
         }
         avformat_close_input(&m_videoFormatContext);
