@@ -15,21 +15,26 @@
 namespace nanoem {
 namespace macos {
 
-MetalVideoRecorder::MetalVideoRecorder(Project *projectPtr, id<MTLDevice> device)
+MetalVideoRecorder::MetalVideoRecorder(Project *projectPtr, id<MTLDevice> device, id<MTLCommandQueue> commandQueue)
     : BaseVideoRecorder(projectPtr)
     , m_device(device)
+    , m_commandQueue(commandQueue)
 {
     enableMetalCompatibility();
 }
 
 MetalVideoRecorder::~MetalVideoRecorder() noexcept
 {
+    m_pendingPixelBuffer = nullptr;
     m_texture = nil;
 }
 
 bool
 MetalVideoRecorder::capture(nanoem_frame_index_t frameIndex)
 {
+    if (m_pendingPixelBuffer) {
+        return appendPendingFrame();
+    }
     CVPixelBufferRef pixelBuffer = nullptr;
     IOSurfaceRef surface = nullptr;
     acquirePixelBuffer(&pixelBuffer, &surface);
@@ -50,28 +55,27 @@ MetalVideoRecorder::capture(nanoem_frame_index_t frameIndex)
         project()->setRenderPassName(m_videoFramePass, "@nanoem/MetalVideoRecorder/CapturePass");
         sg::PassBlock::IDrawQueue *drawQueue = project()->sharedBatchDrawQueue();
         blitPass(drawQueue, m_videoFramePass);
-        sg_pass_action pa = {};
-        struct CallbackArgument {
-            MetalVideoRecorder *m_recorder;
-            nanoem_frame_index_t m_frameIndex;
-            CVPixelBufferRef m_pixelBuffer;
-        };
-        CallbackArgument *argument = nanoem_new(CallbackArgument);
-        argument->m_recorder = this;
-        argument->m_frameIndex = frameIndex;
-        argument->m_pixelBuffer = pixelBuffer;
-        sg::PassBlock pb(drawQueue, m_videoFramePass, pa);
-        pb.registerCallback(
-            [](sg_pass, void *opaque) {
-                auto args = static_cast<CallbackArgument *>(opaque);
-                MetalVideoRecorder *self = args->m_recorder;
-                self->appendAudioSampleBuffer(args->m_frameIndex);
-                self->appendPixelBuffer(args->m_frameIndex, args->m_pixelBuffer);
-                nanoem_delete(args);
-            },
-            argument);
-        appended = true;
+        m_pendingPixelBuffer = pixelBuffer;
+        m_pendingFrameIndex = frameIndex;
+        m_pendingFrameSubmitted = false;
         SG_POP_GROUP();
+    }
+    return appended;
+}
+
+bool
+MetalVideoRecorder::appendPendingFrame()
+{
+    bool appended = false;
+    if (!m_pendingFrameSubmitted && m_commandQueue) {
+        id<MTLCommandBuffer> commandBuffer = [m_commandQueue commandBuffer];
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+        m_pendingFrameSubmitted = true;
+    }
+    if (appendAudioSampleBuffer(m_pendingFrameIndex) && appendPixelBuffer(m_pendingFrameIndex, m_pendingPixelBuffer)) {
+        m_pendingPixelBuffer = nullptr;
+        appended = true;
     }
     return appended;
 }

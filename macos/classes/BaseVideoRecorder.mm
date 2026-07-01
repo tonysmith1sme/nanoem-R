@@ -387,8 +387,8 @@ BaseVideoRecorder::acquirePixelBuffer(CVPixelBufferRef *pixelBufferPtr, IOSurfac
                 CVPixelBufferRelease(m_previousBuffer);
             }
             m_previousBuffer = pixelBuffer;
-            *pixelBufferPtr = pixelBuffer;
         }
+        *pixelBufferPtr = pixelBuffer;
     }
 }
 
@@ -505,7 +505,7 @@ BaseVideoRecorder::updateAllMSAAImages(int width, int height)
         m_receivePassDesc.depth_stencil_attachment.image = sg::make_image(&desc);
         sg::destroy_pass(m_receivePass);
         m_receivePass = sg::make_pass(&m_receivePassDesc);
-        m_project->setRenderPassName(m_videoFramePass, "@nanoem/BaseVideoRecorder/ReceiveMSAAPass");
+        m_project->setRenderPassName(m_receivePass, "@nanoem/BaseVideoRecorder/ReceiveMSAAPass");
         if (!m_blitterMSAA) {
             bool flipY = !sg::query_features().origin_top_left;
             m_blitterMSAA = nanoem_new(internal::BlitPass(m_project, flipY));
@@ -562,7 +562,7 @@ BaseVideoRecorder::setupAudioInput(Error &error)
         @try {
             m_audioWriterInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
                                                                 outputSettings:outputAudioSettings];
-            m_audioWriterInput.expectsMediaDataInRealTime = YES;
+            m_audioWriterInput.expectsMediaDataInRealTime = NO;
             [m_writer addInput:m_audioWriterInput];
             AudioStreamBasicDescription streamBasicDescription = {};
             streamBasicDescription.mSampleRate = m_audioFrequency.floatValue;
@@ -622,7 +622,7 @@ BaseVideoRecorder::setupVideoInput(int width, int height, Error &error)
         }
         m_videoWriterInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
                                                             outputSettings:outputVideoSettings];
-        m_videoWriterInput.expectsMediaDataInRealTime = YES;
+        m_videoWriterInput.expectsMediaDataInRealTime = NO;
         [m_writer addInput:m_videoWriterInput];
     } @catch (NSException *exception) {
         error = Error(exception.reason.UTF8String, nullptr, Error::kDomainTypeOS);
