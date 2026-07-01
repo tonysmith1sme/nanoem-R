@@ -453,8 +453,7 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
       endif()
       set(_build_flags "${_build_flags} ${_macos_ver_min_flags} ${_macos_arch_flags}")
     endif()
-      file(MAKE_DIRECTORY ${_build_path})
-      file(MAKE_DIRECTORY ${_build_path}/_build)
+    file(MAKE_DIRECTORY ${_build_path})
     if(${_cmake_build_type} STREQUAL "Debug")
       set(_build_flags "${_build_flags} -g -O0")
       set(_configure_flags --enable-debug --enable-tracing)
@@ -468,8 +467,8 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
       ${CMAKE_COMMAND} -E env
         CFLAGS=${_cflags}
         CXXFLAGS=${_cxxflags}
+        MACOSX_DEPLOYMENT_TARGET=${OSX_TARGET}
         ICU_DATA_FILTER_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/icu-data-filter.json
-      ${CMAKE_COMMAND} -E chdir ${_build_path}/_build
       ${_source_path_icu4c}/source/configure
         --prefix=${_build_path}/install-root
         ${_configure_flags}
@@ -485,9 +484,9 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
         --disable-layoutex
         --disable-tests
         --disable-samples
-      WORKING_DIRECTORY ${_build_path}/_build)
-    execute_process(COMMAND make clean WORKING_DIRECTORY ${_build_path}/_build)
-    execute_process(COMMAND make install ${_make_flags} WORKING_DIRECTORY ${_build_path}/_build)
+      WORKING_DIRECTORY ${_build_path})
+    execute_process(COMMAND make clean WORKING_DIRECTORY ${_build_path})
+    execute_process(COMMAND make install ${_make_flags} WORKING_DIRECTORY ${_build_path})
   endif()
 endfunction()
 
@@ -633,7 +632,6 @@ function(compile_all_repositories _generator _toolset_option _compiler _arch _co
     set(_macos_archs "${_arch}")
     if("${_arch}" STREQUAL "ub")
       set(_macos_archs "arm64\;x86_64")
-      set(OSX_TARGET "10.13")
     elseif("${_arch}" STREQUAL "arm64")
       set(OSX_TARGET "11.0")
     endif()
@@ -713,15 +711,14 @@ function(cleanup_all_repositories)
   endforeach()
 endfunction()
 
-find_program(NANOEM_MAKE_PROGRAM NAMES ninja ninja-build
-             HINTS /usr/local/bin /opt/homebrew/bin /opt/local/bin)
-mark_as_advanced(NANOEM_MAKE_PROGRAM)
-
 set(ARCH_LIST $ENV{NANOEM_TARGET_ARCHITECTURES})
 if(NOT ARCH_LIST)
   if(APPLE)
-    # ub = "arm64;x86_64"
-    set(ARCH_LIST "ub")
+    if("${CMAKE_HOST_SYSTEM_PROCESSOR}" MATCHES "^(arm64|aarch64)$")
+      set(ARCH_LIST "arm64")
+    else()
+      set(ARCH_LIST "x86_64")
+    endif()
   else()
     set(ARCH_LIST "x86_64")
   endif()
@@ -763,8 +760,6 @@ foreach(arch_item ${ARCH_LIST})
   set(make_program $ENV{NANOEM_MAKE_PROGRAM})
   if(make_program)
     set(toolset_option "-DCMAKE_MAKE_PROGRAM=${make_program}")
-  elseif(NANOEM_MAKE_PROGRAM)
-    set(toolset_option "-DCMAKE_MAKE_PROGRAM=${NANOEM_MAKE_PROGRAM}")
   endif()
   if(WIN32)
     # https://docs.microsoft.com/en-us/cpp/build/reference/utf-8-set-source-and-executable-character-sets-to-utf-8
