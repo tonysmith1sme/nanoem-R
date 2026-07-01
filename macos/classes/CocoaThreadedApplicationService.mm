@@ -1129,8 +1129,7 @@ CocoaThreadedApplicationService::menubarApplicationClient()
 bool
 CocoaThreadedApplicationService::hasVideoRecorder() const noexcept
 {
-    const sg_backend backend = sg::query_backend();
-    return backend == SG_BACKEND_METAL_MACOS || backend == SG_BACKEND_GLCORE33;
+    return false;
 }
 
 bool

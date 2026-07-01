@@ -15,6 +15,7 @@
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
+#include "libavutil/opt.h"
 #include "libavutil/audio_fifo.h"
 #include "libavutil/avutil.h"
 #include "libavutil/imgutils.h"
@@ -51,6 +52,9 @@ handleFFmpegLog(void *ptr, int level, const char *fmt, va_list vl)
 struct FFmpegEncoder {
     static const char kAudioCodecComponentID[];
     static const char kVideoCodecComponentID[];
+    static const char kVideoBitrateModeComponentID[];
+    static const char kVideoBitrateComponentID[];
+    static const char kVideoCRFComponentID[];
     static const char kVideoPixelFormatComponentID[];
     static const int kMinimumSampleRate;
     static const int kMinimumNumChannels;
@@ -67,6 +71,9 @@ struct FFmpegEncoder {
         , m_audioCodecID(AV_CODEC_ID_PCM_S16LE)
         , m_videoCodecID(AV_CODEC_ID_RAWVIDEO)
         , m_videoPixelFormat(AV_PIX_FMT_BGR24)
+        , m_videoBitrateMode(kVideoBitrateModeLossless)
+        , m_videoBitrateKbps(50000)
+        , m_videoCRF(18)
         , m_fps(0)
         , m_duration(0)
         , m_numFrequency(0)
@@ -88,6 +95,9 @@ struct FFmpegEncoder {
     openAudioCodec()
     {
         const AVCodec *codec = avcodec_find_encoder(m_audioCodecID);
+        if (!codec) {
+            return AVERROR_ENCODER_NOT_FOUND;
+        }
         if ((m_audioStream = avformat_new_stream(m_formatContext, codec)) != nullptr) {
             m_audioCodecContext = avcodec_alloc_context3(codec);
             m_audioCodecContext->sample_fmt = AV_SAMPLE_FMT_S16;
@@ -96,6 +106,10 @@ struct FFmpegEncoder {
             m_audioCodecContext->channel_layout = av_get_default_channel_layout(m_audioCodecContext->channels);
             m_audioCodecContext->time_base.num = 1;
             m_audioCodecContext->time_base.den = m_audioCodecContext->sample_rate;
+            if (m_audioCodecID == AV_CODEC_ID_AAC) {
+                m_audioCodecContext->sample_fmt = codec && codec->sample_fmts ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+                m_audioCodecContext->bit_rate = 320000;
+            }
             AVSampleFormat inputSampleFormat;
             switch (m_numBits) {
             case 32: {
@@ -137,6 +151,9 @@ struct FFmpegEncoder {
     openVideoCodec()
     {
         const AVCodec *codec = avcodec_find_encoder(m_videoCodecID);
+        if (!codec) {
+            return AVERROR_ENCODER_NOT_FOUND;
+        }
         if ((m_videoStream = avformat_new_stream(m_formatContext, codec)) != nullptr) {
             m_videoCodecContext = avcodec_alloc_context3(codec);
             m_videoCodecContext->width = static_cast<int>(m_width);
@@ -144,6 +161,11 @@ struct FFmpegEncoder {
             m_videoCodecContext->pix_fmt = m_videoPixelFormat;
             m_videoCodecContext->time_base.num = 1;
             m_videoCodecContext->time_base.den = static_cast<int>(m_fps);
+            if (m_videoCodecID == AV_CODEC_ID_H264) {
+                m_videoCodecContext->gop_size = static_cast<int>(std::max(m_fps, nanoem_u32_t(1)) * 2);
+                m_videoCodecContext->max_b_frames = 2;
+                applyVideoBitrateOptions();
+            }
             if ((m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
                 m_videoCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             }
@@ -151,7 +173,17 @@ struct FFmpegEncoder {
             m_scaleContext = sws_getContext(m_width, m_height, sourcePixelFormat, m_width, m_height,
                 m_videoCodecContext->pix_fmt, SWS_BICUBIC, nullptr, nullptr, nullptr);
         }
-        int rc = avcodec_open2(m_videoCodecContext, codec, nullptr);
+        AVDictionary *options = nullptr;
+        if (m_videoCodecID == AV_CODEC_ID_H264) {
+            av_dict_set(&options, "preset", "slow", 0);
+            if (m_videoBitrateMode == kVideoBitrateModeVBR) {
+                char crf[16];
+                snprintf(crf, sizeof(crf), "%d", m_videoCRF);
+                av_dict_set(&options, "crf", crf, 0);
+            }
+        }
+        int rc = avcodec_open2(m_videoCodecContext, codec, &options);
+        av_dict_free(&options);
         if (rc == 0 && m_videoStream) {
             rc = avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecContext);
         }
@@ -358,8 +390,9 @@ struct FFmpegEncoder {
     void
     loadUIWindowLayout(nanoem_application_plugin_status_t *status)
     {
-        const char *audioCodecs[] = { "PCM" };
-        const char *videoCodecs[] = { "Raw Video", "UT Codec Video" };
+        const char *audioCodecs[] = { "PCM", "AAC" };
+        const char *videoCodecs[] = { "Raw Video", "UT Codec Video", "H.264/AVC" };
+        const char *videoBitrateModes[] = { "Lossless/Codec Default", "VBR (CRF)", "CBR" };
         const char *videoPixelFormats[] = {
             "RGB",
             "RGBA",
@@ -371,6 +404,11 @@ struct FFmpegEncoder {
         const nanoem_u32_t numVideoCodecs = sizeof(videoCodecs) / sizeof(videoCodecs[0]);
         m_components.push_back(createLabel("Video Codec"));
         m_components.push_back(createCombobox(kVideoCodecComponentID, videoCodecs, numVideoCodecs, 0));
+        const nanoem_u32_t numVideoBitrateModes = sizeof(videoBitrateModes) / sizeof(videoBitrateModes[0]);
+        m_components.push_back(createLabel("Video Bitrate Mode"));
+        m_components.push_back(createCombobox(kVideoBitrateModeComponentID, videoBitrateModes, numVideoBitrateModes, 0));
+        m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "Video Bitrate (kbps)", m_videoBitrateKbps, 1000, 10000));
+        m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR Quality (CRF)", m_videoCRF, 0, 51));
         const nanoem_u32_t numVideoPixelFormats = sizeof(videoPixelFormats) / sizeof(videoPixelFormats[0]);
         m_components.push_back(createLabel("Video Pixel Format"));
         m_components.push_back(
@@ -421,6 +459,9 @@ struct FFmpegEncoder {
                 case 0:
                     m_audioCodecID = AV_CODEC_ID_PCM_S16LE;
                     break;
+                case 1:
+                    m_audioCodecID = AV_CODEC_ID_AAC;
+                    break;
                 }
             }
             else if (StringUtils::equals(id, kVideoCodecComponentID)) {
@@ -433,7 +474,34 @@ struct FFmpegEncoder {
                     m_videoPixelFormat = AV_PIX_FMT_GBRP;
                     m_videoCodecID = AV_CODEC_ID_UTVIDEO;
                     break;
+                case 2:
+                    m_videoPixelFormat = AV_PIX_FMT_YUV420P;
+                    m_videoCodecID = AV_CODEC_ID_H264;
+                    break;
                 }
+            }
+            else if (StringUtils::equals(id, kVideoBitrateModeComponentID)) {
+                switch (component->combo_box->selected_index) {
+                case 0:
+                    m_videoBitrateMode = kVideoBitrateModeLossless;
+                    break;
+                case 1:
+                    m_videoBitrateMode = kVideoBitrateModeVBR;
+                    break;
+                case 2:
+                    m_videoBitrateMode = kVideoBitrateModeCBR;
+                    break;
+                }
+            }
+            else if (StringUtils::equals(id, kVideoBitrateComponentID)) {
+                m_videoBitrateKbps = component->input_scalar_n && component->input_scalar_n->value.data ?
+                    *reinterpret_cast<nanoem_i32_t *>(component->input_scalar_n->value.data) : m_videoBitrateKbps;
+                m_videoBitrateKbps = std::min(std::max(m_videoBitrateKbps, 1000), 300000);
+            }
+            else if (StringUtils::equals(id, kVideoCRFComponentID)) {
+                m_videoCRF = component->slider_scalar_n && component->slider_scalar_n->value.data ?
+                    *reinterpret_cast<nanoem_i32_t *>(component->slider_scalar_n->value.data) : m_videoCRF;
+                m_videoCRF = std::min(std::max(m_videoCRF, 0), 51);
             }
             else if (StringUtils::equals(id, kVideoPixelFormatComponentID)) {
                 switch (component->combo_box->selected_index) {
@@ -466,6 +534,27 @@ struct FFmpegEncoder {
     recoverySuggestion() const
     {
         return nullptr;
+    }
+
+    enum VideoBitrateMode {
+        kVideoBitrateModeLossless,
+        kVideoBitrateModeVBR,
+        kVideoBitrateModeCBR,
+    };
+
+    void
+    applyVideoBitrateOptions()
+    {
+        if (m_videoBitrateMode == kVideoBitrateModeCBR) {
+            const int64_t bitrate = int64_t(m_videoBitrateKbps) * 1000;
+            m_videoCodecContext->bit_rate = bitrate;
+            m_videoCodecContext->rc_min_rate = bitrate;
+            m_videoCodecContext->rc_max_rate = bitrate;
+            m_videoCodecContext->rc_buffer_size = int(bitrate * 2);
+        }
+        else if (m_videoBitrateMode == kVideoBitrateModeVBR) {
+            m_videoCodecContext->bit_rate = int64_t(m_videoBitrateKbps) * 1000;
+        }
     }
 
     int
@@ -551,6 +640,9 @@ struct FFmpegEncoder {
     AVCodecID m_audioCodecID;
     AVCodecID m_videoCodecID;
     AVPixelFormat m_videoPixelFormat;
+    VideoBitrateMode m_videoBitrateMode;
+    int m_videoBitrateKbps;
+    int m_videoCRF;
     nanoem_u32_t m_fps;
     nanoem_u32_t m_duration;
     int m_numFrequency;
@@ -563,6 +655,9 @@ struct FFmpegEncoder {
 };
 const char FFmpegEncoder::kAudioCodecComponentID[] = "ffmpeg.audio-codec";
 const char FFmpegEncoder::kVideoCodecComponentID[] = "ffmpeg.video-codec";
+const char FFmpegEncoder::kVideoBitrateModeComponentID[] = "ffmpeg.video-bitrate-mode";
+const char FFmpegEncoder::kVideoBitrateComponentID[] = "ffmpeg.video-bitrate";
+const char FFmpegEncoder::kVideoCRFComponentID[] = "ffmpeg.video-crf";
 const char FFmpegEncoder::kVideoPixelFormatComponentID[] = "ffmpeg.video-pixel-format";
 const int FFmpegEncoder::kMinimumSampleRate = 44100;
 const int FFmpegEncoder::kMinimumNumChannels = 2;
@@ -1000,7 +1095,7 @@ const char *const *APIENTRY
 nanoemApplicationPluginEncoderGetAllAvailableVideoFormatExtensions(
     const nanoem_application_plugin_encoder_t * /* encoder */, nanoem_u32_t *length)
 {
-    static const char *kFormatExtensions[] = { "avi" /* , "mkv" */ };
+    static const char *kFormatExtensions[] = { "avi", "mp4", "mkv" };
     *length = sizeof(kFormatExtensions) / sizeof(kFormatExtensions[0]);
     return kFormatExtensions;
 }
