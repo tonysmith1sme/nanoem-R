@@ -30,7 +30,7 @@ public:
     void create(Effect *effect);
     void create(Effect *effect, const Vector2UI16 &size, const Vector2 &scaleFactor, int numMipLevels, int sampleCount,
         sg_pixel_format format);
-    void resizeWithScale(const Vector2UI16 &size);
+    void resizeWithScale(const Vector2UI16 &size, int maxImageSize);
     void setSampleCount(int value);
     void invalidate(Effect *effect);
     void setImageDescription(const sg_image_desc &value);

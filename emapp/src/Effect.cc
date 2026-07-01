@@ -2390,7 +2390,8 @@ Effect::resizeAllRenderTargetImages(
 {
     SG_PUSH_GROUPF("Effect::resizeAllRenderTargetImages(name=%s)", nameConstString());
     bool enableAA = RenderTargetColorImageContainer::kAntialiasEnabled;
-    const int sampleCount = enableAA ? m_project->sampleCount() : 1;
+    const int sampleCount = constrainMetalEffectSampleCount(enableAA ? m_project->sampleCount() : 1);
+    const int maxImageSize = isMetalEffectResourceConstrained() ? metalEffectMaxRenderTargetSize() : 0;
     for (DrawableNamedRenderTargetColorImageContainerMap::iterator it = m_drawableNamedRenderTargetColorImages.begin(),
                                                                    end = m_drawableNamedRenderTargetColorImages.end();
          it != end; ++it) {
@@ -2398,7 +2399,7 @@ Effect::resizeAllRenderTargetImages(
         for (NamedRenderTargetColorImageContainerMap::iterator it2 = containers.begin(), end2 = containers.end();
              it2 != end2; ++it2) {
             RenderTargetColorImageContainer *container = it2->second;
-            container->resizeWithScale(size);
+            container->resizeWithScale(size, maxImageSize);
             container->setSampleCount(sampleCount);
             container->invalidate(this);
             if (container->isSharedTexture()) {
@@ -2410,7 +2411,7 @@ Effect::resizeAllRenderTargetImages(
                                                              end = m_renderTargetDepthStencilImages.end();
          it != end; ++it) {
         RenderTargetDepthStencilImageContainer *container = it->second;
-        container->resizeWithScale(size);
+        container->resizeWithScale(size, maxImageSize);
         container->setSampleCount(sampleCount);
         container->invalidate(this);
     }
@@ -2418,7 +2419,7 @@ Effect::resizeAllRenderTargetImages(
                                                           end = m_offscreenRenderTargetImages.end();
          it != end; ++it) {
         OffscreenRenderTargetImageContainer *container = it->second;
-        container->resizeWithScale(this, size);
+        container->resizeWithScale(this, size, maxImageSize);
         if (container->isSharedTexture()) {
             sharedOffscreenImageNames.insert(container->nameConstString());
         }

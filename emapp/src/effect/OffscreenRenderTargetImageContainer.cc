@@ -106,12 +106,18 @@ OffscreenRenderTargetImageContainer::create(Effect *effect, const Vector2UI16 &s
 }
 
 void
-OffscreenRenderTargetImageContainer::resizeWithScale(Effect *effect, const Vector2UI16 &size)
+OffscreenRenderTargetImageContainer::resizeWithScale(Effect *effect, const Vector2UI16 &size, int maxImageSize)
 {
     /* also resize color image to prevent duplicated "leak" create call */
     const Vector2 s(scaleFactor());
     if (s.x > 0 && s.y > 0) {
-        const Vector2SI32 newSize(Vector2(size) * s);
+        Vector2SI32 newSize(Vector2(size) * s);
+        const nanoem_f32_t currentMaxSize = nanoem_f32_t(glm::max(newSize.x, newSize.y));
+        const nanoem_f32_t ratio = maxImageSize > 0 && currentMaxSize > maxImageSize ?
+            nanoem_f32_t(maxImageSize) / currentMaxSize :
+            1.0f;
+        newSize.x = Inline::saturateInt32(glm::max(Inline::roundInt32(newSize.x * ratio), nanoem_u32_t(1)));
+        newSize.y = Inline::saturateInt32(glm::max(Inline::roundInt32(newSize.y * ratio), nanoem_u32_t(1)));
         resizeColorImageDescription(newSize.x, newSize.y);
         m_depthStencilImageDescription.width = newSize.x;
         m_depthStencilImageDescription.height = newSize.y;

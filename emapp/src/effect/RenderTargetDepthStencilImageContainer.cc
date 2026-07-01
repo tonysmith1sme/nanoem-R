@@ -55,9 +55,7 @@ RenderTargetDepthStencilImageContainer::findImage(const Effect *effect, const sg
     hash.begin(0);
     hash.add(colorImageDescription.width);
     hash.add(colorImageDescription.height);
-    hash.add(colorImageDescription.pixel_format);
     hash.add(colorImageDescription.sample_count);
-    hash.add(colorImageDescription.num_mipmaps);
     nanoem_u32_t key = hash.end();
     DepthStencilImageMap::const_iterator it = m_allDepthStencilImages.find(key);
     sg_image image;
@@ -188,12 +186,18 @@ RenderTargetDepthStencilImageContainer::create(Effect *effect, const Vector2UI16
 }
 
 void
-RenderTargetDepthStencilImageContainer::resizeWithScale(const Vector2UI16 &size)
+RenderTargetDepthStencilImageContainer::resizeWithScale(const Vector2UI16 &size, int maxImageSize)
 {
     if (m_scaleFactor.x > 0 && m_scaleFactor.y > 0) {
-        const Vector2SI32 newSize(Vector2(size) * m_scaleFactor);
-        m_depthStencilImageDescription.width = newSize.x;
-        m_depthStencilImageDescription.height = newSize.y;
+        Vector2SI32 newSize(Vector2(size) * m_scaleFactor);
+        const nanoem_f32_t currentMaxSize = nanoem_f32_t(glm::max(newSize.x, newSize.y));
+        const nanoem_f32_t ratio = maxImageSize > 0 && currentMaxSize > maxImageSize ?
+            nanoem_f32_t(maxImageSize) / currentMaxSize :
+            1.0f;
+        m_depthStencilImageDescription.width = Inline::saturateInt32(
+            glm::max(Inline::roundInt32(newSize.x * ratio), nanoem_u32_t(1)));
+        m_depthStencilImageDescription.height = Inline::saturateInt32(
+            glm::max(Inline::roundInt32(newSize.y * ratio), nanoem_u32_t(1)));
         m_dirty = true;
     }
 }

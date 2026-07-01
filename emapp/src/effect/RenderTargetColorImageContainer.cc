@@ -85,10 +85,16 @@ RenderTargetColorImageContainer::create(Effect *effect, const Vector2UI16 &size,
 }
 
 void
-RenderTargetColorImageContainer::resizeWithScale(const Vector2UI16 &size)
+RenderTargetColorImageContainer::resizeWithScale(const Vector2UI16 &size, int maxImageSize)
 {
     if (m_scaleFactor.x > 0 && m_scaleFactor.y > 0) {
-        const Vector2SI32 newSize(Vector2(size) * m_scaleFactor);
+        Vector2SI32 newSize(Vector2(size) * m_scaleFactor);
+        const nanoem_f32_t currentMaxSize = nanoem_f32_t(glm::max(newSize.x, newSize.y));
+        const nanoem_f32_t ratio = maxImageSize > 0 && currentMaxSize > maxImageSize ?
+            nanoem_f32_t(maxImageSize) / currentMaxSize :
+            1.0f;
+        newSize.x = Inline::saturateInt32(glm::max(Inline::roundInt32(newSize.x * ratio), nanoem_u32_t(1)));
+        newSize.y = Inline::saturateInt32(glm::max(Inline::roundInt32(newSize.y * ratio), nanoem_u32_t(1)));
         resizeColorImageDescription(newSize.x, newSize.y);
         m_dirty = true;
     }

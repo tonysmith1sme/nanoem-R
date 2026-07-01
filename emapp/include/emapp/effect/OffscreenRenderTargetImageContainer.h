@@ -25,7 +25,7 @@ public:
     void create(Effect *effect);
     void create(Effect *effect, const Vector2UI16 &size, const Vector2 &scaleFactor, int numMipLevels, int sampleCount,
         sg_pixel_format format);
-    void resizeWithScale(Effect *effect, const Vector2UI16 &size);
+    void resizeWithScale(Effect *effect, const Vector2UI16 &size, int maxImageSize);
     void destroy(Effect *effect) NANOEM_DECL_NOEXCEPT;
 
     const sg_image_desc &depthStencilImageDescription() const NANOEM_DECL_NOEXCEPT;
