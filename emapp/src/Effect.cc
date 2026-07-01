@@ -138,6 +138,14 @@ metalEffectMaxRenderTargetMipmaps() NANOEM_DECL_NOEXCEPT
     return glm::clamp(numMipmaps, 1, int(SG_MAX_MIPMAPS));
 }
 
+static int
+metalEffectMaxTextureMipmaps() NANOEM_DECL_NOEXCEPT
+{
+    const char *value = getenv("NANOEM_EFFECT_METAL_MAX_TEXTURE_MIPMAPS");
+    const int numMipmaps = value ? atoi(value) : 1;
+    return glm::clamp(numMipmaps, 1, int(SG_MAX_MIPMAPS));
+}
+
 static Vector4
 constrainMetalEffectRenderTargetSize(const Vector4 &value, Vector2 &scaleFactor) NANOEM_DECL_NOEXCEPT
 {
@@ -169,6 +177,19 @@ static int
 constrainMetalEffectSampleCount(int value) NANOEM_DECL_NOEXCEPT
 {
     return isMetalEffectResourceConstrained() ? 1 : value;
+}
+
+static void
+constrainMetalEffectTextureMipLevels(sg_image_desc &desc) NANOEM_DECL_NOEXCEPT
+{
+    if (isMetalEffectResourceConstrained() && desc.num_mipmaps > 1) {
+        const int numMipmaps = glm::min(desc.num_mipmaps, metalEffectMaxTextureMipmaps());
+        for (int i = numMipmaps; i < desc.num_mipmaps; i++) {
+            desc.data.subimage[0][i].ptr = nullptr;
+            desc.data.subimage[0][i].size = 0;
+        }
+        desc.num_mipmaps = numMipmaps;
+    }
 }
 
 static sg_pixel_format
@@ -4867,8 +4888,10 @@ Effect::createImageResourceParameter(
     desc.pixel_format = determinePixelFormat(annotations, defaultPixelFormat);
     desc.type = determineImageType(annotations, parameter.m_type);
     if (desc.num_mipmaps == 0) {
-        desc.num_mipmaps = determineMipLevels(annotations, size, SG_MAX_MIPMAPS);
+        desc.num_mipmaps = determineMipLevels(
+            annotations, size, isMetalEffectResourceConstrained() ? 1 : int(SG_MAX_MIPMAPS));
     }
+    constrainMetalEffectTextureMipLevels(desc);
     return ImageResourceParameter(parameter.m_name, fileURI, filename, desc, parameter.m_shared);
 }
 
@@ -5855,6 +5878,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
         newParameter.m_desc.width = desc.width;
         newParameter.m_desc.height = desc.height;
         newParameter.m_desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
+        constrainMetalEffectTextureMipLevels(newParameter.m_desc);
         createImageResource(data.ptr, data.size, newParameter);
         ImageLoader::releaseDecodedImageWithSTB(&decodedImagePtr);
     }
@@ -5868,6 +5892,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
             if (image::DDS *dds = ImageLoader::decodeDDS(&reader, error)) {
                 dds->setImageDescription(desc);
                 desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
+                constrainMetalEffectTextureMipLevels(desc);
                 sg_image image = sg::make_image(&desc);
                 nanoem_delete(dds);
                 nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
@@ -5881,6 +5906,7 @@ Effect::decodeImageData(const ByteArray &bytes, const ImageResourceParameter &pa
         if (image::PFM *pfm = ImageLoader::decodePFM(bytes, error)) {
             pfm->setImageDescription(desc);
             desc.pixel_format = resolveTexturePixelFormat(desc.pixel_format, parameter.m_desc.pixel_format);
+            constrainMetalEffectTextureMipLevels(desc);
             sg_image image = sg::make_image(&desc);
             nanoem_delete(pfm);
             nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
