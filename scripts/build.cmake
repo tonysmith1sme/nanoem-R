@@ -453,7 +453,8 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
       endif()
       set(_build_flags "${_build_flags} ${_macos_ver_min_flags} ${_macos_arch_flags}")
     endif()
-    file(MAKE_DIRECTORY ${_build_path})
+      file(MAKE_DIRECTORY ${_build_path})
+      file(MAKE_DIRECTORY ${_build_path}/_build)
     if(${_cmake_build_type} STREQUAL "Debug")
       set(_build_flags "${_build_flags} -g -O0")
       set(_configure_flags --enable-debug --enable-tracing)
@@ -468,6 +469,7 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
         CFLAGS=${_cflags}
         CXXFLAGS=${_cxxflags}
         ICU_DATA_FILTER_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/icu-data-filter.json
+      ${CMAKE_COMMAND} -E chdir ${_build_path}/_build
       ${_source_path_icu4c}/source/configure
         --prefix=${_build_path}/install-root
         ${_configure_flags}
@@ -483,9 +485,9 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
         --disable-layoutex
         --disable-tests
         --disable-samples
-      WORKING_DIRECTORY ${_build_path})
-    execute_process(COMMAND make clean WORKING_DIRECTORY ${_build_path})
-    execute_process(COMMAND make install ${_make_flags} WORKING_DIRECTORY ${_build_path})
+      WORKING_DIRECTORY ${_build_path}/_build)
+    execute_process(COMMAND make clean WORKING_DIRECTORY ${_build_path}/_build)
+    execute_process(COMMAND make install ${_make_flags} WORKING_DIRECTORY ${_build_path}/_build)
   endif()
 endfunction()
 

@@ -122,6 +122,9 @@ elseif(NANOEM_ENABLE_ICU)
                                     $<$<NOT:$<CONFIG:DEBUG>>:${ICU4C_I18N_LIBRARY_RELEASE}>
                                     $<$<NOT:$<CONFIG:DEBUG>>:${ICU4C_UC_LIBRARY_RELEASE}>
                                     $<$<NOT:$<CONFIG:DEBUG>>:${ICU4C_DATA_LIBRARY_RELEASE}>)
+  if(APPLE)
+    list(APPEND NANOEM_LINK_LIBRARIES "-framework CoreFoundation" "-framework Foundation")
+  endif()
   message(STATUS "[nanoem] ICU unicode string conversion is enabled")
 elseif(WIN32)
   list(APPEND NANOEM_COMPILE_DEFINITIONS NANOEM_ENABLE_MBWC WIN32_LEAN_AND_MEAN VC_EXTRALEAN NOMINMAX)
