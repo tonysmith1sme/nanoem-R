@@ -100,6 +100,7 @@ struct FFmpegEncoder {
         , m_videoCodecContext(nullptr)
         , m_resampleContext(nullptr)
         , m_scaleContext(nullptr)
+        , m_audioFifo(nullptr)
         , m_tempAudioBuffer(nullptr)
         , m_audioCodecID(defaultAudioCodecID())
         , m_videoCodecID(defaultVideoCodecID())
@@ -188,6 +189,13 @@ struct FFmpegEncoder {
             swr_init(m_resampleContext);
         }
         int rc = avcodec_open2(m_audioCodecContext, codec, nullptr);
+        if (rc == 0 && m_audioCodecContext->frame_size > 0) {
+            m_audioFifo = av_audio_fifo_alloc(
+                m_audioCodecContext->sample_fmt, audioChannelCount(m_audioCodecContext), m_audioCodecContext->frame_size);
+            if (!m_audioFifo) {
+                rc = AVERROR(ENOMEM);
+            }
+        }
         if (rc == 0 && m_audioStream) {
             rc = avcodec_parameters_from_context(m_audioStream->codecpar, m_audioCodecContext);
         }
@@ -212,6 +220,7 @@ struct FFmpegEncoder {
             m_videoCodecContext->width = static_cast<int>(m_width);
             m_videoCodecContext->height = static_cast<int>(m_height);
             m_videoCodecContext->pix_fmt = m_videoPixelFormat;
+            m_videoCodecContext->color_range = AVCOL_RANGE_MPEG;
             m_videoCodecContext->time_base.num = 1;
             m_videoCodecContext->time_base.den = static_cast<int>(m_fps);
             m_videoStream->time_base = m_videoCodecContext->time_base;
@@ -358,11 +367,16 @@ struct FFmpegEncoder {
         }
         if (wrapCall(swr_convert(
                          m_resampleContext, &output.m_opaque->data[0], outputSampleCount, &dataPtr, inputSampleCount),
-                status) &&
-            wrapCall(avcodec_send_frame(m_audioCodecContext, output), status)) {
-            drainAudioPackets(status);
-            if (status && *status == NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
-                m_nextAudioPTS += outputSampleCount;
+                status)) {
+            if (m_audioFifo) {
+                writeAudioSamples(output, outputSampleCount, status);
+                encodeAudioFifo(false, status);
+            }
+            else if (wrapCall(avcodec_send_frame(m_audioCodecContext, output), status)) {
+                drainAudioPackets(status);
+                if (status && *status == NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
+                    m_nextAudioPTS += outputSampleCount;
+                }
             }
         }
     }
@@ -412,6 +426,10 @@ struct FFmpegEncoder {
         if (m_resampleContext) {
             swr_close(m_resampleContext);
             swr_free(&m_resampleContext);
+        }
+        if (m_audioFifo) {
+            av_audio_fifo_free(m_audioFifo);
+            m_audioFifo = nullptr;
         }
         if (m_scaleContext) {
             sws_freeContext(m_scaleContext);
@@ -716,6 +734,47 @@ struct FFmpegEncoder {
         return makeFailureReason(rc, status) >= 0;
     }
     void
+    writeAudioSamples(AVFrame *frame, int numSamples, nanoem_application_plugin_status_t *status)
+    {
+        int rc = av_audio_fifo_realloc(m_audioFifo, av_audio_fifo_size(m_audioFifo) + numSamples);
+        if (wrapCall(rc, status)) {
+            rc = av_audio_fifo_write(m_audioFifo, reinterpret_cast<void **>(frame->extended_data), numSamples);
+            if (wrapCall(rc, status) && rc != numSamples) {
+                makeFailureReason(AVERROR(EIO), status);
+            }
+        }
+    }
+    void
+    encodeAudioFifo(bool flush, nanoem_application_plugin_status_t *status)
+    {
+        if (!m_audioFifo || !m_audioCodecContext || !m_audioStream) {
+            return;
+        }
+        const int frameSize = std::max(m_audioCodecContext->frame_size, 1);
+        while (av_audio_fifo_size(m_audioFifo) >= frameSize || (flush && av_audio_fifo_size(m_audioFifo) > 0)) {
+            const int numSamples = std::min(av_audio_fifo_size(m_audioFifo), frameSize);
+            ScopedAudioFrame output(m_audioStream->codecpar, numSamples, m_nextAudioPTS);
+            if (!wrapCall(av_frame_get_buffer(output, 0), status) || !wrapCall(av_frame_make_writable(output), status)) {
+                break;
+            }
+            int rc = av_audio_fifo_read(m_audioFifo, reinterpret_cast<void **>(output.m_opaque->extended_data), numSamples);
+            if (!wrapCall(rc, status) || rc != numSamples) {
+                if (rc >= 0 && rc != numSamples) {
+                    makeFailureReason(AVERROR(EIO), status);
+                }
+                break;
+            }
+            if (!wrapCall(avcodec_send_frame(m_audioCodecContext, output), status)) {
+                break;
+            }
+            drainAudioPackets(status);
+            if (status && *status != NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
+                break;
+            }
+            m_nextAudioPTS += numSamples;
+        }
+    }
+    void
     drainAudioPackets(nanoem_application_plugin_status_t *status)
     {
         drainPackets(m_audioCodecContext, m_audioStream, status);
@@ -750,6 +809,7 @@ struct FFmpegEncoder {
     flushEncoders(nanoem_application_plugin_status_t *status)
     {
         if (m_audioCodecContext) {
+            encodeAudioFifo(true, status);
             if (wrapCall(avcodec_send_frame(m_audioCodecContext, nullptr), status)) {
                 drainAudioPackets(status);
             }
@@ -823,6 +883,7 @@ struct FFmpegEncoder {
     AVCodecContext *m_videoCodecContext;
     SwrContext *m_resampleContext;
     SwsContext *m_scaleContext;
+    AVAudioFifo *m_audioFifo;
     nanoem_f32_t *m_tempAudioBuffer;
     AVCodecID m_audioCodecID;
     AVCodecID m_videoCodecID;
