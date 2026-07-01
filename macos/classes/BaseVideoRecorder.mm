@@ -562,7 +562,7 @@ BaseVideoRecorder::setupAudioInput(Error &error)
         @try {
             m_audioWriterInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
                                                                 outputSettings:outputAudioSettings];
-            m_audioWriterInput.expectsMediaDataInRealTime = NO;
+            m_audioWriterInput.expectsMediaDataInRealTime = YES;
             [m_writer addInput:m_audioWriterInput];
             AudioStreamBasicDescription streamBasicDescription = {};
             streamBasicDescription.mSampleRate = m_audioFrequency.floatValue;
@@ -622,7 +622,7 @@ BaseVideoRecorder::setupVideoInput(int width, int height, Error &error)
         }
         m_videoWriterInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
                                                             outputSettings:outputVideoSettings];
-        m_videoWriterInput.expectsMediaDataInRealTime = NO;
+        m_videoWriterInput.expectsMediaDataInRealTime = YES;
         [m_writer addInput:m_videoWriterInput];
     } @catch (NSException *exception) {
         error = Error(exception.reason.UTF8String, nullptr, Error::kDomainTypeOS);

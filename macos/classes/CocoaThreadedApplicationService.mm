@@ -1104,14 +1104,7 @@ CocoaThreadedApplicationService::createVideoRecorder()
     const sg_backend backend = sg::query_backend();
     if (backend == SG_BACKEND_METAL_MACOS) {
         id<MTLDevice> device = (__bridge id<MTLDevice>) m_nativeDevice;
-        if (!m_commandQueue) {
-            typedef void *(*PFN_sgx_mtl_cmd_queue)(void);
-            if (auto sgx_mtl_cmd_queue =
-                    reinterpret_cast<PFN_sgx_mtl_cmd_queue>(resolveDllProcAddress("sgx_mtl_cmd_queue"))) {
-                m_commandQueue = (__bridge id<MTLCommandQueue>) sgx_mtl_cmd_queue();
-            }
-        }
-        recorder = nanoem_new(MetalVideoRecorder(project, device, m_commandQueue));
+        recorder = nanoem_new(MetalVideoRecorder(project, device));
     }
     else if (backend == SG_BACKEND_GLCORE33) {
         NSOpenGLContext *context = (__bridge NSOpenGLContext *) m_nativeContext;
