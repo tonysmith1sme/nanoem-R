@@ -203,24 +203,32 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
             __unsafe_unretained id<MTLTexture> source = _sg_mtl_id(texture_pool_index);
             if (source && dest) {
                 const int width = image_ptr->cmn.width, height = image_ptr->cmn.height;
-                id<MTLCommandBuffer> cmd_buffer = [_sg.mtl.cmd_queue commandBuffer];
-                id<MTLBlitCommandEncoder> mtl_blitter = [cmd_buffer blitCommandEncoder];
-                size_t size = dest.length, stride = size / height;
-                [mtl_blitter copyFromTexture:source
-                             sourceSlice:0
-                             sourceLevel:0
-                             sourceOrigin:MTLOriginMake(0, 0, 0)
-                             sourceSize:MTLSizeMake(width, height, 1)
-                             toBuffer:dest
-                             destinationOffset:0
-                             destinationBytesPerRow:stride
-                             destinationBytesPerImage:size];
-                [mtl_blitter endEncoding];
-                [cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
-                    _SOKOL_UNUSED(buffer);
-                    callback(dest.contents, size, opaque);
-                }];
-                [cmd_buffer commit];
+                id<MTLCommandBuffer> cmd_buffer = _sg.mtl.cmd_buffer;
+                if (cmd_buffer) {
+                    /* end any active render encoder before creating the blit encoder */
+                    if (_sg.mtl.cmd_encoder) {
+                        [_sg.mtl.cmd_encoder endEncoding];
+                        _sg.mtl.cmd_encoder = nil;
+                    }
+                    id<MTLBlitCommandEncoder> mtl_blitter = [cmd_buffer blitCommandEncoder];
+                    size_t size = dest.length, stride = size / height;
+                    [mtl_blitter copyFromTexture:source
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                 sourceOrigin:MTLOriginMake(0, 0, 0)
+                                 sourceSize:MTLSizeMake(width, height, 1)
+                                 toBuffer:dest
+                                 destinationOffset:0
+                                 destinationBytesPerRow:stride
+                                 destinationBytesPerImage:size];
+                    [mtl_blitter endEncoding];
+                    _sg.mtl.cmd_encoder = nil;
+                    [cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
+                        _SOKOL_UNUSED(buffer);
+                        callback(dest.contents, size, opaque);
+                    }];
+                    /* don't commit here - sokol will commit this cmd_buffer later */
+                }
             }
         }
     }

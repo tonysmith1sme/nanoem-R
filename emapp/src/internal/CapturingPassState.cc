@@ -1573,6 +1573,7 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
         }
     }
     else if (state == kBlitted) {
+        project->flushAllCommandBuffers();
         if (sg::read_pass_async) {
             AsyncReadHandler *handler = nanoem_new(AsyncReadHandler(this, audioPTS, videoPTS));
             sg::read_pass_async(outputPass(), frameStagingBuffer(), &AsyncReadHandler::handleReadPassAsync, handler);
