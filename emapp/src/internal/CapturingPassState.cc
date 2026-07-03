@@ -1189,6 +1189,9 @@ CapturingPassState::hasSaveState() const
 void
 CapturingPassState::blitOutputPass()
 {
+    sg_image primary = m_project->viewportPrimaryImage();
+    fprintf(stderr, "[capture] blitOutputPass: primary=%d valid=%d outputPass=%d\n",
+        primary.id, sg::is_valid(primary) ? 1 : 0, m_outputPass.id);
     m_blitter->blit(m_outputPass);
 }
 
@@ -1529,10 +1532,20 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
                 memcpy(m_state->mutableFrameImageDataPtr(), data, size);
                 if (m_state->outputImageDescription().pixel_format == SG_PIXELFORMAT_RGBA8) {
                     nanoem_u32_t *dataPtr = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
+                    if (m_videoPTS < 3) {
+                        const nanoem_u32_t *rawPixels = static_cast<const nanoem_u32_t *>(data);
+                        fprintf(stderr, "[capture] readPassAsync #%llu: before swap first 4 pixels=%08x %08x %08x %08x\n",
+                            (unsigned long long)m_videoPTS, rawPixels[0], rawPixels[1], rawPixels[2], rawPixels[3]);
+                    }
                     for (size_t i = 0, numPixels = size / sizeof(*dataPtr); i < numPixels; i++) {
                         nanoem_u32_t *ptr = dataPtr + i, v = *ptr;
                         *ptr = 0 | ((v & 0x000000ff) << 16) | (v & 0x0000ff00) | ((v & 0x00ff0000) >> 16) |
                             (v & 0xff000000);
+                    }
+                    if (m_videoPTS < 3) {
+                        nanoem_u32_t *dataPtr2 = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
+                        fprintf(stderr, "[capture] readPassAsync #%llu: after swap first 4 pixels=%08x %08x %08x %08x\n",
+                            (unsigned long long)m_videoPTS, dataPtr2[0], dataPtr2[1], dataPtr2[2], dataPtr2[3]);
                     }
                 }
                 if (!m_state->encodeVideoFrame(m_state->frameImageData(), m_audioPTS, m_videoPTS, error)) {
