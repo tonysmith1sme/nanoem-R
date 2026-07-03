@@ -29,6 +29,9 @@ extern "C" {
 #include "emapp/src/protoc/common.pb-c.c"
 #include "emapp/src/protoc/plugin.pb-c.c"
 
+#define LOG_ERROR(fmt, ...) fprintf(stderr, "[ffmpeg ERROR] " fmt "\n", ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) fprintf(stderr, "[ffmpeg] " fmt "\n", ##__VA_ARGS__)
+
 namespace {
 
 using namespace nanoem::application::plugin;
@@ -222,6 +225,9 @@ struct FFmpegEncoder {
             snprintf(m_reason, sizeof(m_reason), "找不到可用的 FFmpeg 视频编码器");
             return AVERROR_ENCODER_NOT_FOUND;
         }
+        LOG_INFO("openVideoCodec: encoder='%s' id=%d width=%d height=%d fps=%u requested_pix_fmt=%s",
+            codec->name, codec->id, m_width, m_height, m_fps,
+            av_get_pix_fmt_name(m_videoPixelFormat));
         if ((m_videoStream = avformat_new_stream(m_formatContext, codec)) != nullptr) {
             m_videoCodecContext = avcodec_alloc_context3(codec);
             m_videoCodecContext->width = static_cast<int>(m_width);
@@ -258,11 +264,22 @@ struct FFmpegEncoder {
         }
         int rc = avcodec_open2(m_videoCodecContext, codec, &options);
         av_dict_free(&options);
+        LOG_INFO("avcodec_open2 returned %d", rc);
+        if (rc == 0 && m_videoCodecContext) {
+            LOG_INFO("After open2: pix_fmt=%s width=%d height=%d bit_rate=%lld",
+                av_get_pix_fmt_name(m_videoCodecContext->pix_fmt),
+                m_videoCodecContext->width, m_videoCodecContext->height,
+                (long long)m_videoCodecContext->bit_rate);
+        }
         if (rc == 0 && m_videoStream) {
             const AVPixelFormat sourcePixelFormat = AV_PIX_FMT_BGRA;
             m_scaleContext = sws_getContext(m_width, m_height, sourcePixelFormat, m_width, m_height,
                 m_videoCodecContext->pix_fmt, SWS_BILINEAR, nullptr, nullptr, nullptr);
+            LOG_INFO("sws_getContext(BGRA -> %s) = %p",
+                av_get_pix_fmt_name(m_videoCodecContext->pix_fmt), (void *)m_scaleContext);
             rc = avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecContext);
+            LOG_INFO("avcodec_parameters_from_context returned %d, codecpar format=%s",
+                rc, av_get_pix_fmt_name((AVPixelFormat)m_videoStream->codecpar->format));
         }
         return rc;
     }
@@ -273,15 +290,22 @@ struct FFmpegEncoder {
         bool succeeded = true;
         const std::string actualFilePath = actualOutputFilePath(filePath);
         const char *formatName = outputFormatName(actualFilePath);
+        LOG_INFO("open: path=%s format=%s audio_ch=%u freq=%u bits=%u video=%dx%d fps=%u",
+            actualFilePath.c_str(), formatName, m_numChannels, m_numFrequency, m_numBits,
+            m_width, m_height, m_fps);
         avformat_alloc_output_context2(&m_formatContext, 0, formatName, actualFilePath.c_str());
         if (m_numChannels > 0 && m_numFrequency > 0) {
             succeeded = wrapCall(openAudioCodec(), status);
         }
         succeeded = succeeded && wrapCall(openVideoCodec(), status) &&
             wrapCall(avio_open(&m_formatContext->pb, actualFilePath.c_str(), AVIO_FLAG_WRITE), status);
-        if (succeeded && !wrapCall(avformat_write_header(m_formatContext, nullptr), status)) {
-            avio_closep(&m_formatContext->pb);
-            succeeded = false;
+        if (succeeded) {
+            int headerRc = avformat_write_header(m_formatContext, nullptr);
+            LOG_INFO("avformat_write_header returned %d", headerRc);
+            if (!wrapCall(headerRc, status)) {
+                avio_closep(&m_formatContext->pb);
+                succeeded = false;
+            }
         }
         if (!succeeded) {
             avformat_free_context(m_formatContext);
@@ -401,8 +425,21 @@ struct FFmpegEncoder {
         nanoem_application_plugin_status_t *status)
     {
         const AVCodecParameters *parameters = m_videoStream->codecpar;
+        LOG_INFO("encodeVideoFrame #%u: size=%u width=%d height=%d frame_format=%s",
+            currentFrameIndex, size, parameters->width, parameters->height,
+            av_get_pix_fmt_name((AVPixelFormat)parameters->format));
+        if (currentFrameIndex == 0) {
+            LOG_INFO("stream time_base=%d/%d codec time_base=%d/%d",
+                m_videoStream->time_base.num, m_videoStream->time_base.den,
+                m_videoCodecContext->time_base.num, m_videoCodecContext->time_base.den);
+        }
         ScopedVideoFrame frame(parameters, currentFrameIndex);
-        if (!wrapCall(av_frame_get_buffer(frame, 0), status) || !wrapCall(av_frame_make_writable(frame), status)) {
+        if (!wrapCall(av_frame_get_buffer(frame, 0), status)) {
+            LOG_ERROR("av_frame_get_buffer failed at frame #%u", currentFrameIndex);
+            return;
+        }
+        if (!wrapCall(av_frame_make_writable(frame), status)) {
+            LOG_ERROR("av_frame_make_writable failed at frame #%u", currentFrameIndex);
             return;
         }
         const nanoem_u8_t *dataPtr[] = { 0, 0, 0, 0 };
@@ -416,9 +453,17 @@ struct FFmpegEncoder {
             lineSizePtr[0] = stride;
             dataPtr[0] = data;
         }
-        sws_scale(m_scaleContext, dataPtr, lineSizePtr, 0, m_height, frame.m_opaque->data, frame.m_opaque->linesize);
+        int swsRet = sws_scale(m_scaleContext, dataPtr, lineSizePtr, 0, m_height,
+            frame.m_opaque->data, frame.m_opaque->linesize);
+        if (swsRet <= 0) {
+            LOG_ERROR("sws_scale returned %d at frame #%u", swsRet, currentFrameIndex);
+        }
         if (wrapCall(avcodec_send_frame(m_videoCodecContext, frame), status)) {
+            LOG_INFO("avcodec_send_frame OK for frame #%u", currentFrameIndex);
             drainVideoPackets(status);
+        }
+        else {
+            LOG_ERROR("avcodec_send_frame FAILED for frame #%u", currentFrameIndex);
         }
     }
     int
@@ -429,9 +474,12 @@ struct FFmpegEncoder {
     int
     close(nanoem_application_plugin_status_t *status)
     {
+        LOG_INFO("close: flushing encoders");
         flushEncoders(status);
         if (m_formatContext) {
-            makeFailureReason(av_write_trailer(m_formatContext), status);
+            int trailerRc = av_write_trailer(m_formatContext);
+            LOG_INFO("av_write_trailer returned %d", trailerRc);
+            makeFailureReason(trailerRc, status);
         }
         if (m_audioCodecContext) {
             avcodec_free_context(&m_audioCodecContext);
@@ -972,37 +1020,54 @@ struct FFmpegEncoder {
     drainPackets(AVCodecContext *codec, AVStream *stream, nanoem_application_plugin_status_t *status)
     {
         AVPacket packet = {};
+        int count = 0;
         while (true) {
             int rc = avcodec_receive_packet(codec, &packet);
             if (rc == AVERROR(EAGAIN) || rc == AVERROR_EOF) {
+                if (rc == AVERROR_EOF && count == 0) {
+                    LOG_INFO("drainPackets: EOF (no packets flushed)");
+                }
                 break;
             }
             else if (!wrapCall(rc, status)) {
+                LOG_ERROR("drainPackets: avcodec_receive_packet returned %d", rc);
                 break;
             }
             av_packet_rescale_ts(&packet, codec->time_base, stream->time_base);
             packet.stream_index = stream->index;
-            makeFailureReason(av_interleaved_write_frame(m_formatContext, &packet), status);
+            int writeRc = av_interleaved_write_frame(m_formatContext, &packet);
+            if (writeRc < 0) {
+                LOG_ERROR("drainPackets: av_interleaved_write_frame returned %d (pts=%lld size=%d)",
+                    writeRc, (long long)packet.pts, packet.size);
+            }
+            makeFailureReason(writeRc, status);
             av_packet_unref(&packet);
+            count++;
             if (status && *status != NANOEM_APPLICATION_PLUGIN_STATUS_SUCCESS) {
                 break;
             }
+        }
+        if (count > 0) {
+            LOG_INFO("drainPackets: wrote %d packets", count);
         }
     }
     void
     flushEncoders(nanoem_application_plugin_status_t *status)
     {
+        LOG_INFO("flushEncoders: flushing audio encoder");
         if (m_audioCodecContext) {
             encodeAudioFifo(true, status);
             if (wrapCall(avcodec_send_frame(m_audioCodecContext, nullptr), status)) {
                 drainAudioPackets(status);
             }
         }
+        LOG_INFO("flushEncoders: flushing video encoder");
         if (m_videoCodecContext) {
             if (wrapCall(avcodec_send_frame(m_videoCodecContext, nullptr), status)) {
                 drainVideoPackets(status);
             }
         }
+        LOG_INFO("flushEncoders: done");
     }
 
     struct ScopedAudioFrame {
