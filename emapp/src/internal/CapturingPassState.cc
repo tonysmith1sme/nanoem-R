@@ -210,7 +210,9 @@ CapturingPassState::ImageBlitter::draw(sg_pipeline pipeline, sg_pass dest, sg_im
 {
     sg_pass_action pa;
     Inline::clearZeroMemory(pa);
-    pa.colors[0].action = pa.depth.action = pa.stencil.action = SG_ACTION_CLEAR;
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value = { 0.3f, 0.1f, 0.0f, 1.0f };
+    pa.depth.action = pa.stencil.action = SG_ACTION_CLEAR;
     m_bindings.fs_images[0] = source;
     sg::PassBlock pb(m_project->sharedBatchDrawQueue(), dest, pa);
     pb.applyPipelineBindings(pipeline, m_bindings);
@@ -1528,8 +1530,8 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
             Error error;
             if (m_state->frameImageData().size() == size) {
                 memcpy(m_state->mutableFrameImageDataPtr(), data, size);
+                nanoem_u32_t *dataPtr = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
                 if (m_state->outputImageDescription().pixel_format == SG_PIXELFORMAT_RGBA8) {
-                    nanoem_u32_t *dataPtr = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
                     if (m_videoPTS < 3) {
                         const nanoem_u32_t *rawPixels = static_cast<const nanoem_u32_t *>(data);
                         fprintf(stderr, "[capture] readPassAsync #%llu: before swap first 4 pixels=%08x %08x %08x %08x\n",
@@ -1541,10 +1543,18 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
                             (v & 0xff000000);
                     }
                     if (m_videoPTS < 3) {
-                        nanoem_u32_t *dataPtr2 = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
                         fprintf(stderr, "[capture] readPassAsync #%llu: after swap first 4 pixels=%08x %08x %08x %08x\n",
-                            (unsigned long long)m_videoPTS, dataPtr2[0], dataPtr2[1], dataPtr2[2], dataPtr2[3]);
+                            (unsigned long long)m_videoPTS, dataPtr[0], dataPtr[1], dataPtr[2], dataPtr[3]);
                     }
+                }
+                if (m_videoPTS < 3) {
+                    bool allZero = true;
+                    for (size_t i = 0, n = m_state->frameImageData().size() / 4; i < n && allZero; i++) {
+                        allZero = (dataPtr[i] == 0);
+                    }
+                    fprintf(stderr, "[capture] readPassAsync #%llu: allZero=%s first8=[%08x %08x %08x %08x %08x %08x %08x %08x]\n",
+                        (unsigned long long)m_videoPTS, allZero ? "YES" : "NO",
+                        dataPtr[0], dataPtr[1], dataPtr[2], dataPtr[3], dataPtr[4], dataPtr[5], dataPtr[6], dataPtr[7]);
                 }
                 if (!m_state->encodeVideoFrame(m_state->frameImageData(), m_audioPTS, m_videoPTS, error)) {
                     m_state->stopEncoding(error);
@@ -1552,6 +1562,8 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
                 }
             }
             else {
+                fprintf(stderr, "[capture] readPassAsync #%llu: SIZE MISMATCH expected=%zu actual=%zu\n",
+                    (unsigned long long)m_videoPTS, m_state->frameImageData().size(), size);
                 m_state->stopEncoding(error);
                 m_state->setStateTransition(kCancelled);
             }
@@ -1572,7 +1584,18 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
     }
     else if (state == kBlitted) {
         project->flushAllCommandBuffers();
-        if (sg::read_pass_async) {
+        if (videoPTS == 0) {
+            /* Use synchronous read for first frame to diagnose GPU readback vs content issue */
+            fprintf(stderr, "[capture] FRAME 0: using SYNCHRONOUS readPassImage\n");
+            readPassImage();
+            const nanoem_u32_t *firstPixels = reinterpret_cast<const nanoem_u32_t *>(frameImageData().data());
+            fprintf(stderr, "[capture] FRAME 0 sync: first 4 pixels=%08x %08x %08x %08x\n",
+                firstPixels[0], firstPixels[1], firstPixels[2], firstPixels[3]);
+            if (!encodeVideoFrame(frameImageData(), audioPTS, videoPTS, error)) {
+                setStateTransition(kCancelled);
+            }
+        }
+        else if (sg::read_pass_async) {
             AsyncReadHandler *handler = nanoem_new(AsyncReadHandler(this, audioPTS, videoPTS));
             sg::read_pass_async(outputPass(), frameStagingBuffer(), &AsyncReadHandler::handleReadPassAsync, handler);
         }

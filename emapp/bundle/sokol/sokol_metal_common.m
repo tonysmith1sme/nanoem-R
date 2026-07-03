@@ -203,6 +203,12 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
             __unsafe_unretained id<MTLTexture> source = _sg_mtl_id(texture_pool_index);
             if (source && dest) {
                 const int width = image_ptr->cmn.width, height = image_ptr->cmn.height;
+                fprintf(stderr, "[sgx] read_pass_async: tex=%dx%d fmt=%d buf_size=%zu cur_rot=%d img_active_slot=%d buf_active_slot=%d img_id=%d depth_tex=%u pass_id=%d\n",
+                    width, height, (int)source.pixelFormat, (unsigned long)dest.length,
+                    (int)_sg.mtl.cur_frame_rotate_index, (int)image_ptr->cmn.active_slot,
+                    (int)buffer_ptr->cmn.active_slot, ptr->cmn.color_atts[0].image_id.id,
+                    (unsigned)image_ptr->mtl.depth_tex, pass.id);
+                /* try to use sokol's existing cmd_buffer first, fall back to separate cmd_buffer */
                 id<MTLCommandBuffer> cmd_buffer = _sg.mtl.cmd_buffer;
                 if (cmd_buffer) {
                     /* end any active render encoder before creating the blit encoder */
@@ -212,6 +218,9 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
                     }
                     id<MTLBlitCommandEncoder> mtl_blitter = [cmd_buffer blitCommandEncoder];
                     size_t size = dest.length, stride = size / height;
+                    if (@available(macOS 10.13, *)) {
+                        mtl_blitter.label = @"sgx_read_pass_async";
+                    }
                     [mtl_blitter copyFromTexture:source
                                  sourceSlice:0
                                  sourceLevel:0
@@ -227,7 +236,31 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
                         _SOKOL_UNUSED(buffer);
                         callback(dest.contents, size, opaque);
                     }];
-                    /* don't commit here - sokol will commit this cmd_buffer later */
+                    fprintf(stderr, "[sgx] read_pass_async: using sokol cmd_buffer\n");
+                }
+                else {
+                    id<MTLCommandBuffer> fallback = [_sg.mtl.cmd_queue commandBuffer];
+                    id<MTLBlitCommandEncoder> mtl_blitter = [fallback blitCommandEncoder];
+                    size_t size = dest.length, stride = size / height;
+                    if (@available(macOS 10.13, *)) {
+                        mtl_blitter.label = @"sgx_read_pass_async (fallback)";
+                    }
+                    [mtl_blitter copyFromTexture:source
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                 sourceOrigin:MTLOriginMake(0, 0, 0)
+                                 sourceSize:MTLSizeMake(width, height, 1)
+                                 toBuffer:dest
+                                 destinationOffset:0
+                                 destinationBytesPerRow:stride
+                                 destinationBytesPerImage:size];
+                    [mtl_blitter endEncoding];
+                    [fallback addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
+                        _SOKOL_UNUSED(buffer);
+                        callback(dest.contents, size, opaque);
+                    }];
+                    [fallback commit];
+                    fprintf(stderr, "[sgx] read_pass_async: using FALLBACK cmd_buffer (sokol was nil!)\n");
                 }
             }
         }
