@@ -86,6 +86,7 @@ handleFFmpegLog(void *ptr, int level, const char *fmt, va_list vl)
 struct FFmpegEncoder {
     static const char kAudioCodecComponentID[];
     static const char kVideoCodecComponentID[];
+    static const char kVideoEncoderImplementationComponentID[];
     static const char kVideoBitrateModeComponentID[];
     static const char kVideoBitrateComponentID[];
     static const char kVideoCRFComponentID[];
@@ -105,6 +106,7 @@ struct FFmpegEncoder {
         , m_tempAudioBuffer(nullptr)
         , m_audioCodecID(defaultAudioCodecID())
         , m_videoCodecID(defaultVideoCodecID())
+        , m_videoEncoderImplementation(kVideoEncoderImplementationAuto)
         , m_videoPixelFormat(defaultVideoPixelFormat(m_videoCodecID))
         , m_videoBitrateMode(m_videoCodecID == AV_CODEC_ID_H264 ? kVideoBitrateModeVBR : kVideoBitrateModeLossless)
         , m_videoBitrateKbps(50000)
@@ -205,12 +207,16 @@ struct FFmpegEncoder {
     int
     openVideoCodec()
     {
-        const AVCodec *codec = avcodec_find_encoder(m_videoCodecID);
+        const AVCodec *codec = findVideoEncoder(m_videoCodecID, m_videoEncoderImplementation);
         if (!codec && m_videoCodecID != AV_CODEC_ID_RAWVIDEO) {
+            if (m_videoEncoderImplementation != kVideoEncoderImplementationAuto) {
+                snprintf(m_reason, sizeof(m_reason), "找不到所选 FFmpeg 视频编码实现");
+                return AVERROR_ENCODER_NOT_FOUND;
+            }
             m_videoCodecID = AV_CODEC_ID_RAWVIDEO;
             m_videoPixelFormat = defaultVideoPixelFormat(m_videoCodecID);
             m_videoBitrateMode = kVideoBitrateModeLossless;
-            codec = avcodec_find_encoder(m_videoCodecID);
+            codec = findVideoEncoder(m_videoCodecID, m_videoEncoderImplementation);
         }
         if (!codec) {
             snprintf(m_reason, sizeof(m_reason), "找不到可用的 FFmpeg 视频编码器");
@@ -225,7 +231,7 @@ struct FFmpegEncoder {
             m_videoCodecContext->time_base.num = 1;
             m_videoCodecContext->time_base.den = static_cast<int>(m_fps);
             m_videoStream->time_base = m_videoCodecContext->time_base;
-            if (m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_MPEG4) {
+            if (isBitrateConfigurableVideoCodec(m_videoCodecID)) {
                 m_videoCodecContext->gop_size = static_cast<int>(std::max(m_fps, nanoem_u32_t(1)) * 2);
                 m_videoCodecContext->max_b_frames = 2;
                 applyVideoBitrateOptions();
@@ -233,22 +239,29 @@ struct FFmpegEncoder {
             if ((m_formatContext->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
                 m_videoCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             }
-            const AVPixelFormat sourcePixelFormat = AV_PIX_FMT_RGBA;
-            m_scaleContext = sws_getContext(m_width, m_height, sourcePixelFormat, m_width, m_height,
-                m_videoCodecContext->pix_fmt, SWS_BICUBIC, nullptr, nullptr, nullptr);
+            m_videoCodecContext->color_primaries = AVCOL_PRI_BT709;
+            m_videoCodecContext->color_trc = AVCOL_TRC_BT709;
+            m_videoCodecContext->colorspace = AVCOL_SPC_BT709;
         }
         AVDictionary *options = nullptr;
         if (m_videoCodecID == AV_CODEC_ID_H264) {
-            av_dict_set(&options, "preset", "slow", 0);
+            if (isSoftwareEncoder(codec)) {
+                av_dict_set(&options, "preset", "slow", 0);
+            }
             if (m_videoBitrateMode == kVideoBitrateModeVBR) {
                 char crf[16];
                 snprintf(crf, sizeof(crf), "%d", m_videoCRF);
-                av_dict_set(&options, "crf", crf, 0);
+                if (isSoftwareEncoder(codec)) {
+                    av_dict_set(&options, "crf", crf, 0);
+                }
             }
         }
         int rc = avcodec_open2(m_videoCodecContext, codec, &options);
         av_dict_free(&options);
         if (rc == 0 && m_videoStream) {
+            const AVPixelFormat sourcePixelFormat = AV_PIX_FMT_BGRA;
+            m_scaleContext = sws_getContext(m_width, m_height, sourcePixelFormat, m_width, m_height,
+                m_videoCodecContext->pix_fmt, SWS_BICUBIC, nullptr, nullptr, nullptr);
             rc = avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecContext);
         }
         return rc;
@@ -453,6 +466,7 @@ struct FFmpegEncoder {
     loadUIWindowLayout(nanoem_application_plugin_status_t *status)
     {
         updateAvailableCodecs();
+        static const char *kVideoEncoderImplementations[] = { "自动", "软件编码", "硬件编码" };
         const char *videoBitrateModes[] = { "无损/编码器默认", "VBR（CRF）", "CBR 固定码率" };
         const char *videoPixelFormats[] = {
             "RGB",
@@ -464,9 +478,14 @@ struct FFmpegEncoder {
         clearUIWindowLayout();
         m_components.push_back(createLabel("视频编码"));
         m_components.push_back(createCombobox(kVideoCodecComponentID, m_videoCodecNames.data(), m_videoCodecNames.size(), selectedVideoCodecIndex()));
+        m_components.push_back(createLabel("编码实现"));
+        m_components.push_back(createCombobox(kVideoEncoderImplementationComponentID, kVideoEncoderImplementations,
+            sizeof(kVideoEncoderImplementations) / sizeof(kVideoEncoderImplementations[0]),
+            nanoem_u32_t(m_videoEncoderImplementation)));
         const nanoem_u32_t numVideoBitrateModes = sizeof(videoBitrateModes) / sizeof(videoBitrateModes[0]);
         m_components.push_back(createLabel("视频码率模式"));
-        m_components.push_back(createCombobox(kVideoBitrateModeComponentID, videoBitrateModes, numVideoBitrateModes, 0));
+        m_components.push_back(
+            createCombobox(kVideoBitrateModeComponentID, videoBitrateModes, numVideoBitrateModes, selectedVideoBitrateModeIndex()));
         m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "视频码率（kbps）", m_videoBitrateKbps, 1000, 10000));
         m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR 质量（CRF）", m_videoCRF, 0, 51));
         const nanoem_u32_t numVideoPixelFormats = sizeof(videoPixelFormats) / sizeof(videoPixelFormats[0]);
@@ -522,8 +541,14 @@ struct FFmpegEncoder {
                 if (component->combo_box->selected_index < m_videoCodecs.size()) {
                     m_videoCodecID = m_videoCodecs[component->combo_box->selected_index].m_codecID;
                     m_videoPixelFormat = m_videoCodecs[component->combo_box->selected_index].m_pixelFormat;
-                    m_videoBitrateMode = m_videoCodecID == AV_CODEC_ID_H264 || m_videoCodecID == AV_CODEC_ID_MPEG4 ?
-                        kVideoBitrateModeVBR : kVideoBitrateModeLossless;
+                    m_videoBitrateMode = isBitrateConfigurableVideoCodec(m_videoCodecID) ? kVideoBitrateModeVBR :
+                                                                                           kVideoBitrateModeLossless;
+                }
+            }
+            else if (StringUtils::equals(id, kVideoEncoderImplementationComponentID)) {
+                if (component->combo_box->selected_index < kVideoEncoderImplementationMaxEnum) {
+                    m_videoEncoderImplementation =
+                        static_cast<VideoEncoderImplementation>(component->combo_box->selected_index);
                 }
             }
             else if (StringUtils::equals(id, kVideoBitrateModeComponentID)) {
@@ -588,6 +613,13 @@ struct FFmpegEncoder {
         kVideoBitrateModeCBR,
     };
 
+    enum VideoEncoderImplementation {
+        kVideoEncoderImplementationAuto,
+        kVideoEncoderImplementationSoftware,
+        kVideoEncoderImplementationHardware,
+        kVideoEncoderImplementationMaxEnum,
+    };
+
     struct AudioCodecItem {
         const char *m_name;
         AVCodecID m_codecID;
@@ -605,6 +637,96 @@ struct FFmpegEncoder {
         return avcodec_find_encoder(codecID) != nullptr;
     }
 
+    static bool
+    hasNamedEncoder(const char *name)
+    {
+        return name && avcodec_find_encoder_by_name(name) != nullptr;
+    }
+
+    static const char *const *
+    hardwareEncoderNames(AVCodecID codecID)
+    {
+        static const char *kH264Encoders[] = {
+            "h264_videotoolbox", "h264_mf", "h264_nvenc", "h264_qsv", "h264_amf", nullptr
+        };
+        static const char *kHEVCEncoders[] = {
+            "hevc_videotoolbox", "hevc_mf", "hevc_nvenc", "hevc_qsv", "hevc_amf", nullptr
+        };
+        static const char *kVP8Encoders[] = { "vp8_videotoolbox", nullptr };
+        static const char *kVP9Encoders[] = { "vp9_videotoolbox", nullptr };
+        switch (codecID) {
+        case AV_CODEC_ID_H264:
+            return kH264Encoders;
+        case AV_CODEC_ID_HEVC:
+            return kHEVCEncoders;
+        case AV_CODEC_ID_VP8:
+            return kVP8Encoders;
+        case AV_CODEC_ID_VP9:
+            return kVP9Encoders;
+        default:
+            return nullptr;
+        }
+    }
+
+    static const AVCodec *
+    findNamedEncoder(const char *const *names)
+    {
+        if (names) {
+            for (const char *const *it = names; *it; it++) {
+                if (const AVCodec *codec = avcodec_find_encoder_by_name(*it)) {
+                    return codec;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    static const AVCodec *
+    findSoftwareEncoder(AVCodecID codecID)
+    {
+        switch (codecID) {
+        case AV_CODEC_ID_H264:
+            return avcodec_find_encoder_by_name("libx264");
+        case AV_CODEC_ID_HEVC:
+            return avcodec_find_encoder_by_name("libx265");
+        default:
+            return avcodec_find_encoder(codecID);
+        }
+    }
+
+    static const AVCodec *
+    findVideoEncoder(AVCodecID codecID, VideoEncoderImplementation implementation)
+    {
+        switch (implementation) {
+        case kVideoEncoderImplementationSoftware:
+            return findSoftwareEncoder(codecID);
+        case kVideoEncoderImplementationHardware:
+            return findNamedEncoder(hardwareEncoderNames(codecID));
+        case kVideoEncoderImplementationAuto:
+        default:
+            if (const AVCodec *codec = findNamedEncoder(hardwareEncoderNames(codecID))) {
+                return codec;
+            }
+            return findSoftwareEncoder(codecID);
+        }
+    }
+
+    static bool
+    isSoftwareEncoder(const AVCodec *codec)
+    {
+        if (!codec || !codec->name) {
+            return false;
+        }
+        return !strstr(codec->name, "videotoolbox") && !strstr(codec->name, "_mf") && !strstr(codec->name, "nvenc") &&
+            !strstr(codec->name, "qsv") && !strstr(codec->name, "amf");
+    }
+
+    static bool
+    isBitrateConfigurableVideoCodec(AVCodecID codecID)
+    {
+        return codecID == AV_CODEC_ID_H264 || codecID == AV_CODEC_ID_HEVC || codecID == AV_CODEC_ID_MPEG4;
+    }
+
     static AVCodecID
     defaultAudioCodecID()
     {
@@ -614,7 +736,7 @@ struct FFmpegEncoder {
     static AVCodecID
     defaultVideoCodecID()
     {
-        if (hasEncoder(AV_CODEC_ID_H264)) {
+        if (hasEncoder(AV_CODEC_ID_H264) || findNamedEncoder(hardwareEncoderNames(AV_CODEC_ID_H264))) {
             return AV_CODEC_ID_H264;
         }
         else if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
@@ -659,10 +781,13 @@ struct FFmpegEncoder {
             m_videoCodecs.push_back({ "原始视频", AV_CODEC_ID_RAWVIDEO, AV_PIX_FMT_BGR24 });
         }
         if (hasEncoder(AV_CODEC_ID_UTVIDEO)) {
-                m_videoCodecs.push_back({ "UT 视频编码", AV_CODEC_ID_UTVIDEO, AV_PIX_FMT_GBRP });
+            m_videoCodecs.push_back({ "UT 视频编码", AV_CODEC_ID_UTVIDEO, AV_PIX_FMT_GBRP });
         }
-        if (hasEncoder(AV_CODEC_ID_H264)) {
+        if (hasEncoder(AV_CODEC_ID_H264) || findNamedEncoder(hardwareEncoderNames(AV_CODEC_ID_H264))) {
             m_videoCodecs.push_back({ "H.264/AVC", AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P });
+        }
+        if (hasEncoder(AV_CODEC_ID_HEVC) || findNamedEncoder(hardwareEncoderNames(AV_CODEC_ID_HEVC))) {
+            m_videoCodecs.push_back({ "H.265/HEVC", AV_CODEC_ID_HEVC, AV_PIX_FMT_YUV420P });
         }
         if (hasEncoder(AV_CODEC_ID_MPEG4)) {
             m_videoCodecs.push_back({ "MPEG-4 视频", AV_CODEC_ID_MPEG4, AV_PIX_FMT_YUV420P });
@@ -695,6 +820,12 @@ struct FFmpegEncoder {
             }
         }
         return 0;
+    }
+
+    nanoem_u32_t
+    selectedVideoBitrateModeIndex() const
+    {
+        return nanoem_u32_t(m_videoBitrateMode);
     }
 
     std::string
@@ -937,6 +1068,7 @@ struct FFmpegEncoder {
     nanoem_f32_t *m_tempAudioBuffer;
     AVCodecID m_audioCodecID;
     AVCodecID m_videoCodecID;
+    VideoEncoderImplementation m_videoEncoderImplementation;
     AVPixelFormat m_videoPixelFormat;
     VideoBitrateMode m_videoBitrateMode;
     int m_videoBitrateKbps;
@@ -953,6 +1085,7 @@ struct FFmpegEncoder {
 };
 const char FFmpegEncoder::kAudioCodecComponentID[] = "ffmpeg.audio-codec";
 const char FFmpegEncoder::kVideoCodecComponentID[] = "ffmpeg.video-codec";
+const char FFmpegEncoder::kVideoEncoderImplementationComponentID[] = "ffmpeg.video-encoder-implementation";
 const char FFmpegEncoder::kVideoBitrateModeComponentID[] = "ffmpeg.video-bitrate-mode";
 const char FFmpegEncoder::kVideoBitrateComponentID[] = "ffmpeg.video-bitrate";
 const char FFmpegEncoder::kVideoCRFComponentID[] = "ffmpeg.video-crf";
