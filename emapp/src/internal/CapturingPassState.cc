@@ -1585,12 +1585,13 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
     else if (state == kBlitted) {
         project->flushAllCommandBuffers();
         if (videoPTS == 0) {
-            /* Use synchronous read for first frame to diagnose GPU readback vs content issue */
-            fprintf(stderr, "[capture] FRAME 0: using SYNCHRONOUS readPassImage\n");
-            readPassImage();
-            const nanoem_u32_t *firstPixels = reinterpret_cast<const nanoem_u32_t *>(frameImageData().data());
-            fprintf(stderr, "[capture] FRAME 0 sync: first 4 pixels=%08x %08x %08x %08x\n",
-                firstPixels[0], firstPixels[1], firstPixels[2], firstPixels[3]);
+            /* Diagnostic: write a colored pattern directly to frame data to verify encode path */
+            nanoem_u32_t *pixels = reinterpret_cast<nanoem_u32_t *>(mutableFrameImageDataPtr());
+            for (size_t i = 0, n = frameImageData().size() / 4; i < n; i++) {
+                pixels[i] = 0xFF8000FF; /* magenta pixel */
+            }
+            fprintf(stderr, "[capture] FRAME 0: wrote magenta pattern (%zu pixels), encoding...\n",
+                frameImageData().size() / 4);
             if (!encodeVideoFrame(frameImageData(), audioPTS, videoPTS, error)) {
                 setStateTransition(kCancelled);
             }
