@@ -428,10 +428,14 @@ struct FFmpegEncoder {
         LOG_INFO("encodeVideoFrame #%u: size=%u width=%d height=%d frame_format=%s",
             currentFrameIndex, size, parameters->width, parameters->height,
             av_get_pix_fmt_name((AVPixelFormat)parameters->format));
-        if (currentFrameIndex == 0) {
-            LOG_INFO("stream time_base=%d/%d codec time_base=%d/%d",
-                m_videoStream->time_base.num, m_videoStream->time_base.den,
-                m_videoCodecContext->time_base.num, m_videoCodecContext->time_base.den);
+        if (currentFrameIndex < 5) {
+            const nanoem_u32_t *pixels = reinterpret_cast<const nanoem_u32_t *>(data);
+            LOG_INFO("  first 8 pixels (hex): %08x %08x %08x %08x %08x %08x %08x %08x",
+                pixels[0], pixels[1], pixels[2], pixels[3],
+                pixels[4], pixels[5], pixels[6], pixels[7]);
+            LOG_INFO("  pixels 1000-1007 (hex): %08x %08x %08x %08x %08x %08x %08x %08x",
+                pixels[1000], pixels[1001], pixels[1002], pixels[1003],
+                pixels[1004], pixels[1005], pixels[1006], pixels[1007]);
         }
         ScopedVideoFrame frame(parameters, currentFrameIndex);
         if (!wrapCall(av_frame_get_buffer(frame, 0), status)) {
