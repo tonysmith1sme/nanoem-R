@@ -577,7 +577,7 @@ struct FFmpegEncoder {
             else if (StringUtils::equals(id, kVideoPixelFormatComponentID)) {
                 switch (component->combo_box->selected_index) {
                 case 0:
-                    m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGR24 : AV_PIX_FMT_YUV420P;
+                    m_videoPixelFormat = defaultVideoPixelFormat(m_videoCodecID);
                     break;
                 case 1:
                     m_videoPixelFormat = m_videoCodecID == AV_CODEC_ID_RAWVIDEO ? AV_PIX_FMT_BGRA : AV_PIX_FMT_YUV422P;
@@ -753,7 +753,10 @@ struct FFmpegEncoder {
     static AVPixelFormat
     defaultVideoPixelFormat(AVCodecID codecID)
     {
-        if (codecID == AV_CODEC_ID_H264 || codecID == AV_CODEC_ID_MPEG4) {
+        if (codecID == AV_CODEC_ID_H264) {
+            return AV_PIX_FMT_NV12;
+        }
+        else if (codecID == AV_CODEC_ID_MPEG4) {
             return AV_PIX_FMT_YUV420P;
         }
         else if (codecID == AV_CODEC_ID_UTVIDEO) {
