@@ -926,8 +926,6 @@ CapturingPassState::save(Project *project)
     m_lastSampleLevel = project->sampleLevel();
     m_displaySyncDisabled = project->isDisplaySyncDisabled();
     project->saveState(m_saveState);
-    project->setActiveAccessory(nullptr);
-    project->setActiveModel(nullptr);
     project->setSampleLevel(m_sampleLevel);
     project->setPhysicsSimulationMode(
         project->physicsEngine()->simulationMode() != PhysicsEngine::kSimulationModeDisable
