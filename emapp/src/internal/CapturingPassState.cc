@@ -922,6 +922,8 @@ CapturingPassState::save(Project *project)
     depthStencilDescription.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
     m_outputPassDescription.depth_stencil_attachment.image = sg::make_image(&depthStencilDescription);
     m_outputPass = sg::make_pass(&m_outputPassDescription);
+    fprintf(stderr, "[capture] save: outputPass created id=%d state=%d\n",
+        m_outputPass.id, (int)sg::query_pass_state(m_outputPass));
     m_lastLogicalScaleUniformedViewportImageSize = project->logicalScaleUniformedViewportImageSize();
     m_lastViewportDevicePixelRatio = project->viewportDevicePixelRatio();
     m_lastPreferredMotionFPS = project->preferredMotionFPS();
