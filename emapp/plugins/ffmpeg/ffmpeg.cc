@@ -261,7 +261,7 @@ struct FFmpegEncoder {
         if (rc == 0 && m_videoStream) {
             const AVPixelFormat sourcePixelFormat = AV_PIX_FMT_BGRA;
             m_scaleContext = sws_getContext(m_width, m_height, sourcePixelFormat, m_width, m_height,
-                m_videoCodecContext->pix_fmt, SWS_BICUBIC, nullptr, nullptr, nullptr);
+                m_videoCodecContext->pix_fmt, SWS_BILINEAR, nullptr, nullptr, nullptr);
             rc = avcodec_parameters_from_context(m_videoStream->codecpar, m_videoCodecContext);
         }
         return rc;
