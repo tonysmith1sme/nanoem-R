@@ -228,11 +228,18 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "IBL_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "MULTI_LIGHT_ENABLE", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
             "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
+    }
+    if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
+            "diffuse = max(diffuse, material.albedo * 0.03);\n\t$1");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
