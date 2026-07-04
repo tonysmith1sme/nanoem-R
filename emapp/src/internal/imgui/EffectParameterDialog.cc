@@ -26,6 +26,33 @@ namespace imgui {
 const char *const EffectParameterDialog::kIdentifier = "dialog.project.effect";
 const nanoem_f32_t EffectParameterDialog::kMinimumWindowWidth = 600;
 
+static const char *const kPredefinedOffscreenRenderTargetNames[] = {
+    "MaterialMap",
+    "FogMap",
+    "LightMap",
+    "EnvLightMap",
+    "OutlineMap",
+    "SSAOMap",
+    "PSSM1",
+    "PSSM2",
+    "PSSM3",
+    "PSSM4",
+};
+static const char *const kPredefinedOffscreenRenderTargetDescriptions[] = {
+    "Material Map",
+    "Fog Map",
+    "Light Map",
+    "Environment Light Map",
+    "Outline Map",
+    "Screen Space Ambient Occlusion Map",
+    "Parallel-Split Shadow Map 1",
+    "Parallel-Split Shadow Map 2",
+    "Parallel-Split Shadow Map 3",
+    "Parallel-Split Shadow Map 4",
+};
+static const int kNumPredefinedOffscreenRenderTargets =
+    sizeof(kPredefinedOffscreenRenderTargetNames) / sizeof(kPredefinedOffscreenRenderTargetNames[0]);
+
 void
 EffectParameterDialog::handleLoadingModelEffectSetting(
     const URI &fileURI, Project *project, Error &error, void *userData)
@@ -126,6 +153,11 @@ EffectParameterDialog::layoutAllOffscreenRenderTargets(Project *project)
     typedef tinystl::vector<OffscreenRenderTargetPair, TinySTLAllocator> OffscreenRenderTargetPairList;
     OffscreenRenderTargetPairList allOptions;
     nanoem_f32_t maxTextWidth = 0;
+    for (int i = 0; i < kNumPredefinedOffscreenRenderTargets; i++) {
+        maxTextWidth = glm::max(
+            maxTextWidth, ImGui::CalcTextSize(kPredefinedOffscreenRenderTargetNames[i]).x);
+    }
+    maxTextWidth = glm::max(maxTextWidth, ImGui::CalcTextSize(Effect::kOffscreenOwnerNameMain.c_str()).x);
     for (Project::DrawableList::const_iterator it = drawables->begin(), end = drawables->end(); it != end; ++it) {
         const IDrawable *drawable = *it;
         if (const Effect *effect = project->resolveEffect(drawable)) {
@@ -144,16 +176,26 @@ EffectParameterDialog::layoutAllOffscreenRenderTargets(Project *project)
             maxTextWidth = glm::max(maxTextWidth, ImGui::CalcTextSize(drawable->nameConstString()).x);
         }
     }
+    const int numFixedTargets = 1 + kNumPredefinedOffscreenRenderTargets;
+    const int totalItems = numFixedTargets + Inline::saturateInt32(allOptions.size());
     ImGui::BeginChild("left-pane", ImVec2(ImGuiWindow::kLeftPaneWidth * project->windowDevicePixelRatio(), 0), true);
     ImGuiListClipper clipper;
     bool up, down;
     detectUpDown(up, down);
-    selectIndex(up, down, allOptions.size() + 1, m_activeOffscreenRenderTargetIndex);
-    clipper.Begin(Inline::saturateInt32(allOptions.size() + 1));
+    selectIndex(up, down, totalItems, m_activeOffscreenRenderTargetIndex);
+    clipper.Begin(totalItems);
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart, end = clipper.DisplayEnd; i < end; i++) {
-            const char *name =
-                i == 0 ? Effect::kOffscreenOwnerNameMain.c_str() : allOptions[i - 1].first.m_name.c_str();
+            const char *name = nullptr;
+            if (i == 0) {
+                name = Effect::kOffscreenOwnerNameMain.c_str();
+            }
+            else if (i <= kNumPredefinedOffscreenRenderTargets) {
+                name = kPredefinedOffscreenRenderTargetNames[i - 1];
+            }
+            else {
+                name = allOptions[i - numFixedTargets].first.m_name.c_str();
+            }
             const bool selected = m_activeOffscreenRenderTargetIndex == i;
             if (ImGui::Selectable(name, selected) || ((up || down) && selected)) {
                 m_activeOffscreenRenderTargetIndex = i;
@@ -164,13 +206,18 @@ EffectParameterDialog::layoutAllOffscreenRenderTargets(Project *project)
     ImGui::SameLine();
     ImGui::BeginChild("right-pane", ImGui::GetContentRegionAvail());
     ImGui::PushItemWidth(-1);
-    if (m_activeOffscreenRenderTargetIndex > 0 &&
-        m_activeOffscreenRenderTargetIndex <= Inline::saturateInt32(allOptions.size())) {
-        const OffscreenRenderTargetPair &item = allOptions[m_activeOffscreenRenderTargetIndex - 1];
-        layoutAllOffscreenRenderTargetAttachments(project, item.second, item.first, maxTextWidth);
-    }
-    else {
+    if (m_activeOffscreenRenderTargetIndex == 0) {
         layoutOffscreenMainRenderTargetAttachments(project, maxTextWidth);
+    }
+    else if (m_activeOffscreenRenderTargetIndex <= kNumPredefinedOffscreenRenderTargets) {
+        const int predefinedIndex = m_activeOffscreenRenderTargetIndex - 1;
+        layoutPredefinedOffscreenRenderTargetAttachments(project,
+            String(kPredefinedOffscreenRenderTargetNames[predefinedIndex]),
+            String(kPredefinedOffscreenRenderTargetDescriptions[predefinedIndex]), maxTextWidth);
+    }
+    else if (m_activeOffscreenRenderTargetIndex - numFixedTargets < Inline::saturateInt32(allOptions.size())) {
+        const OffscreenRenderTargetPair &item = allOptions[m_activeOffscreenRenderTargetIndex - numFixedTargets];
+        layoutAllOffscreenRenderTargetAttachments(project, item.second, item.first, maxTextWidth);
     }
     ImGui::PopItemWidth();
     ImGui::EndChild();
@@ -196,6 +243,28 @@ EffectParameterDialog::layoutOffscreenMainRenderTargetAttachments(Project *proje
             drawable->setVisible(visible);
         }
         layoutOffscreenRenderTargetAttachment(project, drawable, Effect::kOffscreenOwnerNameMain, maxTextWidth);
+    }
+}
+
+void
+EffectParameterDialog::layoutPredefinedOffscreenRenderTargetAttachments(
+    Project *project, const String &name, const String &description, nanoem_f32_t maxTextWidth)
+{
+    MutableString desc(description.c_str(), description.c_str() + description.size());
+    desc.push_back(0);
+    ImGui::InputTextMultiline("##desc", desc.data(), desc.size(), ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 3),
+        ImGuiInputTextFlags_ReadOnly);
+    layoutDefaultOffscreenRenderTargetAttachment(project, name);
+    const Project::DrawableList *drawables = project->drawableOrderList();
+    for (Project::DrawableList::const_iterator it = drawables->begin(), end = drawables->end(); it != end; ++it) {
+        IDrawable *drawable = *it;
+        char buffer[Inline::kLongNameStackBufferSize];
+        StringUtils::format(buffer, sizeof(buffer), "##%s/%p/visible", name.c_str(), drawable);
+        bool visible = drawable->isVisible();
+        if (ImGuiWindow::handleCheckBox(buffer, &visible, true)) {
+            drawable->setVisible(visible);
+        }
+        layoutOffscreenRenderTargetAttachment(project, drawable, name, maxTextWidth);
     }
 }
 

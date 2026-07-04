@@ -43,6 +43,8 @@ struct EffectParameterDialog : BaseNonModalDialogWindow {
     bool draw(Project *project);
     void layoutAllOffscreenRenderTargets(Project *project);
     void layoutOffscreenMainRenderTargetAttachments(Project *project, nanoem_f32_t maxTextWidth);
+    void layoutPredefinedOffscreenRenderTargetAttachments(
+        Project *project, const String &name, const String &description, nanoem_f32_t maxTextWidth);
     void layoutAllOffscreenRenderTargetAttachments(Project *project, const Effect *ownerEffect,
         const effect::OffscreenRenderTargetOption &option, nanoem_f32_t maxTextWidth);
     void layoutDefaultOffscreenRenderTargetAttachment(Project *project, const String &offscreenOwnerName);
