@@ -54,6 +54,7 @@ public:
     virtual void openMorphCorrectionDialog(Project *project) = 0;
     virtual void openViewportDialog(Project *project) = 0;
     virtual void openModelDrawOrderDialog(Project *project) = 0;
+    virtual void openAccessoryDrawOrderDialog(Project *project) = 0;
     virtual void openModelTransformOrderDialog(Project *project) = 0;
     virtual void openPhysicsEngineDialog(Project *project) = 0;
     virtual void openModelAllObjectsDialog() = 0;

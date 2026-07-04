@@ -1264,6 +1264,7 @@ ApplicationMenuBuilder::createProjectMenu(MainMenuBarHandle bar)
     appendMenuSeparator(m_projectMenu);
     appendMenuItem(m_projectMenu, kMenuItemTypeProjectOpenViewportDialog);
     appendMenuItem(m_projectMenu, kMenuItemTypeProjectOpenDrawOrderDialog);
+    appendMenuItem(m_projectMenu, kMenuItemTypeProjectOpenAccessoryDrawOrderDialog);
     appendMenuItem(m_projectMenu, kMenuItemTypeProjectOpenTransformOrderDialog);
     appendMenuItem(m_projectMenu, kMenuItemTypeProjectDetachViewportWindow);
     appendMenuSeparator(m_projectMenu);

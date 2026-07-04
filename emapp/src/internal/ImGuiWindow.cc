@@ -60,6 +60,7 @@
 #include "emapp/internal/imgui/LazySetActiveModelMorphCommand.h"
 #include "emapp/internal/imgui/LazySetCameraOutsideParentCommand.h"
 #include "emapp/internal/imgui/LazySetFrameIndexCommand.h"
+#include "emapp/internal/imgui/AccessoryDrawOrderDialog.h"
 #include "emapp/internal/imgui/ModelDrawOrderDialog.h"
 #include "emapp/internal/imgui/ModelEdgeDialog.h"
 #include "emapp/internal/imgui/ModelEditCommandDialog.h"
@@ -1614,7 +1615,15 @@ ImGuiWindow::setFontPointSize(nanoem_f32_t pointSize)
         }
         else {
             builder.AddRanges(m_atlas.GetGlyphRangesCyrillic());
-            builder.AddRanges(m_atlas.GetGlyphRangesChineseFull());
+            switch (language) {
+            case ITranslator::kLanguageTypeChineseSimplified:
+            case ITranslator::kLanguageTypeChineseTraditional:
+                builder.AddRanges(m_atlas.GetGlyphRangesChineseFull());
+                break;
+            default:
+                builder.AddRanges(m_atlas.GetGlyphRangesChineseSimplifiedCommon());
+                break;
+            }
             builder.AddRanges(m_atlas.GetGlyphRangesJapanese());
             builder.AddRanges(m_atlas.GetGlyphRangesKorean());
             builder.AddRanges(m_atlas.GetGlyphRangesThai());
@@ -1785,6 +1794,15 @@ ImGuiWindow::openModelDrawOrderDialog(Project *project)
     if (m_dialogWindows.find(ModelDrawOrderDialog::kIdentifier) == m_dialogWindows.end()) {
         INoModalDialogWindow *dialog = nanoem_new(ModelDrawOrderDialog(project, m_applicationPtr));
         m_dialogWindows.insert(tinystl::make_pair(ModelDrawOrderDialog::kIdentifier, dialog));
+    }
+}
+
+void
+ImGuiWindow::openAccessoryDrawOrderDialog(Project *project)
+{
+    if (m_dialogWindows.find(AccessoryDrawOrderDialog::kIdentifier) == m_dialogWindows.end()) {
+        INoModalDialogWindow *dialog = nanoem_new(AccessoryDrawOrderDialog(project, m_applicationPtr));
+        m_dialogWindows.insert(tinystl::make_pair(AccessoryDrawOrderDialog::kIdentifier, dialog));
     }
 }
 

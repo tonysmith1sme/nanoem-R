@@ -201,6 +201,7 @@ public:
     void openMorphCorrectionDialog(Project *project) NANOEM_DECL_OVERRIDE;
     void openViewportDialog(Project *project) NANOEM_DECL_OVERRIDE;
     void openModelDrawOrderDialog(Project *project) NANOEM_DECL_OVERRIDE;
+    void openAccessoryDrawOrderDialog(Project *project) NANOEM_DECL_OVERRIDE;
     void openModelTransformOrderDialog(Project *project) NANOEM_DECL_OVERRIDE;
     void openPhysicsEngineDialog(Project *project) NANOEM_DECL_OVERRIDE;
     void openModelAllObjectsDialog() NANOEM_DECL_OVERRIDE;

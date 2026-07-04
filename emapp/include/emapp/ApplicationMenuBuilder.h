@@ -88,6 +88,7 @@ public:
         kMenuItemTypeProjectOpenViewportDialog,
         kMenuItemTypeProjectOpenDrawOrderDialog,
         kMenuItemTypeProjectOpenTransformOrderDialog,
+        kMenuItemTypeProjectOpenAccessoryDrawOrderDialog,
         kMenuItemTypeProjectDetachViewportWindow,
         kMenuItemTypeProjectEnableLoop,
         kMenuItemTypeProjectEnableGrid,

@@ -1933,6 +1933,10 @@ BaseApplicationService::dispatchMenuItemAction(Project *project, nanoem_u32_t ty
         m_window->openModelDrawOrderDialog(project);
         break;
     }
+    case ApplicationMenuBuilder::kMenuItemTypeProjectOpenAccessoryDrawOrderDialog: {
+        m_window->openAccessoryDrawOrderDialog(project);
+        break;
+    }
     case ApplicationMenuBuilder::kMenuItemTypeProjectOpenTransformOrderDialog: {
         m_window->openModelTransformOrderDialog(project);
         break;
