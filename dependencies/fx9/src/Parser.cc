@@ -294,13 +294,10 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
         patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "IBL_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "MULTI_LIGHT_ENABLE", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
@@ -308,6 +305,21 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex(R"(diffuse \+= tex2Dlod\(LightMapSamp)"),
+            "diffuse += max(tex2Dlod(LightMapSamp");
+        patched = std::regex_replace(patched,
+            std::regex(R"(specular \+= tex2Dlod\(LightSpecMapSamp)"),
+            "specular += max(tex2Dlod(LightSpecMapSamp");
+        patched = std::regex_replace(patched,
+            std::regex(R"(, 0, 0\)\)\.rgb\);(\s*)// multi-light was)"),
+            ", 0, 0)).rgb, 0.0);$1// multi-light was");
+        patched = std::regex_replace(patched,
+            std::regex(R"(diffuse \+= iblDiffuse;)"),
+            "diffuse += max(iblDiffuse, 0.0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(specular \+= iblSpecular;)"),
+            "specular += max(iblSpecular, 0.0);");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
             "diffuse = max(diffuse, material.albedo * 0.01);\n\t$1");
