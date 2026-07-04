@@ -236,13 +236,15 @@ EffectParameterDialog::layoutOffscreenMainRenderTargetAttachments(Project *proje
     for (Project::DrawableList::const_iterator it = drawables->begin(), end = drawables->end(); it != end; ++it) {
         IDrawable *drawable = *it;
         char buffer[Inline::kLongNameStackBufferSize];
-        StringUtils::format(
-            buffer, sizeof(buffer), "##%s/%p/visible", Effect::kOffscreenOwnerNameMain.c_str(), drawable);
-        bool visible = drawable->isVisible();
-        if (ImGuiWindow::handleCheckBox(buffer, &visible, true)) {
-            drawable->setVisible(visible);
+        const String &name = Effect::kOffscreenOwnerNameMain;
+        StringUtils::format(buffer, sizeof(buffer), "##%s/%p/enabled", name.c_str(), drawable);
+        const Effect *effect = project->upcastEffect(drawable->findOffscreenPassiveRenderTargetEffect(name.c_str()));
+        bool enabled = drawable->isOffscreenPassiveRenderTargetEffectEnabled(name);
+        if (ImGuiWindow::handleCheckBox(buffer, &enabled, effect != nullptr)) {
+            drawable->setOffscreenPassiveRenderTargetEffectEnabled(name, enabled);
+            project->forceResetAllPasses();
         }
-        layoutOffscreenRenderTargetAttachment(project, drawable, Effect::kOffscreenOwnerNameMain, maxTextWidth);
+        layoutOffscreenRenderTargetAttachment(project, drawable, name, maxTextWidth);
     }
 }
 
@@ -259,10 +261,12 @@ EffectParameterDialog::layoutPredefinedOffscreenRenderTargetAttachments(
     for (Project::DrawableList::const_iterator it = drawables->begin(), end = drawables->end(); it != end; ++it) {
         IDrawable *drawable = *it;
         char buffer[Inline::kLongNameStackBufferSize];
-        StringUtils::format(buffer, sizeof(buffer), "##%s/%p/visible", name.c_str(), drawable);
-        bool visible = drawable->isVisible();
-        if (ImGuiWindow::handleCheckBox(buffer, &visible, true)) {
-            drawable->setVisible(visible);
+        StringUtils::format(buffer, sizeof(buffer), "##%s/%p/enabled", name.c_str(), drawable);
+        const Effect *effect = project->upcastEffect(drawable->findOffscreenPassiveRenderTargetEffect(name.c_str()));
+        bool enabled = drawable->isOffscreenPassiveRenderTargetEffectEnabled(name);
+        if (ImGuiWindow::handleCheckBox(buffer, &enabled, effect != nullptr)) {
+            drawable->setOffscreenPassiveRenderTargetEffectEnabled(name, enabled);
+            project->forceResetAllPasses();
         }
         layoutOffscreenRenderTargetAttachment(project, drawable, name, maxTextWidth);
     }
