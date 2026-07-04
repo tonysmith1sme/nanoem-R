@@ -63,6 +63,7 @@
       LPAREN
       RPAREN.
 %right ELSE.
+%left SEMICOLON.
 
 translation_unit ::= external_decl_list(A). {
     fx9ParserContextAcceptTranslationUnit(parser, A);
@@ -474,6 +475,9 @@ annotation_list(A) ::= annotation_list(B) annotation_entry(C). {
 }
 annotation_list(A) ::= annotation_entry(B). {
     A = fx9ParserContextAppendAnnotation(parser, 0, B);
+}
+annotation_entry(A) ::= annotation(B). {
+    A = B;
 }
 annotation_entry(A) ::= annotation(B) SEMICOLON. {
     A = B;

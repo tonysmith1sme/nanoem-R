@@ -293,7 +293,8 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "#define MIDPOINT_8_BIT (127.0f / 255.0f)\n$1",
             std::regex_constants::format_first_only);
     }
-    if (endsWithIgnoreCase(path, "PostProcessHDR.fxsub")) {
+    if (endsWithIgnoreCase(path, "PostProcessHDR.fxsub") ||
+        endsWithIgnoreCase(path, "LightBloom.fxsub")) {
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*,)"), "sampler2D $1,");
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
     }
