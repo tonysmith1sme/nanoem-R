@@ -157,6 +157,14 @@ target_link_libraries(fx9 fx9_protobuf
                           debug ${SPIRV_CROSS_GLSL_LIBRARY_DEBUG}
                           debug ${SPIRV_CROSS_HLSL_LIBRARY_DEBUG}
                           debug ${SPIRV_CROSS_MSL_LIBRARY_DEBUG})
+if(NOT WIN32)
+  find_package(Iconv QUIET)
+  if(Iconv_FOUND)
+    target_link_libraries(fx9 Iconv::Iconv)
+  else()
+    target_link_libraries(fx9 iconv)
+  endif()
+endif()
 set_property(TARGET fx9 PROPERTY FOLDER dependencies)
 set_property(TARGET fx9 APPEND PROPERTY INCLUDE_DIRECTORIES ${FX9_PATH}/include
                         ${CMAKE_CURRENT_BINARY_DIR}/fx9
