@@ -256,6 +256,20 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
             "}\n$1");
     }
+    if (endsWithIgnoreCase(path, "material_common.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex("GbufferParam MaterialPS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*,"
+                       "\\s*in float4 viewdir\\s*:\\s*TEXCOORD3\\s*\\)"),
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("return EncodeGbuffer\\(material, viewdir\\.w\\);"),
+            "GbufferParam __gb = EncodeGbuffer(material, viewdir.w); "
+            "oColor0 = __gb.buffer1; oColor1 = __gb.buffer2; "
+            "oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
+    }
     replaceAll(patched, "Sky*box*.*", "sky*box*.*");
     replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
     patched = std::regex_replace(patched,
