@@ -518,8 +518,8 @@ struct FFmpegEncoder {
     loadUIWindowLayout(nanoem_application_plugin_status_t *status)
     {
         updateAvailableCodecs();
-        static const char *kVideoEncoderImplementations[] = { "自动", "软件编码", "硬件编码" };
-        const char *videoBitrateModes[] = { "无损/编码器默认", "VBR（CRF）", "CBR 固定码率" };
+        static const char *kVideoEncoderImplementations[] = { "自动", "软件 (CPU)", "硬件 (GPU/NVENC/VideoToolbox)" };
+        const char *videoBitrateModes[] = { "无损 / 默认", "VBR (CRF)", "CBR (kbps)" };
         const char *videoPixelFormats[] = {
             "RGB",
             "RGBA",
@@ -538,8 +538,8 @@ struct FFmpegEncoder {
         m_components.push_back(createLabel("视频码率模式"));
         m_components.push_back(
             createCombobox(kVideoBitrateModeComponentID, videoBitrateModes, numVideoBitrateModes, selectedVideoBitrateModeIndex()));
-        m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "视频码率（kbps）", m_videoBitrateKbps, 1000, 10000));
-        m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR 质量（CRF）", m_videoCRF, 0, 51));
+        m_components.push_back(createInputScalarN(kVideoBitrateComponentID, "视频码率 (kbps)", m_videoBitrateKbps, 1000, 10000));
+        m_components.push_back(createSliderScalarN(kVideoCRFComponentID, "VBR 质量 (CRF)", m_videoCRF, 0, 51));
         const nanoem_u32_t numVideoPixelFormats = sizeof(videoPixelFormats) / sizeof(videoPixelFormats[0]);
         m_components.push_back(createLabel("视频像素格式"));
         m_components.push_back(
