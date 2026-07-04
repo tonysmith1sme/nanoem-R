@@ -235,18 +235,12 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "#endif\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
-        patched = std::regex_replace(patched,
-            std::regex("diffuse \\+= tex2Dlod\\(LightMapSamp"),
-            "diffuse += max(tex2Dlod(LightMapSamp");
-        patched = std::regex_replace(patched,
-            std::regex("tex2Dlod\\((LightMapSamp[^)]+\\)\\))\\.rgb\\);"),
-            "tex2Dlod($1).rgb, 0.0);");
-        patched = std::regex_replace(patched,
-            std::regex("specular \\+= tex2Dlod\\(LightSpecMapSamp"),
-            "specular += max(tex2Dlod(LightSpecMapSamp");
-        patched = std::regex_replace(patched,
-            std::regex("tex2Dlod\\((LightSpecMapSamp[^)]+\\)\\))\\.rgb\\);"),
-            "tex2Dlod($1).rgb, 0.0);");
+        for (size_t pos = 0; (pos = patched.find("diffuse += tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 62) {
+            patched.replace(pos, 62, "diffuse += max(tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        }
+        for (size_t pos = 0; (pos = patched.find("specular += tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 67) {
+            patched.replace(pos, 67, "specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        }
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
             "diffuse += max(iblDiffuse, 0.0);");
