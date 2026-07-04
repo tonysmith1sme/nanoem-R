@@ -12,6 +12,7 @@
 #include "emapp/BaseApplicationService.h"
 #include "emapp/Constants.h"
 #include "emapp/DefaultFileManager.h"
+#include "emapp/ICamera.h"
 #include "emapp/EnumUtils.h"
 #include "emapp/IAudioPlayer.h"
 #include "emapp/IModalDialog.h"
@@ -616,6 +617,7 @@ public:
     bool reloadUILayout(ByteArray &bytes, Error &error) NANOEM_DECL_OVERRIDE;
 
 private:
+    static String displayPluginName(plugin::EncoderPlugin *plugin);
     static void drawStringPairList(const char *text, const StringPairList &items, String &value);
 
     CapturingPassAsVideoState *m_parent;
@@ -638,7 +640,32 @@ CapturingPassAsVideoState::ModalDialog::ModalDialog(CapturingPassAsVideoState *p
     , m_reloadLayout(false)
     , m_enableVideoRecorder(false)
 {
-    m_exportFrameIndexRange.second = parent->stateController()->currentProject()->duration();
+    Project *project = parent->stateController()->currentProject();
+    m_exportFrameIndexRange.second = project->duration();
+    /* auto-select FFmpeg plugin as default */
+    const IFileManager::EncoderPluginList &plugins =
+        parent->stateController()->fileManager()->allVideoEncoderPluginList();
+    for (IFileManager::EncoderPluginList::const_iterator it = plugins.begin(), end = plugins.end(); it != end; ++it) {
+        plugin::EncoderPlugin *plugin = *it;
+        if (strstr(plugin->name().c_str(), "ffmpeg")) {
+            const Vector2UI16 size(resolutionSize(project));
+            const nanoem_frame_index_t duration = m_exportFrameIndexRange.second - m_exportFrameIndexRange.first;
+            Error error;
+            plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_FPS, 60, error);
+            plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_VIDEO_WIDTH, size.x, error);
+            plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_VIDEO_HEIGHT, size.y, error);
+            plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_DURATION, duration, error);
+            const IAudioPlayer *audio = project->audioPlayer();
+            if (audio->isLoaded()) {
+                plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_AUDIO_NUM_BITS, audio->bitsPerSample(), error);
+                plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_AUDIO_NUM_CHANNELS, audio->numChannels(), error);
+                plugin->setOption(NANOEM_APPLICATION_PLUGIN_ENCODER_OPTION_AUDIO_NUM_FREQUENCY, audio->sampleRate(), error);
+            }
+            m_plugin = plugin;
+            m_reloadLayout = true;
+            break;
+        }
+    }
 }
 
 CapturingPassAsVideoState::ModalDialog::~ModalDialog()
@@ -649,6 +676,24 @@ const char *
 CapturingPassAsVideoState::ModalDialog::title() const NANOEM_DECL_NOEXCEPT
 {
     return "Encoding Video Configuration";
+}
+
+String
+CapturingPassAsVideoState::ModalDialog::displayPluginName(plugin::EncoderPlugin *plugin)
+{
+    const char *raw = plugin->name().c_str();
+    const char *p = raw;
+    /* strip "plugin_" prefix */
+    if (strncmp(p, "plugin_", 7) == 0) {
+        p += 7;
+    }
+    /* copy up to first '.' for display name */
+    String name(p);
+    const char *dot = strchr(name.c_str(), '.');
+    if (dot) {
+        name = String(name.c_str(), dot - name.c_str());
+    }
+    return name;
 }
 
 void
@@ -720,12 +765,12 @@ CapturingPassAsVideoState::ModalDialog::draw(const Project *project)
     }
     if (!m_enableVideoRecorder) {
         const IFileManager::EncoderPluginList plugins(stateController->fileManager()->allVideoEncoderPluginList());
-        ImGui::TextUnformatted("Plugins");
-        if (ImGui::BeginCombo("##plugin", m_plugin ? m_plugin->name().c_str() : "(none)")) {
+        ImGui::TextUnformatted(translator->translate("nanoem.window.dialog.export.video.plugin"));
+        if (ImGui::BeginCombo("##plugin", m_plugin ? displayPluginName(m_plugin).c_str() : "(none)")) {
             for (IFileManager::EncoderPluginList::const_iterator it = plugins.begin(), end = plugins.end(); it != end;
                  ++it) {
                 plugin::EncoderPlugin *plugin = *it;
-                const String name(plugin->name());
+                const String name(displayPluginName(plugin));
                 if (ImGui::Selectable(name.c_str())) {
                     const Vector2UI16 size(resolutionSize(project));
                     const nanoem_frame_index_t duration =
@@ -896,6 +941,7 @@ CapturingPassState::CapturingPassState(StateController *stateControllerPtr, Proj
     , m_lastVideoPTS(Motion::kMaxFrameIndex)
     , m_startFrameIndex(0)
     , m_blittedCount(0)
+    , m_lastCameraFollowingType(0)
     , m_viewportAspectRatioEnabled(false)
     , m_displaySyncDisabled(false)
     , m_preventFrameMisalighmentEnabled(true)
@@ -930,6 +976,15 @@ CapturingPassState::save(Project *project)
     m_lastSampleLevel = project->sampleLevel();
     m_displaySyncDisabled = project->isDisplaySyncDisabled();
     project->saveState(m_saveState);
+    if (project->activeModel()) {
+        project->setActiveModel(nullptr);
+        fprintf(stderr, "[capture] save: cleared active model for global camera\n");
+    }
+    m_lastCameraFollowingType = static_cast<int>(project->activeCamera()->followingType());
+    if (m_lastCameraFollowingType != ICamera::kFollowingTypeNone) {
+        project->activeCamera()->setFollowingType(ICamera::kFollowingTypeNone);
+        fprintf(stderr, "[capture] save: disabled camera following (was %d)\n", m_lastCameraFollowingType);
+    }
     project->setSampleLevel(m_sampleLevel);
     project->setPhysicsSimulationMode(
         project->physicsEngine()->simulationMode() != PhysicsEngine::kSimulationModeDisable
@@ -948,6 +1003,10 @@ CapturingPassState::restore(Project *project)
         if (m_saveState) {
             project->restoreState(m_saveState, true);
             project->destroyState(m_saveState);
+        }
+        if (m_lastCameraFollowingType != ICamera::kFollowingTypeNone) {
+            project->activeCamera()->setFollowingType(static_cast<ICamera::FollowingType>(m_lastCameraFollowingType));
+            fprintf(stderr, "[capture] restore: restored camera following type to %d\n", m_lastCameraFollowingType);
         }
         project->setViewportDevicePixelRatio(m_lastViewportDevicePixelRatio);
         project->setPreferredMotionFPS(m_lastPreferredMotionFPS, m_displaySyncDisabled);
@@ -1533,22 +1592,10 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
             if (m_state->frameImageData().size() == size) {
                 memcpy(m_state->mutableFrameImageDataPtr(), data, size);
                 nanoem_u32_t *dataPtr = reinterpret_cast<nanoem_u32_t *>(m_state->mutableFrameImageDataPtr());
-                if (m_state->outputImageDescription().pixel_format == SG_PIXELFORMAT_RGBA8) {
-                    if (m_videoPTS < 3) {
-                        const nanoem_u32_t *rawPixels = static_cast<const nanoem_u32_t *>(data);
-                        fprintf(stderr, "[capture] readPassAsync #%llu: before swap first 4 pixels=%08x %08x %08x %08x\n",
-                            (unsigned long long)m_videoPTS, rawPixels[0], rawPixels[1], rawPixels[2], rawPixels[3]);
-                    }
-                    for (size_t i = 0, numPixels = size / sizeof(*dataPtr); i < numPixels; i++) {
-                        nanoem_u32_t *ptr = dataPtr + i, v = *ptr;
-                        *ptr = 0 | ((v & 0x000000ff) << 16) | (v & 0x0000ff00) | ((v & 0x00ff0000) >> 16) |
-                            (v & 0xff000000);
-                    }
-                    if (m_videoPTS < 3) {
-                        fprintf(stderr, "[capture] readPassAsync #%llu: after swap first 4 pixels=%08x %08x %08x %08x\n",
-                            (unsigned long long)m_videoPTS, dataPtr[0], dataPtr[1], dataPtr[2], dataPtr[3]);
-                    }
-                }
+                /* No byte-swap needed: the viewport primary pass produces BGRA8 data on macOS
+                 * (fmt=80 = MTLPixelFormatBGRA8Unorm), and the FFmpeg encoder expects
+                 * AV_PIX_FMT_BGRA. The byte-swap previously present here converted BGRA→RGBA,
+                 * swapping R and B channels and producing inverted/negative-looking colors. */
                 if (m_videoPTS < 3) {
                     bool allZero = true;
                     for (size_t i = 0, n = m_state->frameImageData().size() / 4; i < n && allZero; i++) {
@@ -1586,21 +1633,14 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
     }
     else if (state == kBlitted) {
         project->flushAllCommandBuffers();
-        if (videoPTS == 0) {
-            /* Diagnostic: write a colored pattern directly to frame data to verify encode path */
-            nanoem_u32_t *pixels = reinterpret_cast<nanoem_u32_t *>(mutableFrameImageDataPtr());
-            for (size_t i = 0, n = frameImageData().size() / 4; i < n; i++) {
-                pixels[i] = 0xFF8000FF; /* magenta pixel */
-            }
-            fprintf(stderr, "[capture] FRAME 0: wrote magenta pattern (%zu pixels), encoding...\n",
-                frameImageData().size() / 4);
-            if (!encodeVideoFrame(frameImageData(), audioPTS, videoPTS, error)) {
-                setStateTransition(kCancelled);
-            }
-        }
-        else if (sg::read_pass_async) {
+        if (sg::read_pass_async) {
             AsyncReadHandler *handler = nanoem_new(AsyncReadHandler(this, audioPTS, videoPTS));
-            sg::read_pass_async(outputPass(), frameStagingBuffer(), &AsyncReadHandler::handleReadPassAsync, handler);
+            /* Read from the viewport primary pass instead of the custom output pass.
+             * The primary pass is rendered by drawViewport() + blitRenderPass every frame,
+             * bypassing the ImageBlitter output pass which has been producing all-zero data. */
+            sg_pass primaryPass = project->viewportPrimaryPass();
+            fprintf(stderr, "[capture] reading primary pass id=%d\n", primaryPass.id);
+            sg::read_pass_async(primaryPass, frameStagingBuffer(), &AsyncReadHandler::handleReadPassAsync, handler);
         }
         else {
             readPassImage();
@@ -1610,6 +1650,18 @@ CapturingPassAsVideoState::handleCaptureViaEncoderPlugin(Project *project, nanoe
         }
         calculateFrameIndex(deltaScaleFactor, m_amount, frameIndex);
         seekAndProgress(project, frameIndex, durationFrameIndices);
+        if (frameIndex > durationFrameIndices) {
+            if (m_encoderPluginPtr) {
+                Error finishError;
+                stopEncoding(finishError);
+            }
+            else if (m_videoRecorder) {
+                finishEncoding();
+            }
+            else {
+                setStateTransition(kFinished);
+            }
+        }
     }
 }
 

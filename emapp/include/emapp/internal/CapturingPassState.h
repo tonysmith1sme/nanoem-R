@@ -131,6 +131,7 @@ private:
     nanoem_frame_index_t m_startFrameIndex;
     volatile int m_asyncCount;
     int m_blittedCount;
+    int m_lastCameraFollowingType;
     bool m_viewportAspectRatioEnabled;
     bool m_displaySyncDisabled;
     bool m_preventFrameMisalighmentEnabled;
