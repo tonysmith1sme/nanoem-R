@@ -3752,6 +3752,12 @@
     ja_JP: 出力範囲
     zh_CN: 导出范围
   description: ''
+- key: nanoem.window.dialog.export.video.plugin
+  phrase:
+    en_US: Plugin
+    ja_JP: プラグイン
+    zh_CN: 编码插件
+  description: ''
 - key: nanoem.dialog.filename.untitled
   phrase:
     en_US: Untitled
