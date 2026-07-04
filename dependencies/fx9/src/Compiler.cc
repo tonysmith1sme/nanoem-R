@@ -230,18 +230,23 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     std::string patched(source);
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
-            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
+            "#if !defined(SSDO_QUALITY) || SSDO_QUALITY == 0\n"
+            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n"
+            "#endif\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
         patched = std::regex_replace(patched,
-            std::regex(R"(diffuse \+= tex2Dlod\(LightMapSamp)"),
+            std::regex("diffuse \\+= tex2Dlod\\(LightMapSamp"),
             "diffuse += max(tex2Dlod(LightMapSamp");
         patched = std::regex_replace(patched,
-            std::regex(R"(specular \+= tex2Dlod\(LightSpecMapSamp)"),
+            std::regex("tex2Dlod\\((LightMapSamp[^)]+\\)\\))\\.rgb\\);"),
+            "tex2Dlod($1).rgb, 0.0);");
+        patched = std::regex_replace(patched,
+            std::regex("specular \\+= tex2Dlod\\(LightSpecMapSamp"),
             "specular += max(tex2Dlod(LightSpecMapSamp");
         patched = std::regex_replace(patched,
-            std::regex(R"(, 0, 0\)\)\.rgb\);(\s*)// multi-light was)"),
-            ", 0, 0)).rgb, 0.0);$1// multi-light was");
+            std::regex("tex2Dlod\\((LightSpecMapSamp[^)]+\\)\\))\\.rgb\\);"),
+            "tex2Dlod($1).rgb, 0.0);");
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
             "diffuse += max(iblDiffuse, 0.0);");
@@ -267,6 +272,18 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched,
             std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
             "}\n$1");
+        patched = std::regex_replace(patched,
+            std::regex("(\\{)(FxaaFloat2 posM)"),
+            "{\n$2");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaFloat lumaM)"),
+            ";\n$1");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaBool earlyExit)"),
+            ";\n$1");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaFloat lumaNW)"),
+            ";\n$1");
     }
     if (endsWithIgnoreCase(path, "material_common.fxsub")) {
         patched = std::regex_replace(patched,
