@@ -385,7 +385,7 @@ static std::string
 patchLegacyEffectSource(const std::string &path, const std::string &source)
 {
     std::string patched(patchRayMMDSource(path, source)), result;
-    if (endsWithIgnoreCase(path, "SpecularColorDraw.fx")) {
+    if (patched.find("DefTech(_0, object , true, Tex)") != std::string::npos) {
         for (size_t pos = 0; (pos = patched.find("DefTech(_0", pos)) != std::string::npos; ) {
             size_t end = patched.find('\n', pos);
             if (end == std::string::npos) end = patched.size();
@@ -402,17 +402,7 @@ patchLegacyEffectSource(const std::string &path, const std::string &source)
             else if (line.find("DefTech(_3, object_ss , false, NoTex)") == 0) {
                 patched.replace(pos, line.size(), "technique ObjectTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
             }
-            else {
-                pos = end + 1;
-            }
-        }
-    }
-    if (endsWithIgnoreCase(path, "NormalDraw.fx")) {
-        for (size_t pos = 0; (pos = patched.find("DefTech(_0", pos)) != std::string::npos; ) {
-            size_t end = patched.find('\n', pos);
-            if (end == std::string::npos) end = patched.size();
-            std::string line = patched.substr(pos, end - pos);
-            if (line.find("DefTech(_0, object , true, Tex)") == 0) {
+            else if (line.find("DefTech(_0, object , true, Tex)") == 0) {
                 patched.replace(pos, line.size(), "technique ObjectEdgeTec_0 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
             }
             else if (line.find("DefTech(_1, object , false, NoTex)") == 0) {
