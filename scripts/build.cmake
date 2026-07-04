@@ -463,6 +463,8 @@ function(compile_icu4c _cmake_build_type _generator _toolset_option _arch_option
     endif()
     get_compiler_flags(_cflags _cxxflags)
     # see https://unicode-org.github.io/icu/userguide/icu_data/buildtool.html#icu-data-configuration-file for more details of ICU_DATA_FILTER_FILE
+    set(_cflags "${_cflags} ${_build_flags}")
+    set(_cxxflags "${_cxxflags} ${_build_flags}")
     execute_process(COMMAND
       ${CMAKE_COMMAND} -E env
         CFLAGS=${_cflags}
