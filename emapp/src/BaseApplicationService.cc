@@ -6,6 +6,8 @@
 
 #include "emapp/BaseApplicationService.h"
 
+#include <stdio.h>
+
 #include "emapp/Accessory.h"
 #include "emapp/AccessoryProgramBundle.h"
 #include "emapp/ApplicationMenuBuilder.h"
@@ -1629,6 +1631,7 @@ BaseApplicationService::BaseApplicationService(const JSON_Value *root)
     , m_translatorPtr(nullptr)
     , m_applicationPendingChangeConfiguration(nullptr)
     , m_capturingPassState(nullptr)
+    , m_captureDestroyPending(false)
     , m_window(nullptr)
     , m_confirmer(this)
     , m_sharedCancelPublisherRepository(this)
@@ -1749,6 +1752,13 @@ void
 BaseApplicationService::draw(Project *project)
 {
     if (nanoem_likely(project)) {
+        /* Defer destroy to next frame so sg_commit (called by sokol after draw()
+         * returns) has submitted the GPU cmd_buffer and Metal completion handlers
+         * have fired, avoiding spin-loop timeout and use-after-free crash. */
+        if (m_captureDestroyPending && m_capturingPassState) {
+            m_captureDestroyPending = false;
+            stopCapture(project);
+        }
         Error error;
         project->drawShadowMap();
         project->drawAllOffscreenRenderTargets();
@@ -1758,8 +1768,10 @@ BaseApplicationService::draw(Project *project)
             stopped = m_capturingPassState->capture(project, error);
         }
         project->flushAllCommandBuffers();
+        IState *state = m_stateController->currentState();
+        m_window->drawAllWindows(project, state, m_defaultAuxFlags);
         if (stopped) {
-            stopCapture(project);
+            m_captureDestroyPending = true;
             if (g_sentryAvailable) {
                 sentry_value_t breadcrumb = sentry_value_new_breadcrumb(nullptr, nullptr);
                 sentry_value_set_by_key(breadcrumb, "category", sentry_value_new_string("capture.stop"));
@@ -1769,8 +1781,6 @@ BaseApplicationService::draw(Project *project)
                 error.addModalDialog(this);
             }
         }
-        IState *state = m_stateController->currentState();
-        m_window->drawAllWindows(project, state, m_defaultAuxFlags);
     }
 }
 
@@ -5706,7 +5716,9 @@ void
 BaseApplicationService::destroyCapturePassState(Project *project)
 {
     while (!m_capturingPassState->transitDestruction(project)) {
+        bx::sleep(2);
     }
+    fprintf(stderr, "[capture] destroyCapturePassState: done\n");
     nanoem_delete_safe(m_capturingPassState);
 }
 

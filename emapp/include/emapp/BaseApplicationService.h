@@ -428,6 +428,7 @@ private:
     ITranslator *m_translatorPtr;
     JSON_Value *m_applicationPendingChangeConfiguration;
     internal::CapturingPassState *m_capturingPassState;
+    bool m_captureDestroyPending;
     internal::IUIWindow *m_window;
     Confirmer m_confirmer;
     HandledSGXMessageSet m_handledSGXMessages;
