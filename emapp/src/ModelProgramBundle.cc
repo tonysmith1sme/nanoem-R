@@ -61,6 +61,7 @@ namespace {
 #include "emapp/private/shaders/model_zplot_vs_glsl_es3.h"
 #include "emapp/private/shaders/model_zplot_vs_msl_macos.h"
 #include "emapp/private/shaders/model_zplot_vs_spirv.h"
+#include "emapp/private/shaders/pointed_model_color_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_model_color_vs_msl_macos.h"
 const char *const kPrefixName = "@nanoem/ModelProgramBundle";
 } /* namespace anonymous */
@@ -607,8 +608,14 @@ ModelProgramBundle::ObjectTechnique::execute(const IDrawable * /* drawable */, b
             if (backend == SG_BACKEND_D3D11) {
                 sd.fs.bytecode.ptr = g_nanoem_model_color_ps_dxbc_data;
                 sd.fs.bytecode.size = g_nanoem_model_color_ps_dxbc_size;
-                sd.vs.bytecode.ptr = g_nanoem_model_color_vs_dxbc_data;
-                sd.vs.bytecode.size = g_nanoem_model_color_vs_dxbc_size;
+                if (m_isPointDrawEnabled) {
+                    sd.vs.bytecode.ptr = g_nanoem_pointed_model_color_vs_dxbc_data;
+                    sd.vs.bytecode.size = g_nanoem_pointed_model_color_vs_dxbc_size;
+                }
+                else {
+                    sd.vs.bytecode.ptr = g_nanoem_model_color_vs_dxbc_data;
+                    sd.vs.bytecode.size = g_nanoem_model_color_vs_dxbc_size;
+                }
             }
             else if (sg::is_backend_metal(backend)) {
                 sd.fs.bytecode.ptr = g_nanoem_model_color_fs_msl_macos_data;

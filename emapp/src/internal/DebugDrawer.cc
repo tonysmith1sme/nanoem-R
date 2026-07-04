@@ -24,6 +24,7 @@ namespace {
 #include "emapp/private/shaders/debug_vs_glsl_es3.h"
 #include "emapp/private/shaders/debug_vs_msl_macos.h"
 #include "emapp/private/shaders/debug_vs_spirv.h"
+#include "emapp/private/shaders/pointed_debug_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_debug_vs_msl_macos.h"
 static const char *const kLabelPrefix = "@nanoem/DebugDrawer";
 } /* namespace anonymous */
@@ -341,7 +342,14 @@ DebugDrawer::setupShader()
         desc.attrs[6] = sg_shader_attr_desc { "a_texcoord4", "TEXCOORD", 4 };
         desc.attrs[7] = sg_shader_attr_desc { "a_color0", "COLOR", 0 };
         m_shader = sg::make_shader(&desc);
-        if (sg::is_backend_metal(backend)) {
+        if (backend == SG_BACKEND_D3D11) {
+            desc.vs.bytecode.ptr = g_nanoem_pointed_debug_vs_dxbc_data;
+            desc.vs.bytecode.size = g_nanoem_pointed_debug_vs_dxbc_size;
+            m_pointedShader = sg::make_shader(&desc);
+            nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
+            SG_LABEL_SHADER(m_pointedShader, desc.label);
+        }
+        else if (sg::is_backend_metal(backend)) {
             desc.vs.bytecode.ptr = g_nanoem_pointed_debug_vs_msl_macos_data;
             desc.vs.bytecode.size = g_nanoem_pointed_debug_vs_msl_macos_size;
             m_pointedShader = sg::make_shader(&desc);

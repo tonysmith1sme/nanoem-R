@@ -23,6 +23,7 @@ namespace {
 #include "emapp/private/shaders/grid_vs_glsl_core33.h"
 #include "emapp/private/shaders/grid_vs_glsl_es3.h"
 #include "emapp/private/shaders/grid_vs_msl_macos.h"
+#include "emapp/private/shaders/pointed_grid_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_grid_vs_msl_macos.h"
 
 struct Uniform {
@@ -108,7 +109,14 @@ LineDrawer::initialize()
     m_shader = sg::make_shader(&sd);
     nanoem_assert(sg::query_shader_state(m_shader) == SG_RESOURCESTATE_VALID, "shader must be valid");
     SG_LABEL_SHADER(m_shader, sd.label);
-    if (sg::is_backend_metal(backend)) {
+    if (backend == SG_BACKEND_D3D11) {
+        sd.vs.bytecode.ptr = g_nanoem_pointed_grid_vs_dxbc_data;
+        sd.vs.bytecode.size = g_nanoem_pointed_grid_vs_dxbc_size;
+        m_pointedShader = sg::make_shader(&sd);
+        nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
+        SG_LABEL_SHADER(m_pointedShader, sd.label);
+    }
+    else if (sg::is_backend_metal(backend)) {
         sd.vs.bytecode.ptr = g_nanoem_pointed_grid_vs_msl_macos_data;
         sd.vs.bytecode.size = g_nanoem_pointed_grid_vs_msl_macos_size;
         m_pointedShader = sg::make_shader(&sd);
