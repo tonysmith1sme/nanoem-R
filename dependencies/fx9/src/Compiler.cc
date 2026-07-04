@@ -228,9 +228,6 @@ patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &
     patched = std::regex_replace(patched,
         std::regex(R"(#\s*define\s+SSR_SAMPLER_COUNT\s+128\b)", std::regex_constants::icase),
         "#define SSR_SAMPLER_COUNT 64");
-    patched = std::regex_replace(patched,
-        std::regex(R"(#\s*define\s+SHADOW_BLUR_COUNT\s+6\b)", std::regex_constants::icase),
-        "#define SHADOW_BLUR_COUNT 12");
     return patched;
 }
 
@@ -287,12 +284,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
-            "diffuse = max(diffuse, material.albedo * 0.08);\n\t$1");
-    }
-    if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
-        patched = std::regex_replace(patched,
-            std::regex(R"(exp\\(-20 \\* \\(receiverDepth)"),
-            "exp(-5 * (receiverDepth");
+            "diffuse = max(diffuse, material.albedo * 0.01);\n\t$1");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
