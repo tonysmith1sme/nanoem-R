@@ -463,17 +463,20 @@ array_size_expression(A) ::= int_literal(B). {
     A = B;
 }
 
-annotation_decl(A) ::= LT annotation_list(B) SEMICOLON GT. {
+annotation_decl(A) ::= LT annotation_list(B) GT. {
     A = B;
 }
 annotation_decl(A) ::= LT GT. {
     A = 0;
 }
-annotation_list(A) ::= annotation_list(B) SEMICOLON annotation(C). {
+annotation_list(A) ::= annotation_list(B) annotation_entry(C). {
     A = fx9ParserContextAppendAnnotation(parser, B, C);
 }
-annotation_list(A) ::= annotation(B). {
+annotation_list(A) ::= annotation_entry(B). {
     A = fx9ParserContextAppendAnnotation(parser, 0, B);
+}
+annotation_entry(A) ::= annotation(B) SEMICOLON. {
+    A = B;
 }
 annotation(A) ::= type_specifier(B) identifier(C) ASSIGN initializer_expression(D). {
     A = fx9ParserContextCreateAnnotation(parser, B, C, D);

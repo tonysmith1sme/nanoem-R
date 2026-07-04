@@ -232,6 +232,19 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = replaceRayMMDIntegerDefine(patched, "MULTI_LIGHT_ENABLE", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
+    if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
+        patched = std::string(
+            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
+    }
+    if (endsWithIgnoreCase(path, "PostProcessHDR.fxsub")) {
+        patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*,)"), "sampler2D $1,");
+        patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
+    }
+    if (endsWithIgnoreCase(path, "FXAA3.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
+            "}\n$1");
+    }
     patched = patchRayMMDConfigurationInclude(patched);
     replaceAll(patched, "Sky*box*.*", "sky*box*.*");
     replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
