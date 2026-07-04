@@ -229,11 +229,8 @@ patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &
         std::regex(R"(#\s*define\s+SSR_SAMPLER_COUNT\s+128\b)", std::regex_constants::icase),
         "#define SSR_SAMPLER_COUNT 64");
     patched = std::regex_replace(patched,
-        std::regex(R"(#\s*define\s+SHADOW_POISSON_COUNT\s+25\b)", std::regex_constants::icase),
-        "#define SHADOW_POISSON_COUNT 16");
-    patched = std::regex_replace(patched,
         std::regex(R"(#\s*define\s+SHADOW_BLUR_COUNT\s+6\b)", std::regex_constants::icase),
-        "#define SHADOW_BLUR_COUNT 4");
+        "#define SHADOW_BLUR_COUNT 8");
     return patched;
 }
 
@@ -286,6 +283,16 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
             "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
+    }
+    if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
+            "diffuse = max(diffuse, material.albedo * 0.06);\n\t$1");
+    }
+    if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex(R"(exp\\(-20 \\* \\(receiverDepth)"),
+            "exp(-10 * (receiverDepth");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
