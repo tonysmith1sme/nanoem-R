@@ -289,6 +289,40 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     patched = std::regex_replace(patched,
         std::regex(R"(SHKernel\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\])", std::regex_constants::icase),
         "SHKernel[(($1) * 9) + ($2)]");
+    if (endsWithIgnoreCase(path, "SpecularColorDraw.fx")) {
+        replaceAll(patched, "#pass_", "\"object\"");
+        replaceAll(patched, "##id_", "_0");
+        replaceAll(patched, "##sym##", "_Tex");
+        replaceAll(patched,
+            "DefTech(_1, object , false, NoTex)",
+            "technique ObjectTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
+        replaceAll(patched,
+            "DefTech(_2, object_ss , true, Tex)",
+            "technique ObjectTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
+        replaceAll(patched,
+            "DefTech(_3, object_ss , false, NoTex)",
+            "technique ObjectTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
+        replaceAll(patched,
+            "DefTech(_0, object , true, Tex)",
+            "technique ObjectTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
+    }
+    if (endsWithIgnoreCase(path, "NormalDraw.fx")) {
+        replaceAll(patched, "#pass_", "\"object\"");
+        replaceAll(patched, "##id_", "_0");
+        replaceAll(patched, "##sym##", "_Tex");
+        replaceAll(patched,
+            "DefTech(_1, object , false, NoTex)",
+            "technique ObjectEdgeTec_1 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
+        replaceAll(patched,
+            "DefTech(_2, object_ss , true, Tex)",
+            "technique ObjectEdgeTec_2 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
+        replaceAll(patched,
+            "DefTech(_3, object_ss , false, NoTex)",
+            "technique ObjectEdgeTec_3 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
+        replaceAll(patched,
+            "DefTech(_0, object , true, Tex)",
+            "technique ObjectEdgeTec_0 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
+    }
     return patched;
 }
 
