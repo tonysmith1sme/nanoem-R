@@ -14,6 +14,7 @@
 #include <Windows.h>
 #else
 #include <fcntl.h>
+#include <iconv.h>
 #include <cctype>
 #include <float.h>
 #include <sys/stat.h>
@@ -40,6 +41,48 @@ using namespace glslang;
 #endif
 
 namespace {
+
+static bool
+isValidUTF8(const char *data, size_t size)
+{
+    const unsigned char *ptr = reinterpret_cast<const unsigned char *>(data);
+    size_t i = 0;
+    while (i < size) {
+        const unsigned char c = ptr[i];
+        if (c <= 0x7f) {
+            i++;
+        }
+        else if ((c & 0xe0) == 0xc0) {
+            if (i + 1 >= size || (ptr[i + 1] & 0xc0) != 0x80 || c < 0xc2) {
+                return false;
+            }
+            i += 2;
+        }
+        else if ((c & 0xf0) == 0xe0) {
+            if (i + 2 >= size || (ptr[i + 1] & 0xc0) != 0x80 || (ptr[i + 2] & 0xc0) != 0x80) {
+                return false;
+            }
+            if ((c == 0xe0 && ptr[i + 1] < 0xa0) || (c == 0xed && ptr[i + 1] >= 0xa0)) {
+                return false;
+            }
+            i += 3;
+        }
+        else if ((c & 0xf8) == 0xf0) {
+            if (i + 3 >= size || (ptr[i + 1] & 0xc0) != 0x80 || (ptr[i + 2] & 0xc0) != 0x80 ||
+                (ptr[i + 3] & 0xc0) != 0x80) {
+                return false;
+            }
+            if ((c == 0xf0 && ptr[i + 1] < 0x90) || (c > 0xf4) || (c == 0xf4 && ptr[i + 1] >= 0x90)) {
+                return false;
+            }
+            i += 4;
+        }
+        else {
+            return false;
+        }
+    }
+    return true;
+}
 
 static TString
 decodeTextSource(const char *data, size_t size)
@@ -92,6 +135,40 @@ decodeTextSource(const char *data, size_t size)
             utf8.resize(numBytes);
             WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), int(wide.size()), &utf8[0], numBytes, nullptr, nullptr);
             return TString(utf8.c_str(), utf8.size());
+        }
+    }
+#else
+    const char *offset = data;
+    size_t remaining = size;
+    if (size >= 3 && static_cast<unsigned char>(data[0]) == 0xef && static_cast<unsigned char>(data[1]) == 0xbb &&
+        static_cast<unsigned char>(data[2]) == 0xbf) {
+        offset += 3;
+        remaining -= 3;
+    }
+    if (isValidUTF8(offset, remaining)) {
+        return TString(offset, remaining);
+    }
+    iconv_t cd = iconv_open("UTF-8", "SHIFT_JIS");
+    if (cd != reinterpret_cast<iconv_t>(-1)) {
+        std::string result;
+        char outbuf[4096];
+        size_t inremain = remaining;
+        const char *inptr = offset;
+        while (inremain > 0) {
+            char *pin = const_cast<char *>(inptr);
+            char *pout = outbuf;
+            size_t outremain = sizeof(outbuf);
+            size_t n = iconv(cd, &pin, &inremain, &pout, &outremain);
+            if (n == static_cast<size_t>(-1) && errno != E2BIG) {
+                result.clear();
+                break;
+            }
+            result.append(outbuf, sizeof(outbuf) - outremain);
+            inptr = pin;
+        }
+        iconv_close(cd);
+        if (!result.empty()) {
+            return TString(result.c_str(), result.size());
         }
     }
 #endif

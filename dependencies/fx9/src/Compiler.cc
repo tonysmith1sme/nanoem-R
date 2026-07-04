@@ -13,6 +13,7 @@
 #include <Windows.h>
 #else
 #include <fcntl.h>
+#include <iconv.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -144,6 +145,40 @@ decodeTextSource(const char *data, size_t size)
             utf8.resize(numBytes);
             WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), int(wide.size()), &utf8[0], numBytes, nullptr, nullptr);
             return utf8;
+        }
+    }
+#else
+    const char *offset = data;
+    size_t remaining = size;
+    if (size >= 3 && static_cast<unsigned char>(data[0]) == 0xef && static_cast<unsigned char>(data[1]) == 0xbb &&
+        static_cast<unsigned char>(data[2]) == 0xbf) {
+        offset += 3;
+        remaining -= 3;
+    }
+    if (isValidUTF8(offset, remaining)) {
+        return std::string(offset, remaining);
+    }
+    iconv_t cd = iconv_open("UTF-8", "SHIFT_JIS");
+    if (cd != reinterpret_cast<iconv_t>(-1)) {
+        std::string result;
+        char outbuf[4096];
+        size_t inremain = remaining;
+        const char *inptr = offset;
+        while (inremain > 0) {
+            char *pin = const_cast<char *>(inptr);
+            char *pout = outbuf;
+            size_t outremain = sizeof(outbuf);
+            size_t n = iconv(cd, &pin, &inremain, &pout, &outremain);
+            if (n == static_cast<size_t>(-1) && errno != E2BIG) {
+                result.clear();
+                break;
+            }
+            result.append(outbuf, sizeof(outbuf) - outremain);
+            inptr = pin;
+        }
+        iconv_close(cd);
+        if (!result.empty()) {
+            return result;
         }
     }
 #endif
