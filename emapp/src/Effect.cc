@@ -176,11 +176,7 @@ constrainMetalEffectRenderTargetMipLevels(nanoem_u8_t value) NANOEM_DECL_NOEXCEP
 static int
 constrainMetalEffectSampleCount(int value) NANOEM_DECL_NOEXCEPT
 {
-    if (isMetalEffectResourceConstrained()) {
-        const int capped = glm::min(value, 4);
-        return glm::max(capped, 1);
-    }
-    return value;
+    return isMetalEffectResourceConstrained() ? 1 : value;
 }
 
 static void
