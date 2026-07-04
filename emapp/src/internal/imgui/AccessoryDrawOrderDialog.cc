@@ -81,7 +81,7 @@ AccessoryDrawOrderDialog::draw(Project *project)
 {
     bool visible = true;
     const nanoem_f32_t height = ImGui::GetFrameHeightWithSpacing() * 14;
-    if (open("Accessory Draw Order", kIdentifier, &visible, height)) {
+    if (open(tr("nanoem.gui.window.project.order.accessorydrawable.title"), kIdentifier, &visible, height)) {
         bool changed = false;
         if (ImGuiWindow::handleButton("Up", ImGui::GetContentRegionAvail().x * 0.5f,
                 !m_orderState.isOrderBegin())) {

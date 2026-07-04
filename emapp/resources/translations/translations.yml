@@ -1128,6 +1128,11 @@
     en_US: Transform Model Order
     ja_JP: モデルの変形順
     zh_CN: 模型变形顺序
+- key: nanoem.gui.window.project.order.accessorydrawable.title
+  phrase:
+    en_US: Accessory Draw Order
+    ja_JP: アクセサリの描画順
+    zh_CN: 附件绘制顺序
 - key: nanoem.gui.window.project.physics-engine.title
   phrase:
     en_US: Physics Simulation
