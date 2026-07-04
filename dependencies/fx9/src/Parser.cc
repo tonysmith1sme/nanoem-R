@@ -290,16 +290,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         return source;
     }
     std::string patched(source);
-    if (endsWithIgnoreCase(path, "ray.conf")) {
-        const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
-            std::regex_constants::icase;
-        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
-    }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
             "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
@@ -340,7 +330,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
             "}\n$1");
     }
-    patched = patchRayMMDConfigurationInclude(patched);
     replaceAll(patched, "Sky*box*.*", "sky*box*.*");
     replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
     patched = std::regex_replace(patched,
@@ -349,7 +338,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     patched = std::regex_replace(patched,
         std::regex(R"(SHKernel\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\])", std::regex_constants::icase),
         "SHKernel[(($1) * 9) + ($2)]");
-    patched = patchRayMMDMetalHeavySamplingSource(path, patched);
     return patched;
 }
 
