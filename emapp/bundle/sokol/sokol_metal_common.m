@@ -230,13 +230,14 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
                                  destinationOffset:0
                                  destinationBytesPerRow:stride
                                  destinationBytesPerImage:size];
+                    [mtl_blitter synchronizeResource:dest];
                     [mtl_blitter endEncoding];
                     _sg.mtl.cmd_encoder = nil;
                     [cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
                         _SOKOL_UNUSED(buffer);
                         callback(dest.contents, size, opaque);
                     }];
-                    fprintf(stderr, "[sgx] read_pass_async: using sokol cmd_buffer\n");
+                    fprintf(stderr, "[sgx] read_pass_async: using sokol cmd_buffer (will commit later)\n");
                 }
                 else {
                     id<MTLCommandBuffer> fallback = [_sg.mtl.cmd_queue commandBuffer];
@@ -254,6 +255,7 @@ sgx_read_pass_async(sg_pass pass, sg_buffer buffer, sgx_read_pass_async_callback
                                  destinationOffset:0
                                  destinationBytesPerRow:stride
                                  destinationBytesPerImage:size];
+                    [mtl_blitter synchronizeResource:dest];
                     [mtl_blitter endEncoding];
                     [fallback addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
                         _SOKOL_UNUSED(buffer);
