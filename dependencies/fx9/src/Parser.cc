@@ -294,7 +294,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
         patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
@@ -302,7 +301,9 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
-            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
+            "#if !defined(SSDO_QUALITY) || SSDO_QUALITY == 0\n"
+            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n"
+            "#endif\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
         replaceAll(patched,
