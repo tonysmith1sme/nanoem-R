@@ -209,6 +209,16 @@ endsWithIgnoreCase(const std::string &value, const char *suffix)
         valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
 }
 
+static void
+replaceAll(std::string &value, const std::string &from, const std::string &to)
+{
+    size_t offset = 0;
+    while ((offset = value.find(from, offset)) != std::string::npos) {
+        value.replace(offset, from.size(), to);
+        offset += to.size();
+    }
+}
+
 static bool
 isRayMMDMainEffectSourcePath(const std::string &path)
 {
@@ -288,10 +298,40 @@ patchRayMMDSource(const std::string &path, const std::string &source)
                        "\\s*in float4 viewdir\\s*:\\s*TEXCOORD3\\s*\\)"),
             "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         patched = std::regex_replace(patched,
-            std::regex("return EncodeGbuffer\\(material, viewdir\\.w\\);"),
-            "GbufferParam __gb = EncodeGbuffer(material, viewdir.w); "
+            std::regex("GbufferParam MaterialPS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("GbufferParam Material2PS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
+            "void Material2PS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("return EncodeGbuffer\\(material, (\\w+)\\.w\\);"),
+            "GbufferParam __gb = EncodeGbuffer(material, $1.w); "
             "oColor0 = __gb.buffer1; oColor1 = __gb.buffer2; "
             "oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
+    }
+    if (endsWithIgnoreCase(path, "_2.0.fxsub")) {
+        replaceAll(patched, "\r\n", "\n");
+        replaceAll(patched,
+            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "\treturn EncodeGbuffer(material, worldPos.w);",
+            "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
