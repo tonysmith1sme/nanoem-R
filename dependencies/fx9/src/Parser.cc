@@ -373,19 +373,19 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
     }
     if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
-        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 48");
-        replaceAll(patched, "float radius = 2.0 / SHADOW_MAP_SIZE", "float radius = 120.0 / SHADOW_MAP_SIZE");
-        replaceAll(patched, "exp(-20 *", "exp(-0.5 *");
-        replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 20");
-        replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 20");
-        // Fix: Use fixed sigma=6 for BilateralWeight to maintain proper depth-aware filtering
-        // SHADOW_BLUR_COUNT (48) is too large as sigma - makes bilateral filter nearly uniform
+        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 24");
+        replaceAll(patched, "float radius = 2.0 / SHADOW_MAP_SIZE", "float radius = 48.0 / SHADOW_MAP_SIZE");
+        replaceAll(patched, "exp(-20 *", "exp(-2 *");
+        replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 8");
+        replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 8");
+        // Fix: Use fixed sigma=8 for BilateralWeight to maintain proper depth-aware filtering
+        // SHADOW_BLUR_COUNT (24) is too large as sigma - makes bilateral filter nearly uniform
         replaceAll(patched,
             "BilateralWeight(r, depth1, center_d, SHADOW_BLUR_COUNT, 10)",
-            "BilateralWeight(r, depth1, center_d, 6, 10)");
+            "BilateralWeight(r, depth1, center_d, 8, 10)");
         replaceAll(patched,
             "BilateralWeight(r, depth2, center_d, SHADOW_BLUR_COUNT, 10)",
-            "BilateralWeight(r, depth2, center_d, 6, 10)");
+            "BilateralWeight(r, depth2, center_d, 8, 10)");
     }
     if (endsWithIgnoreCase(path, "textures.fxsub")) {
         replaceAll(patched,
