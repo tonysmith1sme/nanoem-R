@@ -1009,45 +1009,6 @@ DefaultFileManager::handleAddingModelDialog(void *userData, Model *model, Projec
     Progress progress(project, 0);
     Error error;
     fileManager->loadModelEffectSettingFile(model, project, progress, error);
-    if (project->isEffectPluginEnabled() && !error.hasReason() && !project->resolveEffect(model)) {
-        const Project::AccessoryList *accessories = project->allAccessories();
-        for (Project::AccessoryList::const_iterator it = accessories->begin(), end = accessories->end(); it != end; ++it) {
-            const Accessory *accessory = *it;
-            if (accessory) {
-                if (const Effect *sceneEffect = project->resolveEffect(accessory)) {
-                    if (sceneEffect->scriptClass() == IEffect::kScriptClassTypeScene) {
-                        String baseDir(sceneEffect->fileURI().absolutePathByDeletingLastPathComponent());
-                        String materialFxPath(baseDir);
-                        materialFxPath.append("/Materials/material_2.0.fx");
-                        if (FileUtils::exists(materialFxPath.c_str())) {
-                            const URI fxURI(URI::createFromFilePath(materialFxPath));
-                            ByteArray bytes;
-                            if (Effect::compileFromSource(fxURI, fileManager, project->isMipmapEnabled(), bytes, progress, error)) {
-                                Effect *materialEffect = project->createEffect();
-                                materialEffect->setName("material_2.0.fx");
-                                if (materialEffect->load(bytes, progress, error)) {
-                                    materialEffect->setFileURI(fxURI);
-                                    if (materialEffect->upload(effect::kAttachmentTypeMaterial, progress, error)) {
-                                        nanoem_rsize_t numMaterials;
-                                        nanoem_model_material_t *const *materials =
-                                            nanoemModelGetAllMaterialObjects(model->data(), &numMaterials);
-                                        for (nanoem_rsize_t i = 0; i < numMaterials; i++) {
-                                            model::Material *material = model::Material::cast(materials[i]);
-                                            project->attachModelMaterialEffect(material, materialEffect);
-                                        }
-                                    }
-                                }
-                                if (error.hasReason()) {
-                                    project->destroyEffect(materialEffect);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
     IModalDialog *dialog = nullptr;
     if (!project->loadAttachedDrawableEffect(model, progress, error)) {
         BaseApplicationService *applicationPtr = fileManager->m_applicationPtr;
