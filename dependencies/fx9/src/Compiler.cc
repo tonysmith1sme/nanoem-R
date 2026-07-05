@@ -296,19 +296,19 @@ patchRayMMDSource(const std::string &path, const std::string &source)
                        "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
                        "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*,"
                        "\\s*in float4 viewdir\\s*:\\s*TEXCOORD3\\s*\\)"),
-            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         patched = std::regex_replace(patched,
             std::regex("GbufferParam MaterialPS\\("
                        "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
                        "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
                        "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
-            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         patched = std::regex_replace(patched,
             std::regex("GbufferParam Material2PS\\("
                        "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
                        "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
                        "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
-            "void Material2PS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void Material2PS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         patched = std::regex_replace(patched,
             std::regex("return EncodeGbuffer\\(material, (\\w+)\\.w\\);"),
             "GbufferParam __gb = EncodeGbuffer(material, $1.w); "
@@ -319,16 +319,16 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         replaceAll(patched, "\r\n", "\n");
         replaceAll(patched,
             "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
-            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         replaceAll(patched,
             "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
-            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         replaceAll(patched,
             "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
-            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         replaceAll(patched,
             "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
-            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : SV_Target0, out float4 oColor1 : SV_Target1, out float4 oColor2 : SV_Target2, out float4 oColor3 : SV_Target3)");
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         replaceAll(patched,
             "\treturn EncodeGbuffer(material, worldPos.w);",
             "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
@@ -2520,8 +2520,9 @@ Compiler::compile(const std::string &source, const char *filename, EffectProduct
         const SpvVersion &spv = createSpvVersion();
         intermediate.setSpv(spv);
         intermediate.setSource(EShSourceHlsl);
+        EShMessages messages = EShMessages(EShMsgDefault | EShMsgHlslDX9Compatible);
         HlslParseContext parseContext(symbolTableRef, intermediate, false, m_version, m_profile, spv, EShLangFragment,
-            infoSink, TString(), false, EShMsgDefault);
+            infoSink, TString(), false, messages);
         ParserContext parser(&parseContext, filename, m_vertexShaderInputVariables, m_pixelShaderInputVariables);
         for (auto it = m_includeSourceData.begin(), end = m_includeSourceData.end(); it != end; ++it) {
             parser.addIncludeSource(it->first.c_str(), it->second.c_str());

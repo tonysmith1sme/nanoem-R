@@ -27,7 +27,7 @@ struct EffectCompiler {
     }
 
     EffectCompiler()
-        : m_compiler(new Compiler(ECoreProfile, EShMsgDefault))
+        : m_compiler(new Compiler(ECoreProfile, EShMessages(EShMsgDefault | EShMsgHlslDX9Compatible)))
     {
         m_compiler->setOptimizeEnabled(false);
         m_compiler->setValidationEnabled(false);
