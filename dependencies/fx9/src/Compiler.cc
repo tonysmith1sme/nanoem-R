@@ -343,6 +343,15 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             std::regex("(#include\\s+\"[^\"]+\"\\s*)"),
             "#define MIDPOINT_8_BIT (127.0f / 255.0f)\n$1",
             std::regex_constants::format_first_only);
+        // Fix: Skip YCbCr encoding on Metal to avoid purple overlay.
+        // EncodeYcbcr/DecodeYcbcr uses fmod + EdgeFilter 4-neighbor sampling,
+        // which produces channel misalignment under MSL's float ordering.
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor0\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*diffuse\s*,\s*specular\s*\)\s*;)"),
+            "oColor0 = float4(diffuse, 0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor1\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*diffuse2\s*,\s*specular2\s*\)\s*;)"),
+            "oColor1 = float4(specular, 0);");
     }
     if (endsWithIgnoreCase(path, "material_common.fxsub")) {
         patched = std::regex_replace(patched,
