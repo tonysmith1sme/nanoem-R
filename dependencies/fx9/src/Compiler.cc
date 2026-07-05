@@ -281,22 +281,14 @@ patchRayMMDConfigurationInclude(const std::string &source)
 {
     static const char *kRayMMDMetalConfigurationOverride =
         "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
-        "#undef FOG_ENABLE\n"
-        "#define FOG_ENABLE 0\n"
         "#undef SUN_SHADOW_QUALITY\n"
         "#define SUN_SHADOW_QUALITY 2\n"
         "#undef SSDO_QUALITY\n"
-        "#define SSDO_QUALITY 0\n"
+        "#define SSDO_QUALITY 1\n"
         "#undef SSR_QUALITY\n"
-        "#define SSR_QUALITY 0\n"
-        "#undef SSSS_QUALITY\n"
-        "#define SSSS_QUALITY 0\n"
+        "#define SSR_QUALITY 1\n"
         "#undef HDR_BLOOM_MODE\n"
-        "#define HDR_BLOOM_MODE 0\n"
-        "#undef IBL_QUALITY\n"
-        "#define IBL_QUALITY 0\n"
-        "#undef MULTI_LIGHT_ENABLE\n"
-        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#define HDR_BLOOM_MODE 1\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
         "#endif\n";
@@ -315,14 +307,11 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "ray.conf")) {
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
-        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 1, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 1, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 1, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "MULTI_LIGHT_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "IBL_QUALITY", 0, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
@@ -2761,6 +2750,12 @@ Compiler::setTargetLanguage(Compiler::LanguageType value)
             break;
         }
         m_language = value;
+        m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_MSL");
+        m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_HLSL");
+        m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_GLSL");
+        if (value == kLanguageTypeMSL) {
+            m_macros["NANOEM_OUTPUT_SHADER_LANGUAGE_MSL"] = "1";
+        }
     }
 }
 
