@@ -209,6 +209,16 @@ endsWithIgnoreCase(const std::string &value, const char *suffix)
         valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
 }
 
+static void
+replaceAll(std::string &value, const std::string &from, const std::string &to)
+{
+    size_t offset = 0;
+    while ((offset = value.find(from, offset)) != std::string::npos) {
+        value.replace(offset, from.size(), to);
+        offset += to.size();
+    }
+}
+
 static bool
 isRayMMDMainEffectSourcePath(const std::string &path)
 {
@@ -319,15 +329,12 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
-        patched = std::regex_replace(patched,
-            std::regex(R"(diffuse \+= tex2Dlod\(LightMapSamp)"),
-            "diffuse += max(tex2Dlod(LightMapSamp");
-        patched = std::regex_replace(patched,
-            std::regex(R"(specular \+= tex2Dlod\(LightSpecMapSamp)"),
-            "specular += max(tex2Dlod(LightSpecMapSamp");
-        patched = std::regex_replace(patched,
-            std::regex(R"(, 0, 0\)\)\.rgb\);(\s*)// multi-light was)"),
-            ", 0, 0)).rgb, 0.0);$1// multi-light was");
+        for (size_t pos = 0; (pos = patched.find("diffuse += tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 62) {
+            patched.replace(pos, 62, "diffuse += max(tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        }
+        for (size_t pos = 0; (pos = patched.find("specular += tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 67) {
+            patched.replace(pos, 67, "specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        }
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
             "diffuse += max(iblDiffuse, 0.0);");
@@ -336,13 +343,57 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "specular += max(iblSpecular, 0.0);");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
-            "diffuse = max(diffuse, material.albedo * 0.01);\n\t$1");
+            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.02);\n\t$1");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
             std::regex("(#include\\s+\"[^\"]+\"\\s*)"),
             "#define MIDPOINT_8_BIT (127.0f / 255.0f)\n$1",
             std::regex_constants::format_first_only);
+    }
+    if (endsWithIgnoreCase(path, "material_common.fxsub")) {
+        patched = std::regex_replace(patched,
+            std::regex("GbufferParam MaterialPS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*,"
+                       "\\s*in float4 viewdir\\s*:\\s*TEXCOORD3\\s*\\)"),
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("GbufferParam MaterialPS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
+            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("GbufferParam Material2PS\\("
+                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
+                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
+                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
+            "void Material2PS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        patched = std::regex_replace(patched,
+            std::regex("return EncodeGbuffer\\(material, (\\w+)\\.w\\);"),
+            "GbufferParam __gb = EncodeGbuffer(material, $1.w); "
+            "oColor0 = __gb.buffer1; oColor1 = __gb.buffer2; "
+            "oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
+    }
+    if (endsWithIgnoreCase(path, "_2.0.fxsub")) {
+        replaceAll(patched, "\r\n", "\n");
+        replaceAll(patched,
+            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
+            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
+            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
+        replaceAll(patched,
+            "\treturn EncodeGbuffer(material, worldPos.w);",
+            "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
     }
     if (endsWithIgnoreCase(path, "PostProcessHDR.fxsub") ||
         endsWithIgnoreCase(path, "LightBloom.fxsub")) {
@@ -353,6 +404,18 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched,
             std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
             "}\n$1");
+        patched = std::regex_replace(patched,
+            std::regex("(\\{)(FxaaFloat2 posM)"),
+            "{\n$2");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaFloat lumaM)"),
+            ";\n$1");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaBool earlyExit)"),
+            ";\n$1");
+        patched = std::regex_replace(patched,
+            std::regex(";(FxaaFloat lumaNW)"),
+            ";\n$1");
     }
     patched = patchRayMMDConfigurationInclude(patched);
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
