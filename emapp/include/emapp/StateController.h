@@ -33,6 +33,7 @@ public:
     IState *currentState() NANOEM_DECL_NOEXCEPT;
     void setCurrentState(IState *state);
     void consumeDefaultPass();
+    void destroyAllPendingProjects();
 
     void handlePointerScroll(const Vector3SI32 &logicalCursorPosition, const Vector2SI32 &delta);
     void handlePointerPress(const Vector3SI32 &logicalCursorPosition, Project::CursorType type);

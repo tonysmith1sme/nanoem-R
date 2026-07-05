@@ -2018,6 +2018,12 @@ StateController::consumeDefaultPass()
         }
         project->eventPublisher()->publishConsumePassEvent(globalFrameIndex);
     }
+    destroyAllPendingProjects();
+}
+
+void
+StateController::destroyAllPendingProjects()
+{
     QueuedProjectList &deletables = m_project.second;
     if (!deletables.empty()) {
         for (QueuedProjectList::const_iterator it = deletables.begin(), end = deletables.end(); it != end; ++it) {
@@ -2176,6 +2182,10 @@ StateController::setProject(Project *newProject)
     else if (!newProject) {
         dd::shutdown();
     }
+    /* Why: drain the queue synchronously so the previous project (and its GPU resources)
+     * are released before the caller continues, preventing accumulation when projects
+     * are reloaded faster than consumeDefaultPass() runs (e.g. paused/inactive state) */
+    destroyAllPendingProjects();
 }
 
 void

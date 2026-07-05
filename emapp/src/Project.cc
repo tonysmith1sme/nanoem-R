@@ -1303,6 +1303,12 @@ Project::~Project() NANOEM_DECL_NOEXCEPT
     m_cameraMotionPtr = nullptr;
     m_lightMotionPtr = nullptr;
     m_selfShadowMotionPtr = nullptr;
+    /* Why: registerRenderPass leaves sg_pass handles in m_renderPassBundleMap that internalResetAllRenderTargets
+     * frees on size change but destroy() may not have been called (failure path) */
+    for (RenderPassBundleMap::const_iterator it = m_renderPassBundleMap.begin(), end = m_renderPassBundleMap.end();
+         it != end; ++it) {
+        sg::destroy_pass(it->second.m_handle);
+    }
     for (ModelList::const_iterator it = m_allModelPtrs.begin(), end = m_allModelPtrs.end(); it != end; ++it) {
         destroyModel(*it);
     }
@@ -1321,6 +1327,7 @@ Project::~Project() NANOEM_DECL_NOEXCEPT
     }
     m_allTracks.clear();
     m_drawable2MotionPtrs.clear();
+    destroyState(m_lastSaveState);
     undoStackDestroy(m_undoStack);
     m_undoStack = nullptr;
     nanoem_delete_safe(m_audioPlayer);
@@ -1383,6 +1390,8 @@ void
 Project::destroy() NANOEM_DECL_NOEXCEPT
 {
     SG_PUSH_GROUP("Project::destroy");
+    /* Why: preparePlaying() may leave m_lastSaveState allocated if the project closes mid-playback */
+    destroyState(m_lastSaveState);
     MotionList deletingMotions;
     for (MotionList::const_iterator it = m_allMotions.begin(), end = m_allMotions.end(); it != end; ++it) {
         deletingMotions.push_back(*it);
@@ -1420,6 +1429,7 @@ Project::destroy() NANOEM_DECL_NOEXCEPT
     for (MotionList::const_iterator it = deletingMotions.begin(), end = deletingMotions.end(); it != end; ++it) {
         destroyMotion(*it);
     }
+    m_sharedRenderTargetImageContainers.clear();
     EffectList deletingEffects;
     for (LoadedEffectSet::const_iterator it = m_loadedEffectSet.begin(), end = m_loadedEffectSet.end(); it != end;
          ++it) {
@@ -1429,6 +1439,11 @@ Project::destroy() NANOEM_DECL_NOEXCEPT
     for (EffectList::const_iterator it = deletingEffects.begin(), end = deletingEffects.end(); it != end; ++it) {
         destroyDetachedEffect(*it);
     }
+    for (TrackList::const_iterator it = m_allTracks.begin(), end = m_allTracks.end(); it != end; ++it) {
+        nanoem_delete(*it);
+    }
+    m_allTracks.clear();
+    m_selectedTrack = nullptr;
     m_viewportPrimaryPass.destroy();
     m_viewportSecondaryPass.destroy();
     m_context2DPass.destroy();
@@ -1439,6 +1454,26 @@ Project::destroy() NANOEM_DECL_NOEXCEPT
         m_sharedImageBlitter->destroy();
     }
     sg::destroy_image(m_fallbackImage);
+    /* Why: registerRenderPass populates m_renderPassBundleMap with GPU handles that internalResetAllRenderTargets
+     * normally frees on size change, but destroy() previously skipped them, leaking across project reloads */
+    for (RenderPassBundleMap::const_iterator it = m_renderPassBundleMap.begin(), end = m_renderPassBundleMap.end();
+         it != end; ++it) {
+        sg::destroy_pass(it->second.m_handle);
+    }
+    m_renderPassBundleMap.clear();
+    m_hashedRenderPassBundleMap.clear();
+    m_renderPassStringMap.clear();
+    m_renderPipelineStringMap.clear();
+    m_redoObjectHandles.clear();
+    m_effectReferences.clear();
+    m_effectOrderSet.clear();
+    m_dependsOnScriptExternal.clear();
+    m_drawable2MotionPtrs.clear();
+    m_indicesOfMaterialToAttachEffect.second.clear();
+    m_drawablesToAttachOffscreenRenderTargetEffect.first = String();
+    m_drawablesToAttachOffscreenRenderTargetEffect.second.clear();
+    m_modelClipboard.clear();
+    m_motionClipboard.clear();
     m_objectHandleAllocator->free(0);
     bx::destroyHandleAlloc(g_emapp_allocator, m_objectHandleAllocator);
     m_objectHandleAllocator = nullptr;
