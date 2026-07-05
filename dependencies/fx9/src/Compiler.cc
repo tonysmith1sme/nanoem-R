@@ -311,6 +311,8 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "MULTI_LIGHT_ENABLE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "IBL_QUALITY", 0, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
