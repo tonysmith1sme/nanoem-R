@@ -545,6 +545,70 @@ parseMacroDirective(const std::string &line, const char *directive, std::string 
     return false;
 }
 
+static bool
+isValidHlslStringEscapeFollower(char c)
+{
+    /* HLSL string literal characters allowed immediately after a single backslash. */
+    return c == '\\' || c == '"' || c == '\'' || c == '?' || c == 'a' || c == 'b' || c == 'f' ||
+        c == 'n' || c == 'r' || c == 't' || c == 'v' || c == 'x' || c == 'u' ||
+        (c >= '0' && c <= '7');
+}
+
+static std::string
+patchStrayBackslashesInStringLiterals(const std::string &source)
+{
+    /* Some legacy MME effects ship as Shift-JIS source where multi-byte characters contain the
+       byte 0x5c (= ASCII backslash) as their second byte. After Windows code-page-932 to UTF-8
+       conversion a literal `\` may end up between two non-ASCII characters inside a HLSL string
+       literal (e.g. HgSAO.fx "AO表\示"), which the HLSL lexer rejects as "Invalid escape sequence".
+       Walk each string literal and duplicate any `\` that is not followed by a valid escape leader
+       so the lexer reads it as a literal backslash instead. */
+    std::string out;
+    out.reserve(source.size() + 16);
+    const size_t n = source.size();
+    size_t i = 0;
+    while (i < n) {
+        char c = source[i];
+        if (c != '"') {
+            out.push_back(c);
+            i++;
+            continue;
+        }
+        out.push_back(c);
+        i++;
+        while (i < n) {
+            char d = source[i];
+            if (d == '\n' || d == '\r') {
+                /* unterminated string: bail out and copy the remainder verbatim */
+                while (i < n) {
+                    out.push_back(source[i++]);
+                }
+                return out;
+            }
+            if (d == '\\') {
+                if (i + 1 < n && isValidHlslStringEscapeFollower(source[i + 1])) {
+                    out.push_back('\\');
+                    out.push_back(source[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                out.push_back('\\');
+                out.push_back('\\');
+                i++;
+                continue;
+            }
+            if (d == '"') {
+                out.push_back(d);
+                i++;
+                break;
+            }
+            out.push_back(d);
+            i++;
+        }
+    }
+    return out;
+}
+
 static std::string
 patchLegacyEffectSource(const std::string &path, const std::string &source)
 {
@@ -563,6 +627,7 @@ patchLegacyEffectSource(const std::string &path, const std::string &source)
         }
         patched = std::move(fixed);
     }
+    patched = patchStrayBackslashesInStringLiterals(patched);
     if (patched.find("DefTech(") != std::string::npos &&
         patched.find("#define DefTech(") != std::string::npos) {
         bool isNormalDraw = patched.find("Subset=EdgeMaterial") != std::string::npos;

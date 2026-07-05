@@ -26,6 +26,7 @@ ParameterizedTestParameters(fx9, syntax)
         { "minus" },
         { "mul" },
         { "or" },
+        { "stray_backslash" },
         { "struct" },
     };
     return criterion_test_params(parameters);
