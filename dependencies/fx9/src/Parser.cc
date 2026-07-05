@@ -315,7 +315,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "specular += max(0.0, min(iblSpecular, 1e10));");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
-            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.02);\n\t$1");
+            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.03);\n\tspecular = max(specular, 0.0);\n\t$1");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
