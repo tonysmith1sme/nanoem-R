@@ -216,6 +216,16 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
         "#undef SUN_SHADOW_QUALITY\n"
         "#define SUN_SHADOW_QUALITY 3\n"
+        "#undef MULTI_LIGHT_ENABLE\n"
+        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#undef SSDO_QUALITY\n"
+        "#define SSDO_QUALITY 0\n"
+        "#undef SSR_QUALITY\n"
+        "#define SSR_QUALITY 0\n"
+        "#undef SSSS_QUALITY\n"
+        "#define SSSS_QUALITY 0\n"
+        "#undef HDR_BLOOM_MODE\n"
+        "#define HDR_BLOOM_MODE 0\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
         "#define SHADOW_BLUR_COUNT 12\n"
@@ -298,10 +308,10 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
-            "diffuse += max(iblDiffuse, 0.0);");
+            "diffuse += max(0.0, min(iblDiffuse, 1e10));");
         patched = std::regex_replace(patched,
             std::regex(R"(specular \+= iblSpecular;)"),
-            "specular += max(iblSpecular, 0.0);");
+            "specular += max(0.0, min(iblSpecular, 1e10));");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
             "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.02);\n\t$1");
