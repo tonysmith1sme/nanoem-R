@@ -838,7 +838,6 @@ DefaultFileManager::loadModelEffectSettingFile(Model *model, Project *project, P
     const URI fileURI(model->fileURI());
     String emdPath(fileURI.absolutePathByDeletingPathExtension());
     emdPath.append(".emd");
-    bool loaded = false;
     if (FileUtils::exists(emdPath.c_str())) {
         FileReaderScope scope(translator());
         if (scope.open(URI::createFromFilePath(emdPath), error)) {
@@ -847,31 +846,6 @@ DefaultFileManager::loadModelEffectSettingFile(Model *model, Project *project, P
             FileUtils::read(scope, bytes, error);
             bytes.push_back(0);
             loader.load(reinterpret_cast<const char *>(bytes.data()), model, progress, error);
-            loaded = true;
-        }
-    }
-    if (!loaded && project->isEffectPluginEnabled() && !error.hasReason()) {
-        const Project::AccessoryList *accessories = project->allAccessories();
-        for (Project::AccessoryList::const_iterator it = accessories->begin(), end = accessories->end(); it != end; ++it) {
-            const Accessory *accessory = *it;
-            if (const Effect *sceneEffect = project->resolveEffect(accessory)) {
-                if (sceneEffect->scriptClass() == IEffect::kScriptClassTypeScene) {
-                    String matFxPath(sceneEffect->fileURI().absolutePathByDeletingLastPathComponent());
-                    matFxPath.append("/Materials/material_2.0.fx");
-                    if (FileUtils::exists(matFxPath.c_str())) {
-                        String relPath(FileUtils::relativePath(matFxPath, fileURI.absolutePathByDeletingLastPathComponent()));
-                        if (!relPath.empty()) {
-                            String emdContent("[Effect]\nObj=");
-                            emdContent.append(relPath.c_str());
-                            emdContent.append("\n");
-                            Error innerError;
-                            internal::ModelEffectSetting loader(project, this);
-                            loader.load(emdContent.c_str(), model, progress, innerError);
-                        }
-                    }
-                    break;
-                }
-            }
         }
     }
 }
