@@ -344,7 +344,10 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         // produce channel-misaligned reads. Read packed .rgb/.rgb directly instead.
         patched = std::regex_replace(patched,
             std::regex(R"(DecodeYcbcr\(source\s*,\s*coord\s*,\s*screenPosition\s*,\s*ViewportOffset2\s*,\s*diffuse\s*,\s*specular\s*\)\s*;)"),
-            "{ float4 __ibl = tex2Dlod(source, float4(coord, 0, 0)); diffuse = __ibl.rgb; specular = __ibl.rgb; }");
+            "{ float4 __ibl = tex2Dlod(source, float4(coord, 0, 0)); "
+            "float3 __iblRgb = clamp(__ibl.rgb, 0.0, 8.0); "
+            "if (any(isnan(__ibl.rgb)) || any(isinf(__ibl.rgb))) __iblRgb = 0.0; "
+            "diffuse = __iblRgb; specular = __iblRgb; }");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
