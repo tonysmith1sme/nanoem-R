@@ -217,7 +217,7 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "#undef SUN_SHADOW_QUALITY\n"
         "#define SUN_SHADOW_QUALITY 3\n"
         "#undef IBL_QUALITY\n"
-        "#define IBL_QUALITY 0\n"
+        "#define IBL_QUALITY 1\n"
         "#undef MULTI_LIGHT_ENABLE\n"
         "#define MULTI_LIGHT_ENABLE 0\n"
         "#undef SSDO_QUALITY\n"
