@@ -297,6 +297,22 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "#define HDR_BLOOM_MODE 0\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
+        "#endif\n"
+        "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_HLSL\n"
+        "#undef SUN_SHADOW_QUALITY\n"
+        "#define SUN_SHADOW_QUALITY 3\n"
+        "#undef IBL_QUALITY\n"
+        "#define IBL_QUALITY 1\n"
+        "#undef MULTI_LIGHT_ENABLE\n"
+        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#undef SSDO_QUALITY\n"
+        "#define SSDO_QUALITY 0\n"
+        "#undef SSR_QUALITY\n"
+        "#define SSR_QUALITY 0\n"
+        "#undef SSSS_QUALITY\n"
+        "#define SSSS_QUALITY 0\n"
+        "#undef HDR_BLOOM_MODE\n"
+        "#define HDR_BLOOM_MODE 0\n"
         "#endif\n";
     return std::regex_replace(source,
         std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
@@ -2884,8 +2900,22 @@ Compiler::setTargetLanguage(Compiler::LanguageType value)
         m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_MSL");
         m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_HLSL");
         m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_GLSL");
-        if (value == kLanguageTypeMSL) {
+        m_macros.erase("NANOEM_OUTPUT_SHADER_LANGUAGE_ESSL");
+        switch (value) {
+        case kLanguageTypeMSL:
             m_macros["NANOEM_OUTPUT_SHADER_LANGUAGE_MSL"] = "1";
+            break;
+        case kLanguageTypeHLSL:
+            m_macros["NANOEM_OUTPUT_SHADER_LANGUAGE_HLSL"] = "1";
+            break;
+        case kLanguageTypeGLSL:
+            m_macros["NANOEM_OUTPUT_SHADER_LANGUAGE_GLSL"] = "1";
+            break;
+        case kLanguageTypeESSL:
+            m_macros["NANOEM_OUTPUT_SHADER_LANGUAGE_ESSL"] = "1";
+            break;
+        default:
+            break;
         }
     }
 }
