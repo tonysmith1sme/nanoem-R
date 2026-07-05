@@ -1574,7 +1574,7 @@ CocoaThreadedApplicationService::presentDefaultPass(const Project *project)
             }
         }
 #endif /* IMGUI_HAS_VIEWPORT */
-        uint32_t sampleCount = project->effectiveSampleCount();
+        uint32_t sampleCount = project->sampleCount();
         if (contentView.sampleCount != sampleCount) {
             contentView.sampleCount = sampleCount;
         }
@@ -1718,7 +1718,7 @@ CocoaThreadedApplicationService::setupNewProject()
     if (backend == SG_BACKEND_METAL_MACOS) {
         project->setViewportPixelFormat(resolveMetalPixelFormat());
         MTKView *view = (__bridge MTKView *) m_nativeView;
-        uint32_t sampleCount = project->effectiveSampleCount();
+        uint32_t sampleCount = project->sampleCount();
         if (view.sampleCount != sampleCount) {
             view.sampleCount = sampleCount;
         }

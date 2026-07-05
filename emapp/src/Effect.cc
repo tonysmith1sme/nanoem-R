@@ -174,24 +174,12 @@ constrainMetalEffectRenderTargetMipLevels(nanoem_u8_t value) NANOEM_DECL_NOEXCEP
 }
 
 static int
-effectMMEConstrainedSampleCountMax(const Project *project) NANOEM_DECL_NOEXCEPT
-{
-    if (isMetalEffectResourceConstrained()) {
-        return 1;
-    }
-    if (project) {
-        return project->effectiveSampleCount();
-    }
-    return 1;
-}
-
-static int
 resolveMMEEffectRenderTargetSampleCount(const Project *project, bool enableAA) NANOEM_DECL_NOEXCEPT
 {
     if (!enableAA) {
         return 1;
     }
-    const int requested = project ? project->effectiveSampleCount() : 1;
+    const int requested = project ? project->sampleCount() : 1;
     if (isMetalEffectResourceConstrained()) {
         return 1;
     }

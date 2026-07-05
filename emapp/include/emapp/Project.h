@@ -675,7 +675,6 @@ public:
     void setCoordinationSystem(nanoem_u32_t value);
     int maxAnisotropyValue() const NANOEM_DECL_NOEXCEPT;
     int sampleCount() const NANOEM_DECL_NOEXCEPT;
-    int effectiveSampleCount() const NANOEM_DECL_NOEXCEPT;
     nanoem_u32_t sampleLevel() const NANOEM_DECL_NOEXCEPT;
     void setSampleLevel(nanoem_u32_t value);
     bool isResetAllPassesPending() const NANOEM_DECL_NOEXCEPT;

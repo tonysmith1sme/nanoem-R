@@ -476,7 +476,7 @@ D3D11VideoRecorder::blitPass(sg::PassBlock::IDrawQueue *drawQueue, sg_pass value
 {
     static const glm::vec4 kRect(0, 0, 1, 1);
     const sg_image viewportImage = m_project->viewportPrimaryImage();
-    const int sampleCount = m_project->effectiveSampleCount();
+    const int sampleCount = m_project->sampleCount();
     PixelFormat format;
     format.setColorPixelFormat(m_colorImageDescription.pixel_format, 0);
     if (sampleCount > 1) {
@@ -517,7 +517,7 @@ D3D11VideoRecorder::updateDepthImage(int width, int height)
 void
 D3D11VideoRecorder::updateAllMSAAImages(int width, int height)
 {
-    if (m_project->effectiveSampleCount() > 1) {
+    if (m_project->sampleCount() > 1) {
         SG_PUSH_GROUPF("D3D11VideoRecorderr::updateAllMSAAImages(width=%d, height=%d)", width, height);
         sg_image_desc receiveMSAAImageDescription;
         Inline::clearZeroMemory(receiveMSAAImageDescription);
