@@ -297,7 +297,7 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "#define HDR_BLOOM_MODE 0\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
-        "#define SHADOW_BLUR_COUNT 12\n"
+        "#define SHADOW_BLUR_COUNT 16\n"
         "#endif\n";
     return std::regex_replace(source,
         std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
@@ -395,8 +395,11 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
     }
     if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
-        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 12");
-        replaceAll(patched, "exp(-20 *", "exp(-8 *");
+        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 16");
+        replaceAll(patched, "float radius = 2.0 / SHADOW_MAP_SIZE", "float radius = 12.0 / SHADOW_MAP_SIZE");
+        replaceAll(patched, "exp(-20 *", "exp(-4 *");
+        replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 3");
+        replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 3");
     }
     if (endsWithIgnoreCase(path, "FXAA3.fxsub")) {
         patched = std::regex_replace(patched,
