@@ -293,10 +293,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "ray.conf")) {
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
-        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
-        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 2, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
