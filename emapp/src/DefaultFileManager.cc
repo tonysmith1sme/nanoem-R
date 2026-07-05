@@ -1009,37 +1009,6 @@ DefaultFileManager::handleAddingModelDialog(void *userData, Model *model, Projec
     Progress progress(project, 0);
     Error error;
     fileManager->loadModelEffectSettingFile(model, project, progress, error);
-    if (project->isEffectPluginEnabled() && !error.hasReason() && !project->resolveEffect(model)) {
-        const Project::AccessoryList *accessories = project->allAccessories();
-        for (Project::AccessoryList::const_iterator it = accessories->begin(), end = accessories->end(); it != end; ++it) {
-            const Accessory *accessory = *it;
-            if (const Effect *sceneEffect = project->resolveEffect(accessory)) {
-                if (sceneEffect->scriptClass() == IEffect::kScriptClassTypeScene) {
-                    String matFxPath(sceneEffect->fileURI().absolutePathByDeletingLastPathComponent());
-                    matFxPath.append("/Materials/material_2.0.fx");
-                    if (FileUtils::exists(matFxPath.c_str())) {
-                        const URI fxURI(URI::createFromFilePath(matFxPath));
-                        ByteArray bytes;
-                        Error innerError;
-                        if (Effect::compileFromSource(fxURI, fileManager, project->isMipmapEnabled(), bytes, progress, innerError)) {
-                            Effect *materialEffect = project->createEffect();
-                            materialEffect->setName("material_2.0.fx");
-                            if (materialEffect->load(bytes, progress, innerError)) {
-                                materialEffect->setFileURI(fxURI);
-                                if (materialEffect->upload(effect::kAttachmentTypeMaterial, progress, innerError)) {
-                                    project->attachActiveEffect(model, materialEffect, progress, innerError);
-                                }
-                            }
-                            if (innerError.hasReason() && !project->resolveEffect(model)) {
-                                project->destroyEffect(materialEffect);
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
     IModalDialog *dialog = nullptr;
     if (!project->loadAttachedDrawableEffect(model, progress, error)) {
         BaseApplicationService *applicationPtr = fileManager->m_applicationPtr;
