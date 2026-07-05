@@ -230,7 +230,6 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "#define HDR_BLOOM_MODE 0\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
-        "#define SHADOW_BLUR_COUNT 24\n"
         "#endif\n";
     return std::regex_replace(source,
         std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
@@ -374,11 +373,19 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
     }
     if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
-        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 24");
-        replaceAll(patched, "float radius = 2.0 / SHADOW_MAP_SIZE", "float radius = 40.0 / SHADOW_MAP_SIZE");
-        replaceAll(patched, "exp(-20 *", "exp(-2 *");
-        replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 6");
-        replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 6");
+        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 32");
+        replaceAll(patched, "float radius = 2.0 / SHADOW_MAP_SIZE", "float radius = 80.0 / SHADOW_MAP_SIZE");
+        replaceAll(patched, "exp(-20 *", "exp(-1 *");
+        replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 12");
+        replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 12");
+    }
+    if (endsWithIgnoreCase(path, "textures.fxsub")) {
+        replaceAll(patched,
+            "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
+            "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
+        replaceAll(patched,
+            "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
+            "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
     }
     if (endsWithIgnoreCase(path, "FXAA3.fxsub")) {
         patched = std::regex_replace(patched,
