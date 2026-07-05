@@ -192,18 +192,6 @@ containsRayMMDPath(const std::string &path)
 }
 
 static bool
-isRayMMDMainEffectSourcePath(const std::string &path)
-{
-    std::string normalized(toLowerASCII(path));
-    for (size_t i = 0, numChars = normalized.size(); i < numChars; i++) {
-        if (normalized[i] == '\\') {
-            normalized[i] = '/';
-        }
-    }
-    return normalized.find("ray-mmd") != std::string::npos && normalized.find("/main/main.fxsub") != std::string::npos;
-}
-
-static bool
 endsWithIgnoreCase(const std::string &value, const char *suffix)
 {
     const std::string valueLC(toLowerASCII(value)), suffixLC(toLowerASCII(std::string(suffix)));
@@ -211,23 +199,43 @@ endsWithIgnoreCase(const std::string &value, const char *suffix)
         valueLC.compare(valueLC.size() - suffixLC.size(), suffixLC.size(), suffixLC) == 0;
 }
 
-static void
-replaceAll(std::string &value, const std::string &from, const std::string &to)
-{
-    size_t offset = 0;
-    while ((offset = value.find(from, offset)) != std::string::npos) {
-        value.replace(offset, from.size(), to);
-        offset += to.size();
-    }
-}
-
 static std::string
-replaceRayMMDIntegerDefine(const std::string &source, const char *name, int value)
+replaceRayMMDIntegerDefine(
+    const std::string &source, const char *name, int value, const std::regex_constants::syntax_option_type flags)
 {
     std::ostringstream pattern, replacement;
     pattern << "(^|\\n)([ \\t]*#define[ \\t]+" << name << "[ \\t]+)[0-9]+([ \\t]*(?://[^\\n]*)?)";
     replacement << "$1$2" << value << "$3";
-    return std::regex_replace(source, std::regex(pattern.str(), std::regex_constants::ECMAScript | std::regex_constants::icase), replacement.str());
+    return std::regex_replace(source, std::regex(pattern.str(), flags), replacement.str());
+}
+
+static std::string
+patchRayMMDConfigurationInclude(const std::string &source)
+{
+    static const char *kRayMMDMetalConfigurationOverride =
+        "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
+        "#undef FOG_ENABLE\n"
+        "#define FOG_ENABLE 0\n"
+        "#undef SUN_SHADOW_QUALITY\n"
+        "#define SUN_SHADOW_QUALITY 2\n"
+        "#undef SSDO_QUALITY\n"
+        "#define SSDO_QUALITY 0\n"
+        "#undef SSR_QUALITY\n"
+        "#define SSR_QUALITY 0\n"
+        "#undef SSSS_QUALITY\n"
+        "#define SSSS_QUALITY 0\n"
+        "#undef HDR_BLOOM_MODE\n"
+        "#define HDR_BLOOM_MODE 0\n"
+        "#undef IBL_QUALITY\n"
+        "#define IBL_QUALITY 0\n"
+        "#undef MULTI_LIGHT_ENABLE\n"
+        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#undef OUTLINE_QUALITY\n"
+        "#define OUTLINE_QUALITY 1\n"
+        "#endif\n";
+    return std::regex_replace(source,
+        std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
+        std::string("$1") + kRayMMDMetalConfigurationOverride);
 }
 
 static bool
@@ -265,33 +273,14 @@ patchRayMMDMetalHeavySamplingSource(const std::string &path, const std::string &
     return patched;
 }
 
-static std::string
-patchRayMMDConfigurationInclude(const std::string &source)
+static void
+replaceAll(std::string &value, const std::string &from, const std::string &to)
 {
-    static const char *kRayMMDMetalConfigurationOverride =
-        "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
-        "#undef FOG_ENABLE\n"
-        "#define FOG_ENABLE 0\n"
-        "#undef SUN_SHADOW_QUALITY\n"
-        "#define SUN_SHADOW_QUALITY 2\n"
-        "#undef SSDO_QUALITY\n"
-        "#define SSDO_QUALITY 0\n"
-        "#undef SSR_QUALITY\n"
-        "#define SSR_QUALITY 0\n"
-        "#undef SSSS_QUALITY\n"
-        "#define SSSS_QUALITY 0\n"
-        "#undef HDR_BLOOM_MODE\n"
-        "#define HDR_BLOOM_MODE 0\n"
-        "#undef IBL_QUALITY\n"
-        "#define IBL_QUALITY 0\n"
-        "#undef MULTI_LIGHT_ENABLE\n"
-        "#define MULTI_LIGHT_ENABLE 0\n"
-        "#undef OUTLINE_QUALITY\n"
-        "#define OUTLINE_QUALITY 1\n"
-        "#endif\n";
-    return std::regex_replace(source,
-        std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
-        std::string("$1") + kRayMMDMetalConfigurationOverride);
+    size_t offset = 0;
+    while ((offset = value.find(from, offset)) != std::string::npos) {
+        value.replace(offset, from.size(), to);
+        offset += to.size();
+    }
 }
 
 static std::string
@@ -301,19 +290,30 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         return source;
     }
     std::string patched(source);
+    if (endsWithIgnoreCase(path, "ray.conf")) {
+        const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
+            std::regex_constants::icase;
+        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0, flags);
+        patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
+    }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
         patched = std::string(
-            "#if !defined(SSDO_QUALITY) || SSDO_QUALITY == 0\n"
-            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n"
-            "#endif\n") + patched;
+            "float linearizeDepth(float2 uv) { return tex2Dlod(Gbuffer8Map, float4(uv, 0, 0)).r; }\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
-        replaceAll(patched,
-            "diffuse += tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb;",
-            "diffuse += max(tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
-        replaceAll(patched,
-            "specular += tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb;",
-            "specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(diffuse \+= tex2Dlod\(LightMapSamp)"),
+            "diffuse += max(tex2Dlod(LightMapSamp");
+        patched = std::regex_replace(patched,
+            std::regex(R"(specular \+= tex2Dlod\(LightSpecMapSamp)"),
+            "specular += max(tex2Dlod(LightSpecMapSamp");
+        patched = std::regex_replace(patched,
+            std::regex(R"(, 0, 0\)\)\.rgb\);(\s*)// multi-light was)"),
+            ", 0, 0)).rgb, 0.0);$1// multi-light was");
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
             "diffuse += max(iblDiffuse, 0.0);");
@@ -322,7 +322,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "specular += max(iblSpecular, 0.0);");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
-            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.02);\n\t$1");
+            "diffuse = max(diffuse, material.albedo * 0.01);\n\t$1");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
@@ -339,78 +339,8 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched,
             std::regex("\\}(FxaaFloat4 FxaaPixelShader)"),
             "}\n$1");
-        patched = std::regex_replace(patched,
-            std::regex("(\\{)(FxaaFloat2 posM)"),
-            "{\n$2");
-        patched = std::regex_replace(patched,
-            std::regex(";(FxaaFloat lumaM)"),
-            ";\n$1");
-        patched = std::regex_replace(patched,
-            std::regex(";(FxaaBool earlyExit)"),
-            ";\n$1");
-        patched = std::regex_replace(patched,
-            std::regex(";(FxaaFloat lumaNW)"),
-            ";\n$1");
-    }
-    if (endsWithIgnoreCase(path, "ray.conf")) {
-        patched = replaceRayMMDIntegerDefine(patched, "FOG_ENABLE", 0);
-        patched = replaceRayMMDIntegerDefine(patched, "SSDO_QUALITY", 0);
-        patched = replaceRayMMDIntegerDefine(patched, "SSR_QUALITY", 0);
-        patched = replaceRayMMDIntegerDefine(patched, "SSSS_QUALITY", 0);
-        patched = replaceRayMMDIntegerDefine(patched, "HDR_BLOOM_MODE", 0);
-        patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1);
-    }
-    if (endsWithIgnoreCase(path, "material_common.fxsub")) {
-        patched = std::regex_replace(patched,
-            std::regex("GbufferParam MaterialPS\\("
-                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
-                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
-                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*,"
-                       "\\s*in float4 viewdir\\s*:\\s*TEXCOORD3\\s*\\)"),
-            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, in float4 viewdir : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        patched = std::regex_replace(patched,
-            std::regex("GbufferParam MaterialPS\\("
-                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
-                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
-                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
-            "void MaterialPS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        patched = std::regex_replace(patched,
-            std::regex("GbufferParam Material2PS\\("
-                       "\\s*in float3 normal\\s*:\\s*TEXCOORD0\\s*,"
-                       "\\s*in float2 coord\\s*:\\s*TEXCOORD1\\s*,"
-                       "\\s*in float4 worldPos\\s*:\\s*TEXCOORD2\\s*\\)"),
-            "void Material2PS(in float3 normal : TEXCOORD0, in float2 coord : TEXCOORD1, in float4 worldPos : TEXCOORD2, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        patched = std::regex_replace(patched,
-            std::regex("return EncodeGbuffer\\(material, (\\w+)\\.w\\);"),
-            "GbufferParam __gb = EncodeGbuffer(material, $1.w); "
-            "oColor0 = __gb.buffer1; oColor1 = __gb.buffer2; "
-            "oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
-    }
-    if (endsWithIgnoreCase(path, "_2.0.fxsub")) {
-        replaceAll(patched, "\r\n", "\n");
-        replaceAll(patched,
-            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
-            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        replaceAll(patched,
-            "GbufferParam MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
-            "void MaterialPS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        replaceAll(patched,
-            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3)",
-            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        replaceAll(patched,
-            "GbufferParam Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3)",
-            "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
-        replaceAll(patched,
-            "\treturn EncodeGbuffer(material, worldPos.w);",
-            "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
     }
     patched = patchRayMMDConfigurationInclude(patched);
-    if (isRayMMDMainEffectSourcePath(path)) {
-        patched = std::regex_replace(patched,
-            std::regex(R"(return\s+float4\s*\(\s*GetSpecularHighlight\s*\(\s*normal\s*,\s*coord\s*\)\s*,\s*0\s*\)\s*;)"),
-            "return float4(MaterialDiffuse.rgb * alpha, alpha);");
-    }
-    patched = patchRayMMDMetalHeavySamplingSource(path, patched);
     replaceAll(patched, "Sky*box*.*", "sky*box*.*");
     replaceAll(patched, "SKY*BOX*.*", "sky*box*.*");
     patched = std::regex_replace(patched,
@@ -419,40 +349,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     patched = std::regex_replace(patched,
         std::regex(R"(SHKernel\s*\[\s*([^\]]+)\s*\]\s*\[\s*([^\]]+)\s*\])", std::regex_constants::icase),
         "SHKernel[(($1) * 9) + ($2)]");
-    if (endsWithIgnoreCase(path, "SpecularColorDraw.fx")) {
-        replaceAll(patched, "#pass_", "\"object\"");
-        replaceAll(patched, "##id_", "_0");
-        replaceAll(patched, "##sym##", "_Tex");
-        replaceAll(patched,
-            "DefTech(_1, object , false, NoTex)",
-            "technique ObjectTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
-        replaceAll(patched,
-            "DefTech(_2, object_ss , true, Tex)",
-            "technique ObjectTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
-        replaceAll(patched,
-            "DefTech(_3, object_ss , false, NoTex)",
-            "technique ObjectTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
-        replaceAll(patched,
-            "DefTech(_0, object , true, Tex)",
-            "technique ObjectTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
-    }
-    if (endsWithIgnoreCase(path, "NormalDraw.fx")) {
-        replaceAll(patched, "#pass_", "\"object\"");
-        replaceAll(patched, "##id_", "_0");
-        replaceAll(patched, "##sym##", "_Tex");
-        replaceAll(patched,
-            "DefTech(_1, object , false, NoTex)",
-            "technique ObjectEdgeTec_1 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
-        replaceAll(patched,
-            "DefTech(_2, object_ss , true, Tex)",
-            "technique ObjectEdgeTec_2 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
-        replaceAll(patched,
-            "DefTech(_3, object_ss , false, NoTex)",
-            "technique ObjectEdgeTec_3 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
-        replaceAll(patched,
-            "DefTech(_0, object , true, Tex)",
-            "technique ObjectEdgeTec_0 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
-    }
+    patched = patchRayMMDMetalHeavySamplingSource(path, patched);
     return patched;
 }
 
@@ -515,92 +412,6 @@ static std::string
 patchLegacyEffectSource(const std::string &path, const std::string &source)
 {
     std::string patched(patchRayMMDSource(path, source)), result;
-    {
-        std::string fixed;
-        fixed.reserve(patched.size());
-        for (size_t i = 0; i < patched.size(); i++) {
-            if (static_cast<unsigned char>(patched[i]) == 0xC2 &&
-                i + 1 < patched.size() && static_cast<unsigned char>(patched[i + 1]) == 0xA5) {
-                fixed.push_back('\\');
-                i++;
-            } else {
-                fixed.push_back(patched[i]);
-            }
-        }
-        patched = std::move(fixed);
-    }
-    if (patched.find("DefTech(") != std::string::npos &&
-        patched.find("#define DefTech(") != std::string::npos) {
-        bool isNormalDraw = patched.find("Subset=EdgeMaterial") != std::string::npos;
-        size_t macroPos = patched.find("#define DefTech(");
-        size_t scanPos = patched.find('\n', macroPos);
-        if (scanPos != std::string::npos) {
-            scanPos++;
-            while (scanPos < patched.size()) {
-                size_t nl = patched.find('\n', scanPos);
-                if (nl == std::string::npos) break;
-                size_t endChar = nl;
-                while (endChar > scanPos && (patched[endChar - 1] == '\r' || patched[endChar - 1] == ' ' || patched[endChar - 1] == '\t')) {
-                    endChar--;
-                }
-                bool isContinuation = false;
-                if (endChar > scanPos && patched[endChar - 1] == '\\') {
-                    isContinuation = true;
-                }
-                else if (endChar >= 2 + scanPos && static_cast<unsigned char>(patched[endChar - 2]) == 0xC2 &&
-                    static_cast<unsigned char>(patched[endChar - 1]) == 0xA5) {
-                    isContinuation = true;
-                }
-                if (isContinuation) {
-                    scanPos = nl + 1;
-                }
-                else {
-                    scanPos = nl + 1;
-                    break;
-                }
-            }
-            patched.erase(macroPos, scanPos - macroPos);
-        }
-        const char *defTechArgs[] = {
-            "_0, object , true, Tex)",
-            "_1, object , false, NoTex)",
-            "_2, object_ss , true, Tex)",
-            "_3, object_ss , false, NoTex)"
-        };
-        for (size_t pos = 0; (pos = patched.find("DefTech(", pos)) != std::string::npos; ) {
-            size_t end = patched.find('\n', pos);
-            if (end == std::string::npos) end = patched.size();
-            std::string line = patched.substr(pos, end - pos);
-            bool matched = false;
-            for (size_t i = 0; i < 4 && !matched; i++) {
-                if (line.find(std::string("DefTech(") + defTechArgs[i]) == 0) {
-                    const char *passName = (i >= 2) ? "object_ss" : "object";
-                    const char *useTex = (i % 2 == 0) ? "true" : "false";
-                    const char *texFunc = (i % 2 == 0) ? "Object_Tex_PS" : "Object_NoTex_PS";
-                    if (isNormalDraw) {
-                        char buf[1024];
-                        snprintf(buf, sizeof(buf),
-                            "technique ObjectEdgeTec_%zu < string MMDPass = \"%s\"; string Subset=EdgeMaterial; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(1); } } technique ObjectNoEdgeTec_%zu < string MMDPass = \"%s\"; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(0); } }",
-                            i, passName, useTex, texFunc, i, passName, useTex, texFunc);
-                        patched.replace(pos, line.size(), buf);
-                        pos += strlen(buf);
-                    }
-                    else {
-                        char buf[1024];
-                        snprintf(buf, sizeof(buf),
-                            "technique ObjectTec_%zu < string MMDPass = \"%s\"; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(); } }",
-                            i, passName, useTex, texFunc);
-                        patched.replace(pos, line.size(), buf);
-                        pos += strlen(buf);
-                    }
-                    matched = true;
-                }
-            }
-            if (!matched) {
-                pos = end + 1;
-            }
-        }
-    }
     std::unordered_map<std::string, std::string> macroSubstitutions;
     size_t offset = 0;
     while (offset <= patched.size()) {
@@ -952,7 +763,6 @@ ParserContext::IncluderContext::includeLocal(
                 DWORD numReadBytes = 0;
                 ::ReadFile(handle, bytes.data(), size, &numReadBytes, nullptr);
                 ::CloseHandle(handle);
-                fprintf(stderr, "[fx9] #include: %s (%zuB)\n", requested_source, bytes.size());
                 const std::string patchedSource(
                     patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
                 TString *source = new TString(patchedSource.c_str());
@@ -968,7 +778,6 @@ ParserContext::IncluderContext::includeLocal(
                 if (S_ISREG(st.st_mode)) {
                     std::vector<char> bytes(st.st_size);
                     ::read(fd, bytes.data(), bytes.size());
-                    fprintf(stderr, "[fx9] #include: %s (%zuB)\n", requested_source, bytes.size());
                     const std::string patchedSource(
                         patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
                     TString *source = new TString(patchedSource.c_str());
