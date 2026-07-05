@@ -1577,6 +1577,22 @@ CocoaThreadedApplicationService::presentDefaultPass(const Project *project)
         uint32_t sampleCount = project->sampleCount();
         if (contentView.sampleCount != sampleCount) {
             contentView.sampleCount = sampleCount;
+            if (m_lastViewportSampleCount != 0 && m_lastViewportSampleCount != sampleCount) {
+                for (auto &image : m_colorImages) {
+                    sg::destroy_image(image.second);
+                }
+                for (auto &image : m_depthImages) {
+                    sg::destroy_image(image.second);
+                }
+                for (auto &pass : m_passes) {
+                    sg::destroy_pass(pass.second);
+                }
+                m_colorImageDescriptions.clear();
+                m_colorImages.clear();
+                m_depthImages.clear();
+                m_passes.clear();
+            }
+            m_lastViewportSampleCount = sampleCount;
         }
         bool expected = true;
         if (m_displaySyncChanged.compare_exchange_strong(expected, false)) {

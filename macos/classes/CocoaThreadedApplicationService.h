@@ -132,6 +132,7 @@ private:
     ImageMap m_colorImages;
     ImageMap m_depthImages;
     PassMap m_passes;
+    nanoem_u32_t m_lastViewportSampleCount = 0;
     std::atomic<bool> m_displaySyncChanged;
     bool m_displaySyncEnabled = true;
 };
