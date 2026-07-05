@@ -174,9 +174,38 @@ constrainMetalEffectRenderTargetMipLevels(nanoem_u8_t value) NANOEM_DECL_NOEXCEP
 }
 
 static int
+effectMMEConstrainedSampleCountMax(const Project *project) NANOEM_DECL_NOEXCEPT
+{
+    if (isMetalEffectResourceConstrained()) {
+        return 2;
+    }
+    if (project) {
+        return project->effectiveSampleCount();
+    }
+    return 1;
+}
+
+static int
 constrainMetalEffectSampleCount(int value) NANOEM_DECL_NOEXCEPT
 {
-    return isMetalEffectResourceConstrained() ? 1 : value;
+    if (!isMetalEffectResourceConstrained()) {
+        return value;
+    }
+    return glm::max(glm::min(value, effectMMEConstrainedSampleCountMax(nullptr)), 1);
+}
+
+static int
+resolveMMEEffectRenderTargetSampleCount(const Project *project, bool enableAA) NANOEM_DECL_NOEXCEPT
+{
+    if (!enableAA) {
+        return 1;
+    }
+    const int requested = project ? project->effectiveSampleCount() : 1;
+    if (isMetalEffectResourceConstrained()) {
+        const int maxCount = effectMMEConstrainedSampleCountMax(project);
+        return glm::max(glm::min(requested, maxCount), 1);
+    }
+    return glm::max(requested, 1);
 }
 
 static void
@@ -2392,7 +2421,7 @@ Effect::resizeAllRenderTargetImages(
 {
     SG_PUSH_GROUPF("Effect::resizeAllRenderTargetImages(name=%s)", nameConstString());
     bool enableAA = RenderTargetColorImageContainer::kAntialiasEnabled;
-    const int sampleCount = constrainMetalEffectSampleCount(enableAA ? m_project->sampleCount() : 1);
+    const int sampleCount = resolveMMEEffectRenderTargetSampleCount(m_project, enableAA);
     const int maxImageSize = isMetalEffectResourceConstrained() ? metalEffectMaxRenderTargetSize() : 0;
     for (DrawableNamedRenderTargetColorImageContainerMap::iterator it = m_drawableNamedRenderTargetColorImages.begin(),
                                                                    end = m_drawableNamedRenderTargetColorImages.end();
@@ -2597,7 +2626,7 @@ Effect::generateOffscreenMipmapImagesChain(const effect::OffscreenRenderTargetOp
 void
 Effect::updateCurrentRenderTargetPixelFormatSampleCount()
 {
-    m_currentRenderTargetPixelFormat.setNumSamples(m_project->sampleCount());
+    m_currentRenderTargetPixelFormat.setNumSamples(m_project->effectiveSampleCount());
 }
 
 void
@@ -4424,7 +4453,7 @@ Effect::handleRenderColorTargetSemantic(
                 enableAA = it2->second.toBool();
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
-            int sampleCount = constrainMetalEffectSampleCount(enableAA ? project->sampleCount() : 1);
+            int sampleCount = resolveMMEEffectRenderTargetSampleCount(project, enableAA);
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             if (parameter.m_shared) {
                 project->setSharedRenderTargetImageContainer(name, self, container);
@@ -4459,7 +4488,7 @@ Effect::handleRenderDepthStencilTargetSemantic(
         if (it != self->m_imageDescriptions.end()) {
             container->setImageDescription(it->second);
         }
-        int sampleCount = constrainMetalEffectSampleCount(enableAA ? self->m_project->sampleCount() : 1);
+        int sampleCount = resolveMMEEffectRenderTargetSampleCount(self->m_project, enableAA);
         container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
         self->m_renderTargetDepthStencilUniforms.insert(name);
         self->m_renderTargetDepthStencilImages.insert(tinystl::make_pair(name, container));
@@ -4581,7 +4610,7 @@ Effect::handleOffscreenRenderTargetSemantic(
                 }
             }
             self->setNormalizedColorImageContainer(parameter.m_name, numMipLevels, container);
-            int sampleCount = constrainMetalEffectSampleCount(enableAA ? project->sampleCount() : 1);
+            int sampleCount = resolveMMEEffectRenderTargetSampleCount(project, enableAA);
             container->create(self, size, scaleFactor, numMipLevels, sampleCount, format);
             self->m_offscreenRenderTargetOptions.insert(tinystl::make_pair(name, option));
             if (parameter.m_shared) {
@@ -5951,7 +5980,7 @@ Effect::resetPassDescription()
     Inline::clearZeroMemory(m_currentRenderTargetPassDescription);
     Inline::clearZeroMemory(m_currentNamedDepthStencilImageDescription.second);
     Inline::clearZeroMemory(colorImageDesc);
-    m_currentRenderTargetPixelFormat.reset(m_project->sampleCount());
+    m_currentRenderTargetPixelFormat.reset(m_project->effectiveSampleCount());
     if (!m_project->getOriginOffscreenRenderPassColorImageDescription(
             m_currentRenderTargetPassDescription, colorImageDesc)) {
         m_project->getViewportRenderPassColorImageDescription(m_currentRenderTargetPassDescription, colorImageDesc);
@@ -6339,7 +6368,7 @@ Effect::setRenderTargetColorImageDescription(const IDrawable *drawable, size_t r
         m_currentRenderTargetPassDescription.color_attachments[renderTargetIndex].image = { SG_INVALID_ID };
         if (renderTargetIndex == 0) {
             Inline::clearZeroMemory(destColorImageDescription);
-            int numSamples = m_project->sampleCount();
+            int numSamples = m_project->effectiveSampleCount();
             if (!m_project->getOriginOffscreenRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription) &&
                 !m_project->getScriptExternalRenderPassColorImageDescription(

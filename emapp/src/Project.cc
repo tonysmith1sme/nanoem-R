@@ -5784,6 +5784,19 @@ Project::sampleCount() const NANOEM_DECL_NOEXCEPT
     return 1 << m_sampleLevel.first;
 }
 
+int
+Project::effectiveSampleCount() const NANOEM_DECL_NOEXCEPT
+{
+    if (m_rendererCapability) {
+        nanoem_u32_t level = m_sampleLevel.first;
+        if (!m_rendererCapability->supportsSampleLevel(level)) {
+            level = m_rendererCapability->suggestedSampleLevel(level);
+        }
+        return 1 << level;
+    }
+    return sampleCount();
+}
+
 nanoem_u32_t
 Project::sampleLevel() const NANOEM_DECL_NOEXCEPT
 {
