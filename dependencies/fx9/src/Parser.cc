@@ -378,6 +378,14 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         replaceAll(patched, "exp(-20 *", "exp(-1 *");
         replaceAll(patched, "float2 offset1 = coord + offset", "float2 offset1 = coord + offset * 12");
         replaceAll(patched, "float2 offset2 = coord - offset", "float2 offset2 = coord - offset * 12");
+        // Fix: Use fixed sigma=6 for BilateralWeight to maintain proper depth-aware filtering
+        // SHADOW_BLUR_COUNT (32) is too large as sigma - makes bilateral filter nearly uniform
+        replaceAll(patched,
+            "BilateralWeight(r, depth1, center_d, SHADOW_BLUR_COUNT, 10)",
+            "BilateralWeight(r, depth1, center_d, 6, 10)");
+        replaceAll(patched,
+            "BilateralWeight(r, depth2, center_d, SHADOW_BLUR_COUNT, 10)",
+            "BilateralWeight(r, depth2, center_d, 6, 10)");
     }
     if (endsWithIgnoreCase(path, "textures.fxsub")) {
         replaceAll(patched,
