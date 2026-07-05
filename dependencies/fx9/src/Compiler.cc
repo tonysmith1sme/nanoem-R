@@ -332,6 +332,11 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         replaceAll(patched,
             "\treturn EncodeGbuffer(material, worldPos.w);",
             "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
+        static FILE *fp = fopen("/tmp/material_common_2.0_compiler_patched.txt", "w");
+        if (fp) {
+            fprintf(fp, "%s\n", patched.c_str());
+            fclose(fp);
+        }
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
