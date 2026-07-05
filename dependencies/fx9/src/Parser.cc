@@ -216,8 +216,6 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
         "#undef FOG_ENABLE\n"
         "#define FOG_ENABLE 0\n"
-        "#undef SUN_SHADOW_QUALITY\n"
-        "#define SUN_SHADOW_QUALITY 3\n"
         "#undef SSDO_QUALITY\n"
         "#define SSDO_QUALITY 0\n"
         "#undef SSR_QUALITY\n"
@@ -293,7 +291,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "ray.conf")) {
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
-        patched = replaceRayMMDIntegerDefine(patched, "SUN_SHADOW_QUALITY", 3, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
