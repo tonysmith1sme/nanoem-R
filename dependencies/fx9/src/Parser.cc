@@ -315,7 +315,9 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "specular += max(0.0, min(iblSpecular, 1e10));");
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
-            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.03);\n\tspecular = max(specular, 0.0);\n\t$1");
+            "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.08);\n\t"
+            "diffuse += material.albedo * 0.04;\n\t"
+            "specular = max(specular, float3(0.005, 0.005, 0.005));\n\t$1");
         // Fix: Bypass DecodeYcbcr in ShadingImageBasedLighting on Metal.
         // Even with YCbCr encoding bypassed in the skybox writers, MSL may still
         // produce channel-misaligned reads. Read packed .rgb/.rgb directly instead.
