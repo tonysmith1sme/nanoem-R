@@ -331,7 +331,7 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "void Material2PS(\n\tin float3 normal   : TEXCOORD0,\n\tin float2 coord0   : TEXCOORD1,\n#if OCCLUSION_MAP_TYPE == 2 || OCCLUSION_MAP_TYPE == 3\n\tin float2 coord1   : TEXCOORD2,\n#endif\n\tin float4 worldPos : TEXCOORD3, out float4 oColor0 : COLOR0, out float4 oColor1 : COLOR1, out float4 oColor2 : COLOR2, out float4 oColor3 : COLOR3)");
         replaceAll(patched,
             "\treturn EncodeGbuffer(material, worldPos.w);",
-            "\toColor0 = float4(1, 0, 0, 1); oColor1 = float4(0, 1, 0, 1); oColor2 = float4(0, 0, 1, 1); oColor3 = float4(1, 1, 1, 1);");
+            "\tGbufferParam __gb = EncodeGbuffer(material, worldPos.w);\n\toColor0 = __gb.buffer1; oColor1 = __gb.buffer2; oColor2 = __gb.buffer3; oColor3 = __gb.buffer4;");
     }
     patched = std::regex_replace(patched, std::regex("Sky\\*box\\*\\.\\*", std::regex_constants::icase),
         "sky*box*.*");
