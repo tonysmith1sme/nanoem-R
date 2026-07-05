@@ -368,36 +368,88 @@ static std::string
 patchLegacyEffectSource(const std::string &path, const std::string &source)
 {
     std::string patched(patchRayMMDSource(path, source)), result;
-    if (patched.find("DefTech(_0, object , true, Tex)") != std::string::npos) {
-        for (size_t pos = 0; (pos = patched.find("DefTech(_0", pos)) != std::string::npos; ) {
+    {
+        std::string fixed;
+        fixed.reserve(patched.size());
+        for (size_t i = 0; i < patched.size(); i++) {
+            if (static_cast<unsigned char>(patched[i]) == 0xC2 &&
+                i + 1 < patched.size() && static_cast<unsigned char>(patched[i + 1]) == 0xA5) {
+                fixed.push_back('\\');
+                i++;
+            } else {
+                fixed.push_back(patched[i]);
+            }
+        }
+        patched = std::move(fixed);
+    }
+    if (patched.find("DefTech(") != std::string::npos &&
+        patched.find("#define DefTech(") != std::string::npos) {
+        bool isNormalDraw = patched.find("Subset=EdgeMaterial") != std::string::npos;
+        size_t macroPos = patched.find("#define DefTech(");
+        size_t scanPos = patched.find('\n', macroPos);
+        if (scanPos != std::string::npos) {
+            scanPos++;
+            while (scanPos < patched.size()) {
+                size_t nl = patched.find('\n', scanPos);
+                if (nl == std::string::npos) break;
+                size_t endChar = nl;
+                while (endChar > scanPos && (patched[endChar - 1] == '\r' || patched[endChar - 1] == ' ' || patched[endChar - 1] == '\t')) {
+                    endChar--;
+                }
+                bool isContinuation = false;
+                if (endChar > scanPos && patched[endChar - 1] == '\\') {
+                    isContinuation = true;
+                }
+                else if (endChar >= 2 + scanPos && static_cast<unsigned char>(patched[endChar - 2]) == 0xC2 &&
+                    static_cast<unsigned char>(patched[endChar - 1]) == 0xA5) {
+                    isContinuation = true;
+                }
+                if (isContinuation) {
+                    scanPos = nl + 1;
+                }
+                else {
+                    scanPos = nl + 1;
+                    break;
+                }
+            }
+            patched.erase(macroPos, scanPos - macroPos);
+        }
+        const char *defTechArgs[] = {
+            "_0, object , true, Tex)",
+            "_1, object , false, NoTex)",
+            "_2, object_ss , true, Tex)",
+            "_3, object_ss , false, NoTex)"
+        };
+        for (size_t pos = 0; (pos = patched.find("DefTech(", pos)) != std::string::npos; ) {
             size_t end = patched.find('\n', pos);
             if (end == std::string::npos) end = patched.size();
             std::string line = patched.substr(pos, end - pos);
-            if (line.find("DefTech(_0, object , true, Tex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
+            bool matched = false;
+            for (size_t i = 0; i < 4 && !matched; i++) {
+                if (line.find(std::string("DefTech(") + defTechArgs[i]) == 0) {
+                    const char *passName = (i >= 2) ? "object_ss" : "object";
+                    const char *useTex = (i % 2 == 0) ? "true" : "false";
+                    const char *texFunc = (i % 2 == 0) ? "Object_Tex_PS" : "Object_NoTex_PS";
+                    if (isNormalDraw) {
+                        char buf[1024];
+                        snprintf(buf, sizeof(buf),
+                            "technique ObjectEdgeTec_%zu < string MMDPass = \"%s\"; string Subset=EdgeMaterial; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(1); } } technique ObjectNoEdgeTec_%zu < string MMDPass = \"%s\"; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(0); } }",
+                            i, passName, useTex, texFunc, i, passName, useTex, texFunc);
+                        patched.replace(pos, line.size(), buf);
+                        pos += strlen(buf);
+                    }
+                    else {
+                        char buf[1024];
+                        snprintf(buf, sizeof(buf),
+                            "technique ObjectTec_%zu < string MMDPass = \"%s\"; bool UseTexture=%s;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 %s(); } }",
+                            i, passName, useTex, texFunc);
+                        patched.replace(pos, line.size(), buf);
+                        pos += strlen(buf);
+                    }
+                    matched = true;
+                }
             }
-            else if (line.find("DefTech(_1, object , false, NoTex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
-            }
-            else if (line.find("DefTech(_2, object_ss , true, Tex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(); } }");
-            }
-            else if (line.find("DefTech(_3, object_ss , false, NoTex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = true; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(); } }");
-            }
-            else if (line.find("DefTech(_0, object , true, Tex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectEdgeTec_0 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_0 < string MMDPass = \"object\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
-            }
-            else if (line.find("DefTech(_1, object , false, NoTex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectEdgeTec_1 < string MMDPass = \"object\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_1 < string MMDPass = \"object\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
-            }
-            else if (line.find("DefTech(_2, object_ss , true, Tex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectEdgeTec_2 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(1); } } technique ObjectNoEdgeTec_2 < string MMDPass = \"object_ss\"; bool UseTexture=true;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_Tex_PS(0); } }");
-            }
-            else if (line.find("DefTech(_3, object_ss , false, NoTex)") == 0) {
-                patched.replace(pos, line.size(), "technique ObjectEdgeTec_3 < string MMDPass = \"object_ss\"; string Subset=EdgeMaterial; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(1); } } technique ObjectNoEdgeTec_3 < string MMDPass = \"object_ss\"; bool UseTexture=false;> { pass DrawEdge { AlphaBlendEnable = FALSE; AlphaTestEnable = FALSE; VertexShader = compile vs_2_0 Object_VS(); PixelShader = compile ps_2_0 Object_NoTex_PS(0); } }");
-            }
-            else {
+            if (!matched) {
                 pos = end + 1;
             }
         }
@@ -2413,6 +2465,7 @@ Compiler::compile(const char *path, EffectProduct &effectProduct)
 bool
 Compiler::compile(const std::string &source, const char *filename, EffectProduct &effectProduct)
 {
+    fprintf(stderr, "[fx9] compile: %s (%zuB)\n", filename ? filename : "(none)", source.size());
     TPoolAllocator &allocator = GetThreadPoolAllocator();
     SetThreadPoolAllocator(m_allocator.get());
     m_allocator->push();
@@ -2454,10 +2507,16 @@ Compiler::compile(const std::string &source, const char *filename, EffectProduct
             succeeded = effectProduct.numPasses == 0 ||
                 (effectProduct.numCompiledPasses > 0 &&
                     effectProduct.numCompiledPasses == effectProduct.numValidatedPasses);
+            fprintf(stderr, "[fx9] OK  : %s (passes=%u/%u/%u)\n",
+                filename ? filename : "(none)",
+                effectProduct.numPasses, effectProduct.numCompiledPasses, effectProduct.numValidatedPasses);
         }
         else {
             effectProduct.sink.info = infoSink.info.c_str();
             effectProduct.sink.debug = infoSink.debug.c_str();
+            fprintf(stderr, "[fx9] FAIL: %s\n\t%s\n\t%s\n",
+                filename ? filename : "(none)",
+                infoSink.info.c_str(), infoSink.debug.c_str());
         }
     }
     symbolTable.reset();

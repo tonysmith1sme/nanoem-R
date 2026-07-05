@@ -1614,7 +1614,9 @@ Effect::Effect(Project *project, GlobalUniform *globalUniformPtr, AccessoryProgr
     addImageFormat("G16R16F", SG_PIXELFORMAT_RG16F);
     addImageFormat("G32R32F", SG_PIXELFORMAT_RG32F);
     addImageFormat("X8R8G8B8", SG_PIXELFORMAT_RGBA8);
+    addImageFormat("X8B8G8R8", SG_PIXELFORMAT_RGBA8);
     addImageFormat("A8R8G8B8", SG_PIXELFORMAT_RGBA8);
+    addImageFormat("A8B8G8R8", SG_PIXELFORMAT_RGBA8);
     addImageFormat("A16R16G16B16", SG_PIXELFORMAT_RGBA16);
     addImageFormat("A16B16G16R16", SG_PIXELFORMAT_RGBA16);
     addImageFormat("A16R16G16B16F", SG_PIXELFORMAT_RGBA16F);

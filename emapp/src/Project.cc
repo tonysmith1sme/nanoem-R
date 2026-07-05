@@ -607,13 +607,9 @@ Project::DrawQueue::flush(Project *project)
          ++it) {
         const sg_pass pass = it->m_handle;
         if (sg::query_pass_state(pass) == SG_RESOURCESTATE_VALID) {
-            fprintf(stderr, "[flush] drawing pass id=%d name=%s batch=%s\n", pass.id,
-                project->findRenderPassName(pass), it->m_batch ? "yes" : "no");
             drawPass(it, project, hasher);
         }
         else {
-            fprintf(stderr, "[flush] SKIPPING pass id=%d name=%s (invalid state)\n", pass.id,
-                project->findRenderPassName(pass));
             SG_INSERT_MARKERF("[WARN] The pass \"%s\" (%d) was skipped", project->findRenderPassName(pass), pass.id);
         }
         nanoem_delete(it->m_items);
@@ -2988,7 +2984,6 @@ Project::drawViewport()
 void
 Project::flushAllCommandBuffers()
 {
-    fprintf(stderr, "[flush] flushAllCommandBuffers: queue has %zu entries\n", m_drawQueue->size());
     SG_PUSH_GROUPF("Project::flushAllCommandBuffers(size=%d)", m_drawQueue->size());
     m_drawQueue->flush(this);
     m_batchDrawQueue->clear();
