@@ -409,12 +409,13 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "BilateralWeight(r, depth2, center_d, 10, 10)");
     }
     if (endsWithIgnoreCase(path, "textures.fxsub")) {
-        replaceAll(patched,
-            "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
-            "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
-        replaceAll(patched,
-            "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
-            "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
+        // Keep L8 format on Metal to avoid R16F sampling issues
+        // replaceAll(patched,
+        //     "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
+        //     "texture ShadowMap : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
+        // replaceAll(patched,
+        //     "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"L8\";\r\n>;",
+        //     "texture ShadowMapTemp : RENDERCOLORTARGET<\r\n\tfloat2 ViewportRatio = {1.0, 1.0};\r\n\tstring Format = \"R16F\";\r\n>;");
     }
     if (endsWithIgnoreCase(path, "FXAA3.fxsub")) {
         patched = std::regex_replace(patched,
