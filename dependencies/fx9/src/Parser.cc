@@ -382,10 +382,10 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         // SHADOW_BLUR_COUNT (24) is too large as sigma - makes bilateral filter nearly uniform
         replaceAll(patched,
             "BilateralWeight(r, depth1, center_d, SHADOW_BLUR_COUNT, 10)",
-            "BilateralWeight(r, depth1, center_d, 8, 10)");
+            "BilateralWeight(r, depth1, center_d, 10, 10)");
         replaceAll(patched,
             "BilateralWeight(r, depth2, center_d, SHADOW_BLUR_COUNT, 10)",
-            "BilateralWeight(r, depth2, center_d, 8, 10)");
+            "BilateralWeight(r, depth2, center_d, 10, 10)");
     }
     if (endsWithIgnoreCase(path, "textures.fxsub")) {
         replaceAll(patched,
