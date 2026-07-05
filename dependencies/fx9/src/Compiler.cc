@@ -281,22 +281,11 @@ patchRayMMDConfigurationInclude(const std::string &source)
 {
     static const char *kRayMMDMetalConfigurationOverride =
         "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
-        "#undef FOG_ENABLE\n"
-        "#define FOG_ENABLE 0\n"
-        "#undef SSDO_QUALITY\n"
-        "#define SSDO_QUALITY 0\n"
-        "#undef SSR_QUALITY\n"
-        "#define SSR_QUALITY 0\n"
-        "#undef SSSS_QUALITY\n"
-        "#define SSSS_QUALITY 0\n"
-        "#undef HDR_BLOOM_MODE\n"
-        "#define HDR_BLOOM_MODE 0\n"
-        "#undef IBL_QUALITY\n"
-        "#define IBL_QUALITY 0\n"
-        "#undef MULTI_LIGHT_ENABLE\n"
-        "#define MULTI_LIGHT_ENABLE 0\n"
+        "#undef SUN_SHADOW_QUALITY\n"
+        "#define SUN_SHADOW_QUALITY 3\n"
         "#undef OUTLINE_QUALITY\n"
         "#define OUTLINE_QUALITY 1\n"
+        "#define SHADOW_BLUR_COUNT 12\n"
         "#endif\n";
     return std::regex_replace(source,
         std::regex(R"((#\s*include\s+["<]ray\.conf[">]\s*))", std::regex_constants::icase),
@@ -313,7 +302,6 @@ patchRayMMDSource(const std::string &path, const std::string &source)
     if (endsWithIgnoreCase(path, "ray.conf")) {
         const std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript |
             std::regex_constants::icase;
-        patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
         patched = replaceRayMMDIntegerDefine(patched, "OUTLINE_QUALITY", 1, flags);
     }
     if (endsWithIgnoreCase(path, "PostProcessDiffusion.fxsub")) {
@@ -393,6 +381,10 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         endsWithIgnoreCase(path, "LightBloom.fxsub")) {
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*,)"), "sampler2D $1,");
         patched = std::regex_replace(patched, std::regex(R"(\bsampler\b\s+(\w+)\s*\))"), "sampler2D $1)");
+    }
+    if (endsWithIgnoreCase(path, "ShadowMap.fxsub")) {
+        replaceAll(patched, "SHADOW_BLUR_COUNT 6", "SHADOW_BLUR_COUNT 12");
+        replaceAll(patched, "exp(-20 *", "exp(-8 *");
     }
     if (endsWithIgnoreCase(path, "FXAA3.fxsub")) {
         patched = std::regex_replace(patched,
