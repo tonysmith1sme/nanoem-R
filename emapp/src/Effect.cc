@@ -177,21 +177,12 @@ static int
 effectMMEConstrainedSampleCountMax(const Project *project) NANOEM_DECL_NOEXCEPT
 {
     if (isMetalEffectResourceConstrained()) {
-        return 2;
+        return 1;
     }
     if (project) {
         return project->effectiveSampleCount();
     }
     return 1;
-}
-
-static int
-constrainMetalEffectSampleCount(int value) NANOEM_DECL_NOEXCEPT
-{
-    if (!isMetalEffectResourceConstrained()) {
-        return value;
-    }
-    return glm::max(glm::min(value, effectMMEConstrainedSampleCountMax(nullptr)), 1);
 }
 
 static int
@@ -202,8 +193,7 @@ resolveMMEEffectRenderTargetSampleCount(const Project *project, bool enableAA) N
     }
     const int requested = project ? project->effectiveSampleCount() : 1;
     if (isMetalEffectResourceConstrained()) {
-        const int maxCount = effectMMEConstrainedSampleCountMax(project);
-        return glm::max(glm::min(requested, maxCount), 1);
+        return 1;
     }
     return glm::max(requested, 1);
 }
@@ -2626,7 +2616,7 @@ Effect::generateOffscreenMipmapImagesChain(const effect::OffscreenRenderTargetOp
 void
 Effect::updateCurrentRenderTargetPixelFormatSampleCount()
 {
-    m_currentRenderTargetPixelFormat.setNumSamples(m_project->effectiveSampleCount());
+    m_currentRenderTargetPixelFormat.setNumSamples(m_project->sampleCount());
 }
 
 void
@@ -5980,7 +5970,7 @@ Effect::resetPassDescription()
     Inline::clearZeroMemory(m_currentRenderTargetPassDescription);
     Inline::clearZeroMemory(m_currentNamedDepthStencilImageDescription.second);
     Inline::clearZeroMemory(colorImageDesc);
-    m_currentRenderTargetPixelFormat.reset(m_project->effectiveSampleCount());
+    m_currentRenderTargetPixelFormat.reset(m_project->sampleCount());
     if (!m_project->getOriginOffscreenRenderPassColorImageDescription(
             m_currentRenderTargetPassDescription, colorImageDesc)) {
         m_project->getViewportRenderPassColorImageDescription(m_currentRenderTargetPassDescription, colorImageDesc);
@@ -6368,7 +6358,7 @@ Effect::setRenderTargetColorImageDescription(const IDrawable *drawable, size_t r
         m_currentRenderTargetPassDescription.color_attachments[renderTargetIndex].image = { SG_INVALID_ID };
         if (renderTargetIndex == 0) {
             Inline::clearZeroMemory(destColorImageDescription);
-            int numSamples = m_project->effectiveSampleCount();
+            int numSamples = m_project->sampleCount();
             if (!m_project->getOriginOffscreenRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription) &&
                 !m_project->getScriptExternalRenderPassColorImageDescription(
