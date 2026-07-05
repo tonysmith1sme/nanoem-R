@@ -283,7 +283,7 @@ DebugDrawer::initializeCommonPipelineDescription(sg_pipeline_desc &desc)
     Inline::clearZeroMemory(desc);
     desc.index_type = SG_INDEXTYPE_NONE;
     desc.colors[0].pixel_format = m_project->viewportPixelFormat();
-    desc.sample_count = m_project->sampleCount();
+    desc.sample_count = m_project->effectiveSampleCount();
     Project::setAlphaBlendMode(desc.colors[0]);
     sg_layout_desc &ld = desc.layout;
     ld.buffers[0].stride = sizeof(dd::DrawVertex);

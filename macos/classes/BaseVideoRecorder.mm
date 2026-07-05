@@ -471,7 +471,7 @@ BaseVideoRecorder::blitPass(sg::PassBlock::IDrawQueue *drawQueue, sg_pass value)
     PixelFormat format;
     format.setColorPixelFormat(pixelFormat(), 0);
     sg_image viewportImage = m_project->viewportPrimaryImage();
-    uint32_t sampleCount = m_project->sampleCount();
+    uint32_t sampleCount = m_project->effectiveSampleCount();
     if (sampleCount > 1) {
         m_blitterMSAA->blit(drawQueue, tinystl::make_pair(m_receivePass, kSourceImageName),
             tinystl::make_pair(viewportImage, kSourceImageName), m_blitRect, format);
@@ -487,7 +487,7 @@ BaseVideoRecorder::blitPass(sg::PassBlock::IDrawQueue *drawQueue, sg_pass value)
 void
 BaseVideoRecorder::updateAllMSAAImages(int width, int height)
 {
-    if (m_project->sampleCount() > 1) {
+    if (m_project->effectiveSampleCount() > 1) {
         sg::destroy_image(m_receivePassDesc.color_attachments[0].image);
         sg::destroy_image(m_receivePassDesc.depth_stencil_attachment.image);
         sg_image_desc desc;

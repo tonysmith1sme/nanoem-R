@@ -308,7 +308,7 @@ AccessoryProgramBundle::CommonPass::execute(const IDrawable * /* drawable */, co
                isOffscreenRenderPassActive = project->isOffscreenRenderPassActive();
     const sg_pass pass =
         isOffscreenRenderPassActive ? project->currentOffscreenRenderPass() : project->currentRenderPass();
-    const PixelFormat format(project->findRenderPassPixelFormat(pass, project->sampleCount()));
+    const PixelFormat format(project->findRenderPassPixelFormat(pass, project->effectiveSampleCount()));
     const TechniqueType techniqueType = m_parentTechnique->techniqueType();
     bx::HashMurmur2A hash;
     hash.begin();

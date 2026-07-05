@@ -145,7 +145,7 @@ RenderTargetNormalizer::normalizePrimaryViewportImage(const PixelFormat &originF
         id.height = static_cast<int>(imageSize.y);
         id.render_target = true;
         id.pixel_format = normalizedColorFormat;
-        id.sample_count = project->sampleCount();
+        id.sample_count = project->effectiveSampleCount();
         createNormalizePass(Project::kViewportPrimaryName, originFormat, id, originPassDescription, index);
     }
     currentPassDescriptionRef.color_attachments[index].image = colorImage;

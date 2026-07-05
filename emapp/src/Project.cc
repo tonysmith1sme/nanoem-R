@@ -942,7 +942,7 @@ Project::Pass::update(const Vector2UI16 &size)
     id.pixel_format = colorPixelFormat;
     id.mag_filter = id.min_filter = SG_FILTER_LINEAR;
     id.wrap_u = id.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    id.sample_count = enableMSAA ? m_project->sampleCount() : 1;
+    id.sample_count = enableMSAA ? m_project->effectiveSampleCount() : 1;
     sg::destroy_image(m_colorImage);
     m_colorImage = sg::make_image(&id);
     nanoem_assert(sg::query_image_state(m_colorImage) == SG_RESOURCESTATE_VALID, "color image must be valid");
