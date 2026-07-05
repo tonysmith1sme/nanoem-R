@@ -216,6 +216,8 @@ patchRayMMDConfigurationInclude(const std::string &source)
         "\n#if NANOEM_OUTPUT_SHADER_LANGUAGE_MSL\n"
         "#undef SUN_SHADOW_QUALITY\n"
         "#define SUN_SHADOW_QUALITY 3\n"
+        "#undef IBL_QUALITY\n"
+        "#define IBL_QUALITY 0\n"
         "#undef MULTI_LIGHT_ENABLE\n"
         "#define MULTI_LIGHT_ENABLE 0\n"
         "#undef SSDO_QUALITY\n"
