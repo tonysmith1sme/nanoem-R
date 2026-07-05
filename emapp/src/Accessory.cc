@@ -878,6 +878,18 @@ Accessory::setActiveEffect(IEffect *value)
         effect.m_passiveEffect = static_cast<IEffect *>(bundle);
         m_activeEffectPtrPair.first = bundle;
     }
+    /* Why: Project::setOffscreenPassiveRenderTargetEffect increments the new effect's refcount via
+     * addLoadedEffectSet when assigning a new Main slot. To balance that on reassignment we release the
+     * previous Main effect's reference here. Skipped when clearing (value=nullptr) or resetting to bundle,
+     * because destroyDrawableEffect() and the bundle path manage their own lifetime.
+     * Without this, ray-mmd's main.fx leaks until project destroy on Windows. */
+    if (value && value != bundle) {
+        IEffect *previousEffect =
+            m_offscreenPassiveRenderTargetEffects[Effect::kOffscreenOwnerNameMain].m_passiveEffect;
+        if (previousEffect && previousEffect != bundle && previousEffect != value) {
+            m_project->destroyEffect(m_project->upcastEffect(previousEffect));
+        }
+    }
     m_offscreenPassiveRenderTargetEffects[Effect::kOffscreenOwnerNameMain] = effect;
 }
 
