@@ -337,6 +337,12 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched,
             std::regex("(oColor0 = float4\\(diffuse \\* material\\.albedo \\+ specular, material\\.linearDepth\\);)"),
             "diffuse = max(diffuse, max(material.albedo, 0.02) * 0.03);\n\tspecular = max(specular, 0.0);\n\t$1");
+        // Fix: Bypass DecodeYcbcr in ShadingImageBasedLighting on Metal.
+        // Even with YCbCr encoding bypassed in the skybox writers, MSL may still
+        // produce channel-misaligned reads. Read packed .rgb/.rgb directly instead.
+        patched = std::regex_replace(patched,
+            std::regex(R"(DecodeYcbcr\(source\s*,\s*coord\s*,\s*screenPosition\s*,\s*ViewportOffset2\s*,\s*diffuse\s*,\s*specular\s*\)\s*;)"),
+            "{ float4 __ibl = tex2Dlod(source, float4(coord, 0, 0)); diffuse = __ibl.rgb; specular = __ibl.rgb; }");
     }
     if (endsWithIgnoreCase(path, "Sky with lighting.fx")) {
         patched = std::regex_replace(patched,
@@ -352,6 +358,24 @@ patchRayMMDSource(const std::string &path, const std::string &source)
         patched = std::regex_replace(patched,
             std::regex(R"(oColor1\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*diffuse2\s*,\s*specular2\s*\)\s*;)"),
             "oColor1 = float4(specular, 0);");
+    }
+    if (endsWithIgnoreCase(path, "skylighting.fxsub") ||
+        endsWithIgnoreCase(path, "skylighting_fast.fxsub")) {
+        // Fix: Same YCbCr bypass as Sky with lighting.fx — these are the actual
+        // writers of EnvLightMap when Sky Hemisphere/Sky with lighting is used,
+        // and they suffer from the same MSL purple-overlay channel misalignment.
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor0\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*diffuse\s*,\s*specular\s*\)\s*;)"),
+            "oColor0 = float4(diffuse, 0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor1\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*diffuse2\s*,\s*specular2\s*\)\s*;)"),
+            "oColor1 = float4(specular, 0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor0\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*0\s*,\s*0\s*\)\s*;)"),
+            "oColor0 = float4(0, 0, 0, 0);");
+        patched = std::regex_replace(patched,
+            std::regex(R"(oColor1\s*=\s*EncodeYcbcr\s*\(\s*screenPosition\s*,\s*0\s*,\s*0\s*\)\s*;)"),
+            "oColor1 = float4(0, 0, 0, 0);");
     }
     if (endsWithIgnoreCase(path, "material_common.fxsub")) {
         patched = std::regex_replace(patched,
