@@ -2048,14 +2048,13 @@ Project::reloadDrawableEffect(IDrawable *drawable, Progress &progress, Error &er
             ListUtils::removeItem(drawable, m_dependsOnScriptExternal);
         }
         if (loadAttachedDrawableEffect(drawable, false, progress, error)) {
-            cancelRenderOffscreenRenderTarget(lastEffect);
-            /* decrement self reference to destroy correctly */
-            EffectReferenceMap::iterator it = m_effectReferences.find(lastEffect->fileURI().absolutePath());
-            if (it != m_effectReferences.end()) {
-                it->second.second--;
-            }
-            destroyEffect(lastEffect);
+            /* Why: internalSetDrawableActiveEffect already releases the previous active effect when the
+             * new instance differs. Extra manual -- plus destroyEffect double-decremented refcount and
+             * could destroy the newly attached effect when findEffect reused the same path. */
             if (Effect *ownerEffect = resolveEffect(drawable)) {
+                if (ownerEffect != lastEffect) {
+                    cancelRenderOffscreenRenderTarget(lastEffect);
+                }
                 applyAllDrawablesToOffscreenRenderTargetEffect(drawable, ownerEffect);
             }
             succeeded = true;
@@ -3305,8 +3304,14 @@ void
 Project::attachModelMaterialEffect(model::Material *material, Effect *effect)
 {
     if (material && effect) {
+        Effect *previous = upcastEffect(material->effect());
         material->setEffect(effect);
         addLoadedEffectSet(effect);
+        /* Why: material swaps used to only addLoadedEffectSet the new effect, leaving the previous
+         * material .fx ref permanently elevated (common with per-material ray-mmd attaches). */
+        if (previous && previous != effect) {
+            destroyEffect(previous);
+        }
     }
 }
 
@@ -3315,17 +3320,19 @@ Project::setOffscreenPassiveRenderTargetEffect(
     const String &offscreenOwnerName, IDrawable *drawable, Effect *targetEffect)
 {
     if (drawable && targetEffect) {
-        /* Why: addLoadedEffectSet bumps refcount for every slot assign. Release the previous slot effect
-         * here (not in Model/Accessory::setActiveEffect) so temporary setActiveEffect swaps during
-         * drawObjectToOffscreenRenderTarget do not destroy the offscreen owner mid-frame. Skips program
-         * bundles via upcastEffect. Same path covers Main and passive offscreen owner names. */
+        /* Why: Slot assigns must be refcount-idempotent. applyDrawableToOffscreenRenderTargetEffect is
+         * called for every drawable against every owner (including re-applying the same passive). Bumping
+         * addLoadedEffectSet on every call made ray-mmd passive refs climb without a matching destroy, so
+         * GBuffer/shadow sub-effects never reached Effect::destroy and Metal VRAM grew. Only bump when the
+         * slot actually changes; temporary setActiveEffect swaps must not go through this path. */
         IEffect *previousEffect = drawable->findOffscreenPassiveRenderTargetEffect(offscreenOwnerName);
+        if (previousEffect == static_cast<IEffect *>(targetEffect)) {
+            return;
+        }
         drawable->setOffscreenPassiveRenderTargetEffect(offscreenOwnerName, targetEffect);
         addLoadedEffectSet(targetEffect);
         if (Effect *previous = upcastEffect(previousEffect)) {
-            if (previous != targetEffect) {
-                destroyEffect(previous);
-            }
+            destroyEffect(previous);
         }
     }
 }
@@ -4312,7 +4319,22 @@ Project::destroyEffect(Effect *effect)
 {
     if (effect) {
         EffectReferenceMap::iterator it2 = m_effectReferences.find(effect->fileURI().absolutePath());
-        bool deletable = it2 != m_effectReferences.end() ? --it2->second.second <= 0 : true;
+        bool deletable = true;
+        if (it2 != m_effectReferences.end()) {
+            /* Why: Only decrement when the map still points at this instance. Stale path entries after a
+             * prior destroy left count 0 with a dangling Effect*; the next load reused the path, bumped
+             * the count on the dead pointer, and never freed the live effect's GPU resources. */
+            if (it2->second.first != effect) {
+                deletable = m_loadedEffectSet.find(effect) != m_loadedEffectSet.end();
+            }
+            else if (--it2->second.second <= 0) {
+                m_effectReferences.erase(it2);
+                deletable = true;
+            }
+            else {
+                deletable = false;
+            }
+        }
         if (deletable) {
             LoadedEffectSet::iterator it = m_loadedEffectSet.find(effect);
             if (it != m_loadedEffectSet.end()) {
@@ -5205,6 +5227,12 @@ Project::createAllOffscreenRenderTargets(Effect *ownerEffect, const Archiver *ar
     static const String kHideLiteral = "hide";
     static const String kNoneLiteral = "none";
     nanoem_parameter_assert(ownerEffect, "must NOT be nullptr");
+    /* Why: internalSetDrawableActiveEffect calls this for every drawable attach. Sharing one main.fx
+     * across models re-entered load for every attach and re-bumped passive refs / re-registered the
+     * same owner map. Skip when this owner already built its offscreen graph. */
+    if (m_allOffscreenRenderTargets.find(ownerEffect) != m_allOffscreenRenderTargets.end()) {
+        return;
+    }
     SG_PUSH_GROUPF("Project::createAllOffscreenRenderTargets(owner=%s)", ownerEffect->nameConstString());
     const sg_pass lastViewIndex(currentRenderPass());
     NamedOffscreenRenderTargetConditionListMap &namedOffscreenRenderTargets = m_allOffscreenRenderTargets[ownerEffect];
@@ -5256,26 +5284,31 @@ Project::releaseAllOffscreenRenderTarget(Effect *ownerEffect)
                                                                   end2 = renderTargets.end();
              it2 != end2; ++it2) {
             const String &name = it2->first;
-            OffscreenRenderTargetConditionList &conditionList = it2->second;
-            for (DrawableList::const_iterator it = m_drawableOrderList.begin(), end = m_drawableOrderList.end();
-                 it != end; ++it) {
-                IDrawable *drawable = *it;
-                drawable->removeOffscreenPassiveRenderTargetEffect(name);
-            }
-            for (OffscreenRenderTargetConditionList::iterator it3 = conditionList.begin(), end3 = conditionList.end();
-                 it3 != end3; ++it3) {
-                OffscreenRenderTargetCondition &condition = *it3;
-                LoadedEffectSet::const_iterator it4 = m_loadedEffectSet.find(condition.m_passiveEffect);
-                if (it4 != m_loadedEffectSet.end()) {
-                    destroyEffect(*it4);
+            for (DrawableList::const_iterator itDrawable = m_drawableOrderList.begin(),
+                                              endDrawable = m_drawableOrderList.end();
+                 itDrawable != endDrawable; ++itDrawable) {
+                IDrawable *drawable = *itDrawable;
+                /* Why: removeOffscreen only clears the map; each setOffscreenPassive assigned a ref.
+                 * Drop that slot ref here so passive sub-effects can reach destroy when no other
+                 * drawable still holds them (ray-mmd multi-model attach). */
+                if (Effect *previous = upcastEffect(drawable->findOffscreenPassiveRenderTargetEffect(name))) {
+                    destroyEffect(previous);
                 }
+                drawable->removeOffscreenPassiveRenderTargetEffect(name);
             }
         }
         m_allOffscreenRenderTargets.erase(it);
     }
+    /* Why: Load path holds one owner ref per passive via addLoadedEffectSet (even when no drawable
+     * matched the condition). Drop that owner ref once per unique passive after drawable slots. */
     OffscreenRenderTargetEffectSetMap::iterator it2 = m_allOffscreenRenderTargetEffectSets.find(ownerEffect);
     if (it2 != m_allOffscreenRenderTargetEffectSets.end()) {
+        const LoadedEffectSet passives = it2->second;
         m_allOffscreenRenderTargetEffectSets.erase(it2);
+        for (LoadedEffectSet::const_iterator itPassive = passives.begin(), endPassive = passives.end();
+             itPassive != endPassive; ++itPassive) {
+            destroyEffect(*itPassive);
+        }
     }
     SG_POP_GROUP();
 }
@@ -6443,8 +6476,15 @@ Project::internalSetDrawableActiveEffect(IDrawable *drawable, Effect *effect, co
     const IncludeEffectSourceMap &includeEffectSources, bool enableEffectPlugin, bool enableSourceCache,
     Progress &progress, Error &error)
 {
+    /* Why: attach/reload must release the previous Main/active effect. setActiveEffect no longer
+     * destroyEffect (mid-frame offscreen swap safety); without this, re-attaching main.fx left the
+     * prior owner ref alive and ray-mmd GPU resources accumulated. */
+    Effect *previousEffect = upcastEffect(drawable->activeEffect());
     addLoadedEffectSet(effect);
     drawable->setActiveEffect(effect);
+    if (previousEffect && previousEffect != effect) {
+        destroyEffect(previousEffect);
+    }
     if (effect->hasScriptExternal()) {
         m_dependsOnScriptExternal.push_back(drawable);
     }
@@ -6482,7 +6522,9 @@ Project::loadOffscreenRenderTargetEffect(Effect *ownerEffect, const Archiver *ar
                     cond.m_hidden = cond.m_none = false;
                     newConditions.push_back(cond);
                     m_allOffscreenRenderTargetEffectSets[ownerEffect].insert(targetEffect);
-                    m_loadedEffectSet.insert(targetEffect);
+                    /* Why: register load-time owner ref so releaseAll can destroyEffect once per passive
+                     * even if no drawable matched the condition. Slot assigns add separate refs. */
+                    addLoadedEffectSet(targetEffect);
                 }
                 else {
                     bool hitCache = enableSourceCache && findSourceEffectCache(resolvedURI, output, error);
@@ -6499,7 +6541,9 @@ Project::loadOffscreenRenderTargetEffect(Effect *ownerEffect, const Archiver *ar
                                           URI::lastPathComponent(filename))
                                     : filename);
                             m_allOffscreenRenderTargetEffectSets[ownerEffect].insert(targetEffect);
-                            m_loadedEffectSet.insert(targetEffect);
+                            /* Why: register load-time owner ref so releaseAll can destroyEffect once per passive
+                             * even if no drawable matched the condition. Slot assigns add separate refs. */
+                            addLoadedEffectSet(targetEffect);
                             if (enableSourceCache && !hitCache) {
                                 setSourceEffectCache(resolvedURI, output, error);
                             }
@@ -6525,7 +6569,9 @@ Project::loadOffscreenRenderTargetEffect(Effect *ownerEffect, const Archiver *ar
                     if (loadOffscreenRenderTargetEffectFromByteArray(
                             targetEffect, archiver, fileURI, condition, bytes, newConditions, progress, error)) {
                         m_allOffscreenRenderTargetEffectSets[ownerEffect].insert(targetEffect);
-                        m_loadedEffectSet.insert(targetEffect);
+                        /* Why: register load-time owner ref so releaseAll can destroyEffect once per passive
+                         * even if no drawable matched the condition. Slot assigns add separate refs. */
+                        addLoadedEffectSet(targetEffect);
                     }
                     else {
                         destroyDetachedEffect(targetEffect);
@@ -6583,7 +6629,9 @@ Project::loadOffscreenRenderTargetEffectFromEffectSourceMap(const Effect *ownerE
     }
     if (loaded) {
         m_allOffscreenRenderTargetEffectSets[ownerEffect].insert(targetEffect);
-        m_loadedEffectSet.insert(targetEffect);
+        /* Why: register load-time owner ref so releaseAll can destroyEffect once per passive
+         * even if no drawable matched the condition. Slot assigns add separate refs. */
+        addLoadedEffectSet(targetEffect);
     }
     else {
         destroyDetachedEffect(targetEffect);
@@ -7343,6 +7391,12 @@ Project::applyDrawableToOffscreenRenderTargetEffect(IDrawable *drawable, Effect 
                             setOffscreenPassiveRenderTargetEffect(ownerName, drawable, condition.m_passiveEffect);
                         }
                         else {
+                            /* Why: default/none paths do not go through setOffscreenPassive which
+                             * balances refs; drop any previous custom passive ref first. */
+                            if (Effect *previous =
+                                    upcastEffect(drawable->findOffscreenPassiveRenderTargetEffect(ownerName))) {
+                                destroyEffect(previous);
+                            }
                             drawable->setOffscreenDefaultRenderTargetEffect(ownerName);
                         }
                     }
@@ -7351,6 +7405,9 @@ Project::applyDrawableToOffscreenRenderTargetEffect(IDrawable *drawable, Effect 
                 }
             }
             if (!matched) {
+                if (Effect *previous = upcastEffect(drawable->findOffscreenPassiveRenderTargetEffect(ownerName))) {
+                    destroyEffect(previous);
+                }
                 drawable->setOffscreenDefaultRenderTargetEffect(ownerName);
             }
         }
@@ -7460,7 +7517,15 @@ Project::addLoadedEffectSet(Effect *value)
     const String path(value->fileURI().absolutePath());
     EffectReferenceMap::iterator it2 = m_effectReferences.find(path);
     if (it2 != m_effectReferences.end()) {
-        it2->second.second++;
+        /* Why: if a stale path entry pointed at a destroyed instance, rebind to the live effect
+         * instead of inflating a count that can never free this object. */
+        if (it2->second.first != value) {
+            it2->second.first = value;
+            it2->second.second = 1;
+        }
+        else {
+            it2->second.second++;
+        }
     }
     else {
         m_effectReferences.insert(tinystl::make_pair(path, tinystl::make_pair(value, 1)));

@@ -2558,6 +2558,8 @@ Effect::destroyAllDrawableRenderTargetColorImages(const IDrawable *drawable)
         m_drawableNamedRenderTargetColorImages.find(drawable);
     if (it != m_drawableNamedRenderTargetColorImages.end()) {
         destroyAllRenderTargetColorImages(it->second);
+        /* Why: leave no empty drawable key so repeated attach/remove does not grow the map forever. */
+        m_drawableNamedRenderTargetColorImages.erase(it);
     }
 }
 

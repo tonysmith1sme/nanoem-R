@@ -666,7 +666,17 @@ Accessory::setOffscreenPassiveRenderTargetEffect(const String &ownerName, IEffec
             OffscreenPassiveRenderTargetEffectMap::iterator it = m_offscreenPassiveRenderTargetEffects.find(ownerName);
             if (it != m_offscreenPassiveRenderTargetEffects.end()) {
                 OffscreenPassiveRenderTargetEffect &effect = it->second;
-                effect.m_passiveEffect = value;
+                if (effect.m_passiveEffect != value) {
+                    /* Why: first insert creates per-drawable RT clones; replacing the passive without
+                     * tearing them down left orphan Metal images on the previous effect. */
+                    if (Effect *oldEffect = m_project->upcastEffect(effect.m_passiveEffect)) {
+                        oldEffect->destroyAllDrawableRenderTargetColorImages(this);
+                    }
+                    effect.m_passiveEffect = value;
+                    if (Effect *innerEffect = m_project->upcastEffect(value)) {
+                        innerEffect->createAllDrawableRenderTargetColorImages(this);
+                    }
+                }
             }
             else {
                 const OffscreenPassiveRenderTargetEffect effect = { value, true };
@@ -689,6 +699,11 @@ Accessory::removeOffscreenPassiveRenderTargetEffect(const String &ownerName)
         OffscreenPassiveRenderTargetEffectMap::const_iterator it =
             m_offscreenPassiveRenderTargetEffects.find(ownerName);
         if (it != m_offscreenPassiveRenderTargetEffects.end()) {
+            /* Why: setOffscreenPassive creates per-drawable RT clones on first insert; clearing the
+             * map alone left those Metal/D3D images alive until full Effect::destroy. */
+            if (Effect *innerEffect = m_project->upcastEffect(it->second.m_passiveEffect)) {
+                innerEffect->destroyAllDrawableRenderTargetColorImages(this);
+            }
             m_offscreenPassiveRenderTargetEffects.erase(it);
         }
     }
