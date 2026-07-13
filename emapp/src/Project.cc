@@ -3315,8 +3315,18 @@ Project::setOffscreenPassiveRenderTargetEffect(
     const String &offscreenOwnerName, IDrawable *drawable, Effect *targetEffect)
 {
     if (drawable && targetEffect) {
+        /* Why: addLoadedEffectSet bumps refcount for every slot assign. Release the previous slot effect
+         * here (not in Model/Accessory::setActiveEffect) so temporary setActiveEffect swaps during
+         * drawObjectToOffscreenRenderTarget do not destroy the offscreen owner mid-frame. Skips program
+         * bundles via upcastEffect. Same path covers Main and passive offscreen owner names. */
+        IEffect *previousEffect = drawable->findOffscreenPassiveRenderTargetEffect(offscreenOwnerName);
         drawable->setOffscreenPassiveRenderTargetEffect(offscreenOwnerName, targetEffect);
         addLoadedEffectSet(targetEffect);
+        if (Effect *previous = upcastEffect(previousEffect)) {
+            if (previous != targetEffect) {
+                destroyEffect(previous);
+            }
+        }
     }
 }
 
@@ -6605,6 +6615,9 @@ Project::loadOffscreenRenderTargetEffectFromByteArray(Effect *targetEffect, cons
 void
 Project::cancelRenderOffscreenRenderTarget(Effect *ownerEffect)
 {
+    if (!ownerEffect) {
+        return;
+    }
     effect::OffscreenRenderTargetOptionList options;
     ownerEffect->getAllOffscreenRenderTargetOptions(options);
     for (effect::OffscreenRenderTargetOptionList::const_iterator it = options.begin(), end = options.end(); it != end;
@@ -6616,13 +6629,16 @@ Project::cancelRenderOffscreenRenderTarget(Effect *ownerEffect)
         if (it2 != m_hashedRenderPassBundleMap.end()) {
             const sg_pass pass = it2->second->m_handle;
             DrawQueue::PassCommandBufferList &buffers = m_drawQueue->m_commandBuffers;
-            for (DrawQueue::PassCommandBufferList::iterator it3 = buffers.begin(), end3 = buffers.end(); it3 != end3;
-                 ++it3) {
+            /* Why: erase invalidates end iterators; always re-evaluate buffers.end() and only advance on keep. */
+            for (DrawQueue::PassCommandBufferList::iterator it3 = buffers.begin(); it3 != buffers.end();) {
                 if (it3->m_handle.id == pass.id) {
                     DrawQueue::CommandBuffer *items = it3->m_items;
                     it3 = buffers.erase(it3);
                     nanoem_delete(items);
                     forceResetAllPasses();
+                }
+                else {
+                    ++it3;
                 }
             }
         }
