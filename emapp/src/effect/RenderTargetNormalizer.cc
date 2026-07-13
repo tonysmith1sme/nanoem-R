@@ -39,8 +39,18 @@ RenderTargetNormalizer::destroy()
             "effect::RenderTargetNormalizer::destroy(index=%d, origin=%d, normalizePass=%d, normalizeColorImage=%d)", i,
             m_originPasses[i].first.id, m_normalizedPasses[i].first.id, m_normalizedColorImages[i].first.id);
         sg::destroy_pass(m_originPasses[i].first);
+        m_originPasses[i].first = { SG_INVALID_ID };
         sg::destroy_pass(m_normalizedPasses[i].first);
-        sg::destroy_image(m_normalizedColorImages[i].first);
+        m_normalizedPasses[i].first = { SG_INVALID_ID };
+        /* Why: createNormalizePass() registers the intermediate RT via Effect::setImageLabel.
+         * Drop the label before destroy so Effect::destroy() does not treat it as a residual leak
+         * and attempt a second destroy of the same handle. */
+        if (sg::is_valid(m_normalizedColorImages[i].first)) {
+            m_effect->removeImageLabel(m_normalizedColorImages[i].first);
+            sg::destroy_image(m_normalizedColorImages[i].first);
+            m_normalizedColorImages[i].first = { SG_INVALID_ID };
+        }
+        m_originColorImageRefs[i].first = { SG_INVALID_ID };
     }
     SG_POP_GROUP();
 }

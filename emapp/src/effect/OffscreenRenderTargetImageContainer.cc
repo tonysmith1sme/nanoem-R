@@ -65,6 +65,9 @@ OffscreenRenderTargetImageContainer::generateDepthStencilMipmapImages(const Effe
             }
             sg_image image = sg::make_image(&mipmapImageDescription);
             nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
+            /* Why: track intermediate mipmap RTs so Effect::destroy can reclaim them if resize
+             * aborts before OffscreenRenderTargetImageContainer::destroy runs. */
+            const_cast<Effect *>(effect)->setImageLabel(image, label[0] ? label : nameConstString());
             m_depthStencilMipmapImages.push_back(image);
         }
     }

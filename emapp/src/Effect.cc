@@ -2625,11 +2625,16 @@ Effect::destroy()
     destroyAllStagingBuffers(m_imageStagingBuffers);
     m_project->removeAllSharedRenderTargetImageContainers(this);
     m_project->releaseAllOffscreenRenderTarget(this);
+    /* Why: residual labels mean a container/path forgot removeImageLabel+destroy.
+     * For ray-mmd this used to leave live Metal/D3D textures after effect unload
+     * (project reload, Main-slot reassignment). Destroy the handles as a safety net. */
     if (!m_namedImageHandles.empty()) {
         SG_PUSH_GROUPF("Effect::destroy(leakedImages=%d)", m_namedImageHandles.size());
         for (NamedHandleMap::const_iterator it = m_namedImageHandles.begin(), end = m_namedImageHandles.end();
              it != end; ++it) {
+            const sg_image image = { static_cast<uint32_t>(it->first) };
             SG_INSERT_MARKERF("Effect::destroy(leakedImage=%d, leakedName=%s)", it->first, it->second.c_str());
+            sg::destroy_image(image);
         }
         SG_POP_GROUP();
         m_namedImageHandles.clear();
@@ -2638,7 +2643,9 @@ Effect::destroy()
         SG_PUSH_GROUPF("Effect::destroy(leakedShaders=%d)", m_namedShaderHandles.size());
         for (NamedHandleMap::const_iterator it = m_namedShaderHandles.begin(), end = m_namedShaderHandles.end();
              it != end; ++it) {
+            const sg_shader shader = { static_cast<uint32_t>(it->first) };
             SG_INSERT_MARKERF("Effect::destroy(leakedShader=%d, leakedName=%s)", it->first, it->second.c_str());
+            sg::destroy_shader(shader);
         }
         SG_POP_GROUP();
         m_namedShaderHandles.clear();

@@ -77,7 +77,8 @@ RenderTargetDepthStencilImageContainer::findImage(const Effect *effect, const sg
         }
         image = sg::make_image(&depthStencilImageDescription);
         nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
-        SG_LABEL_IMAGE(image, label);
+        /* Track via Effect label map so residual handles are freed on Effect::destroy. */
+        const_cast<Effect *>(effect)->setImageLabel(image, label[0] ? label : m_name.c_str());
         m_allDepthStencilImages.insert(tinystl::make_pair(key, image));
     }
     return image;
@@ -121,6 +122,7 @@ RenderTargetDepthStencilImageContainer::findMipmapImages(
             }
             sg_image image = sg::make_image(&mipmapImageDescription);
             nanoem_assert(sg::query_image_state(image) == SG_RESOURCESTATE_VALID, "image must be valid");
+            const_cast<Effect *>(effect)->setImageLabel(image, label[0] ? label : m_name.c_str());
             mipmapImages.push_back(image);
         }
         images = &m_allDepthStencilMipmapImages.insert(tinystl::make_pair(key, mipmapImages)).first->second;
