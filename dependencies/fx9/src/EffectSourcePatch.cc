@@ -292,11 +292,19 @@ patchRayMMDSource(const std::string &path, const std::string &source)
             "#endif\n") + patched;
     }
     if (endsWithIgnoreCase(path, "ShadingMaterials.fxsub")) {
-        for (size_t pos = 0; (pos = patched.find("diffuse += tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 62) {
-            patched.replace(pos, 62, "diffuse += max(tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        // Use needle.size() for replace length — hardcoded 62/67 were wrong (actual 59/64)
+        // and truncated the next token into "pecular", causing parse errors near ~91:34.
+        const std::string lightDiffuseNeedle("diffuse += tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb;");
+        const std::string lightDiffuseRepl("diffuse += max(tex2Dlod(LightMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        for (size_t pos = 0; (pos = patched.find(lightDiffuseNeedle, pos)) != std::string::npos;
+             pos += lightDiffuseRepl.size()) {
+            patched.replace(pos, lightDiffuseNeedle.size(), lightDiffuseRepl);
         }
-        for (size_t pos = 0; (pos = patched.find("specular += tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb;", pos)) != std::string::npos; pos += 67) {
-            patched.replace(pos, 67, "specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        const std::string lightSpecularNeedle("specular += tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb;");
+        const std::string lightSpecularRepl("specular += max(tex2Dlod(LightSpecMapSamp, float4(coord, 0, 0)).rgb, 0.0);");
+        for (size_t pos = 0; (pos = patched.find(lightSpecularNeedle, pos)) != std::string::npos;
+             pos += lightSpecularRepl.size()) {
+            patched.replace(pos, lightSpecularNeedle.size(), lightSpecularRepl);
         }
         patched = std::regex_replace(patched,
             std::regex(R"(diffuse \+= iblDiffuse;)"),
