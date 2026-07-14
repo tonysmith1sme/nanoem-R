@@ -530,6 +530,12 @@ AccessoryProgramBundle::ObjectTechnique::execute(const IDrawable * /* drawable *
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_accessory_color_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_accessory_color_vs_glsl_es3_data);
             }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_accessory_color_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_accessory_color_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_accessory_color_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_accessory_color_vs_spirv_size;
+            }
             setupShader("_41", "_35", sd);
             char label[Inline::kMarkerStringLength];
             if (Inline::isDebugLabelEnabled()) {
@@ -586,6 +592,12 @@ AccessoryProgramBundle::GroundShadowTechnique::execute(const IDrawable * /* draw
             else if (backend == SG_BACKEND_GLES3) {
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_accessory_ground_shadow_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_accessory_ground_shadow_vs_glsl_es3_data);
+            }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_accessory_ground_shadow_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_accessory_ground_shadow_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_accessory_ground_shadow_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_accessory_ground_shadow_vs_spirv_size;
             }
             setupShader("_42", "_37", sd);
             char label[Inline::kMarkerStringLength];

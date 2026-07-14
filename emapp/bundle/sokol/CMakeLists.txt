@@ -79,18 +79,54 @@ endfunction()
 function(nanoem_emapp_build_sokol_wgpu)
   if(NANOEM_ENABLE_SOKOL_WGPU)
     set(DAWN_BASE_PATH ${PROJECT_SOURCE_DIR}/dependencies/dawn)
-    find_library(WEBGPU_DAWN_NATIVE_LIBRARY_PATH NAMES dawn_native dawn_native.dll PATH_SUFFIXES out/Release/ PATHS ${DAWN_BASE_PATH})
-    find_library(WEBGPU_DAWN_PROC_LIBRARY_PATH NAMES dawn_proc dawn_proc.dll PATH_SUFFIXES out/Release PATHS ${DAWN_BASE_PATH})
-    find_library(WEBGPU_DAWN_WIRE_LIBRARY_PATH NAMES dawn_wire dawn_wire.dll PATH_SUFFIXES out/Release PATHS ${DAWN_BASE_PATH})
-    find_path(WEBGPU_INCLUDE_DIR NAMES dawn/webgpu.h PATH_SUFFIXES out/Release/gen/src/include PATHS ${DAWN_BASE_PATH})
-    add_library(sokol_wgpu ${_library_type} ${CMAKE_CURRENT_SOURCE_DIR}/sokol_wgpu.c)
-    set_property(TARGET sokol_wgpu PROPERTY FOLDER nanoem/sokol)
-    target_compile_definitions(sokol_wgpu PRIVATE SOKOL_DEBUG=$<BOOL:${SOKOL_ENABLE_DEBUG}> SOKOL_EXTERNAL_GL_LOADER)
-    target_include_directories(sokol_wgpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/dependencies ${WEBGPU_INCLUDE_DIR})
-    set_target_properties(sokol_wgpu PROPERTIES OUTPUT_NAME sokol_wgpu PREFIX "" DEFINE_SYMBOL "")
-    target_link_libraries(sokol_wgpu ${WEBGPU_DAWN_NATIVE_LIBRARY_PATH} ${WEBGPU_DAWN_PROC_LIBRARY_PATH} ${WEBGPU_DAWN_WIRE_LIBRARY_PATH})
-    nanoem_emapp_plugin_install(sokol_wgpu)
-    message(STATUS "[emapp/bundle] setup sokol WGPU backend renderer plugin")
+    # Support both classic Dawn layout and install-root / system layouts.
+    find_path(WEBGPU_INCLUDE_DIR
+      NAMES webgpu/webgpu.h dawn/webgpu.h webgpu.h
+      PATH_SUFFIXES
+        include
+        out/Release/gen/src/include
+        gen/include
+      PATHS
+        ${DAWN_BASE_PATH}
+        ${DAWN_BASE_PATH}/install-root
+        $ENV{DAWN_ROOT}
+        $ENV{WEBGPU_ROOT}
+    )
+    find_library(WEBGPU_DAWN_NATIVE_LIBRARY_PATH
+      NAMES dawn_native webgpu_dawn dawn
+      PATH_SUFFIXES lib out/Release out/Release/lib
+      PATHS ${DAWN_BASE_PATH} ${DAWN_BASE_PATH}/install-root $ENV{DAWN_ROOT} $ENV{WEBGPU_ROOT})
+    find_library(WEBGPU_DAWN_PROC_LIBRARY_PATH
+      NAMES dawn_proc webgpu_dawn dawn
+      PATH_SUFFIXES lib out/Release out/Release/lib
+      PATHS ${DAWN_BASE_PATH} ${DAWN_BASE_PATH}/install-root $ENV{DAWN_ROOT} $ENV{WEBGPU_ROOT})
+    find_library(WEBGPU_DAWN_WIRE_LIBRARY_PATH
+      NAMES dawn_wire
+      PATH_SUFFIXES lib out/Release out/Release/lib
+      PATHS ${DAWN_BASE_PATH} ${DAWN_BASE_PATH}/install-root $ENV{DAWN_ROOT} $ENV{WEBGPU_ROOT})
+    if(WEBGPU_INCLUDE_DIR AND WEBGPU_DAWN_NATIVE_LIBRARY_PATH)
+      add_library(sokol_wgpu ${_library_type} ${CMAKE_CURRENT_SOURCE_DIR}/sokol_wgpu.c)
+      set_property(TARGET sokol_wgpu PROPERTY FOLDER nanoem/sokol)
+      target_compile_definitions(sokol_wgpu PRIVATE SOKOL_DEBUG=$<BOOL:${SOKOL_ENABLE_DEBUG}> SOKOL_EXTERNAL_GL_LOADER)
+      target_include_directories(sokol_wgpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/dependencies ${WEBGPU_INCLUDE_DIR})
+      set_target_properties(sokol_wgpu PROPERTIES OUTPUT_NAME sokol_wgpu PREFIX "" DEFINE_SYMBOL "")
+      set(_wgpu_libs ${WEBGPU_DAWN_NATIVE_LIBRARY_PATH})
+      if(WEBGPU_DAWN_PROC_LIBRARY_PATH)
+        list(APPEND _wgpu_libs ${WEBGPU_DAWN_PROC_LIBRARY_PATH})
+      endif()
+      if(WEBGPU_DAWN_WIRE_LIBRARY_PATH)
+        list(APPEND _wgpu_libs ${WEBGPU_DAWN_WIRE_LIBRARY_PATH})
+      endif()
+      target_link_libraries(sokol_wgpu ${_wgpu_libs})
+      nanoem_emapp_plugin_install(sokol_wgpu)
+      set(NANOEM_HAS_WGPU ON CACHE BOOL "WGPU/Dawn backend available" FORCE)
+      message(STATUS "[emapp/bundle] setup sokol WGPU backend renderer plugin")
+    else()
+      set(NANOEM_HAS_WGPU OFF CACHE BOOL "WGPU/Dawn backend available" FORCE)
+      message(WARNING "[emapp/bundle] NANOEM_ENABLE_SOKOL_WGPU=ON but Dawn/WebGPU was not found under dependencies/dawn; sokol_wgpu skipped")
+    endif()
+  else()
+    set(NANOEM_HAS_WGPU OFF CACHE BOOL "WGPU/Dawn backend available" FORCE)
   endif()
 endfunction()
 

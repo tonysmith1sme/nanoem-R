@@ -168,6 +168,15 @@ MainWindow::initialize(HWND windowHandle, Error &error)
     }
     else
 #endif /* NANOEM_WIN32_HAS_OPENGL */
+#if defined(NANOEM_HAS_WGPU)
+    if (StringUtils::equalsIgnoreCase(preference.rendererBackend(), BaseApplicationService::kRendererVulkan)) {
+        /* Device/surface bootstrap is host-owned; prefer loading sokol_wgpu when Dawn is present. */
+        sokolPath.append("sokol_wgpu.dll");
+        pixelFormat = SG_PIXELFORMAT_BGRA8;
+        isLowPower = result = true;
+    }
+    else
+#endif /* NANOEM_HAS_WGPU */
     {
         result = setupDirectXRenderer(windowHandle, windowSize.x, windowSize.y, isLowPower, error);
         sokolPath.append("sokol_d3d11.dll");

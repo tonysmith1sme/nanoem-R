@@ -63,6 +63,7 @@ namespace {
 #include "emapp/private/shaders/model_zplot_vs_spirv.h"
 #include "emapp/private/shaders/pointed_model_color_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_model_color_vs_msl_macos.h"
+#include "emapp/private/shaders/pointed_model_color_vs_spirv.h"
 const char *const kPrefixName = "@nanoem/ModelProgramBundle";
 } /* namespace anonymous */
 
@@ -637,6 +638,12 @@ ModelProgramBundle::ObjectTechnique::execute(const IDrawable * /* drawable */, b
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_model_color_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_model_color_vs_glsl_es3_data);
             }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_model_color_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_model_color_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_model_color_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_model_color_vs_spirv_size;
+            }
             setupShader("_40", "_39", sd);
             char label[Inline::kMarkerStringLength];
             if (Inline::isDebugLabelEnabled()) {
@@ -698,6 +705,12 @@ ModelProgramBundle::EdgeTechnique::execute(const IDrawable * /* drawable */, boo
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_model_edge_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_model_edge_vs_glsl_es3_data);
             }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_model_edge_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_model_edge_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_model_edge_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_model_edge_vs_spirv_size;
+            }
             setupShader("_42", "_37", sd);
             char label[Inline::kMarkerStringLength];
             if (Inline::isDebugLabelEnabled()) {
@@ -753,6 +766,12 @@ ModelProgramBundle::GroundShadowTechnique::execute(const IDrawable * /* drawable
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_model_ground_shadow_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_model_ground_shadow_vs_glsl_es3_data);
             }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_model_ground_shadow_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_model_ground_shadow_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_model_ground_shadow_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_model_ground_shadow_vs_spirv_size;
+            }
             setupShader("_42", "_37", sd);
             char label[Inline::kMarkerStringLength];
             if (Inline::isDebugLabelEnabled()) {
@@ -807,6 +826,12 @@ ModelProgramBundle::ZplotTechnique::execute(const IDrawable * /* drawable */, bo
             else if (backend == SG_BACKEND_GLES3) {
                 sd.fs.source = reinterpret_cast<const char *>(g_nanoem_model_zplot_fs_glsl_es3_data);
                 sd.vs.source = reinterpret_cast<const char *>(g_nanoem_model_zplot_vs_glsl_es3_data);
+            }
+            else if (backend == SG_BACKEND_WGPU) {
+                sd.fs.bytecode.ptr = g_nanoem_model_zplot_fs_spirv_data;
+                sd.fs.bytecode.size = g_nanoem_model_zplot_fs_spirv_size;
+                sd.vs.bytecode.ptr = g_nanoem_model_zplot_vs_spirv_data;
+                sd.vs.bytecode.size = g_nanoem_model_zplot_vs_spirv_size;
             }
             setupShader("_30", "_37", sd);
             char label[Inline::kMarkerStringLength];

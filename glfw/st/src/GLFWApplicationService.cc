@@ -407,7 +407,15 @@ GLFWApplicationService::createAudioPlayer()
 bool
 GLFWApplicationService::isRendererAvailable(const char *value) const noexcept
 {
-    return StringUtils::equals(value, kRendererOpenGL);
+    if (StringUtils::equals(value, kRendererOpenGL)) {
+        return true;
+    }
+#if defined(NANOEM_HAS_WGPU)
+    if (StringUtils::equals(value, kRendererVulkan)) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 void

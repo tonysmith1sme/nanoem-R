@@ -60,7 +60,7 @@ StringList
 ApplicationPreference::allAvailableRenderers() const
 {
     const char *renderers[] = { BaseApplicationService::kRendererOpenGL, BaseApplicationService::kRendererDirectX,
-        BaseApplicationService::kRendererMetal };
+        BaseApplicationService::kRendererMetal, BaseApplicationService::kRendererVulkan };
     StringList values;
     for (nanoem_rsize_t i = 0; i < BX_COUNTOF(renderers); i++) {
         if (m_application->isRendererAvailable(renderers[i])) {

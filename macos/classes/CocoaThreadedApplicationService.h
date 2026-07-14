@@ -40,6 +40,7 @@ class ThreadedApplicationClient;
 namespace macos {
 
 class IBackgroundRenderer;
+class WebGPUBootstrap;
 
 class CocoaThreadedApplicationService final : public ThreadedApplicationService {
 public:
@@ -63,6 +64,8 @@ public:
     ~CocoaThreadedApplicationService() override;
 
     void setDisplaySyncEnabled(bool value);
+    void setWebGPUBootstrap(WebGPUBootstrap *value);
+    WebGPUBootstrap *webGPUBootstrap() const NANOEM_DECL_NOEXCEPT;
 
     NSOpenGLContext *OpenGLContext();
     id<MTLDevice> metalDevice();
@@ -135,6 +138,7 @@ private:
     nanoem_u32_t m_lastViewportSampleCount = 0;
     std::atomic<bool> m_displaySyncChanged;
     bool m_displaySyncEnabled = true;
+    WebGPUBootstrap *m_webGPUBootstrap = nullptr;
 };
 
 } /* namespace macos */

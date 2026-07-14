@@ -40,6 +40,7 @@
 #include "emapp/internal/DecoderPluginBasedBackgroundVideoRenderer.h"
 #include "emapp/internal/ImGuiWindow.h"
 #include "emapp/private/CommonInclude.h"
+#include "WebGPUBootstrap.h"
 
 #include "emapp/src/protoc/application.pb-c.h"
 #include "imgui/imgui.h"
@@ -989,6 +990,24 @@ CocoaThreadedApplicationService::setDisplaySyncEnabled(bool value)
     m_displaySyncChanged = true;
 }
 
+void
+CocoaThreadedApplicationService::setWebGPUBootstrap(WebGPUBootstrap *value)
+{
+    if (m_webGPUBootstrap != value) {
+        if (m_webGPUBootstrap) {
+            m_webGPUBootstrap->destroy();
+            nanoem_delete(m_webGPUBootstrap);
+        }
+        m_webGPUBootstrap = value;
+    }
+}
+
+WebGPUBootstrap *
+CocoaThreadedApplicationService::webGPUBootstrap() const NANOEM_DECL_NOEXCEPT
+{
+    return m_webGPUBootstrap;
+}
+
 NSOpenGLContext *
 CocoaThreadedApplicationService::OpenGLContext()
 {
@@ -1142,6 +1161,9 @@ CocoaThreadedApplicationService::isRendererAvailable(const char *value) const no
     else if (StringUtils::equals(value, kRendererOpenGL)) {
         result = true;
     }
+    else if (StringUtils::equals(value, kRendererVulkan)) {
+        result = isWebGPUAvailable();
+    }
     return result;
 }
 
@@ -1174,7 +1196,31 @@ CocoaThreadedApplicationService::handleDestructApplicationThread()
 void
 CocoaThreadedApplicationService::handleSetupGraphicsEngine(sg_desc &desc)
 {
-    if (m_nativeDevice && m_nativeView) {
+    if (m_webGPUBootstrap && m_webGPUBootstrap->isValid()) {
+        desc.context.sample_count = glm::max(m_webGPUBootstrap->sampleCount(), 1);
+        desc.context.color_format = SG_PIXELFORMAT_BGRA8;
+        desc.context.depth_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        auto &wgpu = desc.context.wgpu;
+        wgpu.device = m_webGPUBootstrap->device();
+        wgpu.user_data = this;
+        wgpu.render_view_userdata_cb = [](void *userData) -> const void * {
+            auto self = static_cast<CocoaThreadedApplicationService *>(userData);
+            if (self->m_webGPUBootstrap) {
+                self->m_webGPUBootstrap->beginFrame();
+                return self->m_webGPUBootstrap->renderView();
+            }
+            return nullptr;
+        };
+        wgpu.resolve_view_userdata_cb = [](void *userData) -> const void * {
+            auto self = static_cast<CocoaThreadedApplicationService *>(userData);
+            return self->m_webGPUBootstrap ? self->m_webGPUBootstrap->resolveView() : nullptr;
+        };
+        wgpu.depth_stencil_view_userdata_cb = [](void *userData) -> const void * {
+            auto self = static_cast<CocoaThreadedApplicationService *>(userData);
+            return self->m_webGPUBootstrap ? self->m_webGPUBootstrap->depthStencilView() : nullptr;
+        };
+    }
+    else if (m_nativeDevice && m_nativeView) {
         auto view = (__bridge MTKView *) m_nativeView;
         desc.context.sample_count = glm::max<int>(view.sampleCount, 1);
         desc.context.metal.user_data = this;
@@ -1473,6 +1519,10 @@ CocoaThreadedApplicationService::handleTerminateApplication()
     m_nativeContext = nil;
     m_nativeDevice = nil;
     m_nativeView = nil;
+    if (m_webGPUBootstrap) {
+        m_webGPUBootstrap->destroy();
+        nanoem_delete_safe(m_webGPUBootstrap);
+    }
 }
 
 sg_pixel_format
@@ -1541,6 +1591,13 @@ CocoaThreadedApplicationService::beginDefaultPass(
             m_colorImageDescriptions.insert(tinystl::make_pair(windowID, desc));
         }
     }
+    else if (backend == SG_BACKEND_WGPU) {
+        if (m_webGPUBootstrap) {
+            m_webGPUBootstrap->beginFrame();
+            sampleCount = m_webGPUBootstrap->sampleCount();
+        }
+        ThreadedApplicationService::beginDefaultPass(windowID, pa, width, height, sampleCount);
+    }
     else if (backend == SG_BACKEND_GLCORE33) {
         ThreadedApplicationService::beginDefaultPass(windowID, pa, width, height, sampleCount);
     }
@@ -1598,6 +1655,22 @@ CocoaThreadedApplicationService::presentDefaultPass(const Project *project)
         if (m_displaySyncChanged.compare_exchange_strong(expected, false)) {
             if (@available(macOS 10.13, *)) {
                 contentView.currentDrawable.layer.displaySyncEnabled = m_displaySyncEnabled;
+            }
+        }
+    }
+    else if (backend == SG_BACKEND_WGPU) {
+        if (m_webGPUBootstrap) {
+            m_webGPUBootstrap->endFrame();
+            if (project) {
+                const int sampleCount = static_cast<int>(project->sampleCount());
+                if (sampleCount > 0 && sampleCount != m_webGPUBootstrap->sampleCount()) {
+                    NSView *view = (__bridge NSView *) m_nativeView;
+                    const NSSize size = view.bounds.size;
+                    const float dpr = view.window ? static_cast<float>(view.window.backingScaleFactor) : 1.0f;
+                    const int width = glm::max(1, static_cast<int>(size.width * dpr));
+                    const int height = glm::max(1, static_cast<int>(size.height * dpr));
+                    m_webGPUBootstrap->resize(width, height, sampleCount);
+                }
             }
         }
     }

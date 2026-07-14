@@ -26,6 +26,7 @@ namespace {
 #include "emapp/private/shaders/debug_vs_spirv.h"
 #include "emapp/private/shaders/pointed_debug_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_debug_vs_msl_macos.h"
+#include "emapp/private/shaders/pointed_debug_vs_spirv.h"
 static const char *const kLabelPrefix = "@nanoem/DebugDrawer";
 } /* namespace anonymous */
 
@@ -324,6 +325,12 @@ DebugDrawer::setupShader()
             desc.vs.source = reinterpret_cast<const char *>(g_nanoem_debug_vs_glsl_es3_data);
             desc.fs.source = reinterpret_cast<const char *>(g_nanoem_debug_fs_glsl_es3_data);
         }
+        else if (backend == SG_BACKEND_WGPU) {
+            desc.vs.bytecode.ptr = g_nanoem_debug_vs_spirv_data;
+            desc.vs.bytecode.size = g_nanoem_debug_vs_spirv_size;
+            desc.fs.bytecode.ptr = g_nanoem_debug_fs_spirv_data;
+            desc.fs.bytecode.size = g_nanoem_debug_fs_spirv_size;
+        }
         desc.fs.images[0] = sg_shader_image_desc { "SPIRV_Cross_Combined", SG_IMAGETYPE_2D, SG_SAMPLERTYPE_FLOAT };
         desc.vs.entry = "nanoemVSMain";
         desc.vs.uniform_blocks[0].size = sizeof(Matrix4x4);
@@ -352,6 +359,13 @@ DebugDrawer::setupShader()
         else if (sg::is_backend_metal(backend)) {
             desc.vs.bytecode.ptr = g_nanoem_pointed_debug_vs_msl_macos_data;
             desc.vs.bytecode.size = g_nanoem_pointed_debug_vs_msl_macos_size;
+            m_pointedShader = sg::make_shader(&desc);
+            nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
+            SG_LABEL_SHADER(m_pointedShader, desc.label);
+        }
+        else if (backend == SG_BACKEND_WGPU) {
+            desc.vs.bytecode.ptr = g_nanoem_pointed_debug_vs_spirv_data;
+            desc.vs.bytecode.size = g_nanoem_pointed_debug_vs_spirv_size;
             m_pointedShader = sg::make_shader(&desc);
             nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
             SG_LABEL_SHADER(m_pointedShader, desc.label);

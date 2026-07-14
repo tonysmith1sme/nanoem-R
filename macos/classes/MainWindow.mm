@@ -11,10 +11,12 @@
 #import <IOKit/ps/IOPowerSources.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <OpenGL/gl.h>
 
 #import "CocoaThreadedApplicationService.h"
 #import "Preference.h"
+#import "WebGPUBootstrap.h"
 
 #include "bx/commandline.h"
 #include "emapp/emapp.h"
@@ -539,7 +541,12 @@ MainWindow::initialize()
     const char *rendererBackend = m_preference->applicationPreference()->rendererBackend();
     sg_pixel_format pixelFormat = SG_PIXELFORMAT_RGBA8;
     bool isLowPower = true;
-    if (StringUtils::equalsIgnoreCase(rendererBackend, BaseApplicationService::kRendererMetal) &&
+    if (StringUtils::equalsIgnoreCase(rendererBackend, BaseApplicationService::kRendererVulkan) &&
+        initializeWebGPU(pixelFormat)) {
+        pluginPath.append("/sokol_wgpu.dylib");
+        m_textInputContext = [[NSTextInputContext alloc] initWithClient:m_nativeWindow.contentView];
+    }
+    else if (StringUtils::equalsIgnoreCase(rendererBackend, BaseApplicationService::kRendererMetal) &&
         Preference::isMetalAvailable()) {
         id<MTLDevice> device = MTLCreateSystemDefaultDevice();
         initializeMetal(device, pixelFormat);
@@ -1422,6 +1429,40 @@ MainWindow::initializeMetal(id<MTLDevice> device, sg_pixel_format &pixelFormat)
     m_service->setNativeView((__bridge void *) view);
     JSON_Object *pending = json_object(m_service->applicationPendingChangeConfiguration());
     json_object_dotset_string(pending, "macos.renderer.name", device.name.UTF8String);
+}
+
+
+bool
+MainWindow::initializeWebGPU(sg_pixel_format &pixelFormat)
+{
+    if (!macos::isWebGPUAvailable()) {
+        return false;
+    }
+    NSView *contentView = m_nativeWindow.contentView;
+    if (!contentView) {
+        return false;
+    }
+    contentView.wantsLayer = YES;
+    if (![contentView.layer isKindOfClass:[CAMetalLayer class]]) {
+        contentView.layer = [CAMetalLayer layer];
+    }
+    [contentView registerForDraggedTypes:@[ NSFilenamesPboardType ]];
+    const NSSize size = contentView.bounds.size;
+    const float dpr = static_cast<float>(m_nativeWindow.backingScaleFactor);
+    const int width = glm::max(1, static_cast<int>(size.width * dpr));
+    const int height = glm::max(1, static_cast<int>(size.height * dpr));
+    auto *bootstrap = nanoem_new(macos::WebGPUBootstrap);
+    if (!bootstrap->create(contentView, width, height, 1)) {
+        nanoem_delete(bootstrap);
+        return false;
+    }
+    m_service->setWebGPUBootstrap(bootstrap);
+    m_service->setNativeDevice(bootstrap->device());
+    m_service->setNativeView((__bridge void *) contentView);
+    pixelFormat = SG_PIXELFORMAT_BGRA8;
+    JSON_Object *pending = json_object(m_service->applicationPendingChangeConfiguration());
+    json_object_dotset_string(pending, "macos.renderer.name", "WebGPU/Dawn (Vulkan preference)");
+    return true;
 }
 
 void

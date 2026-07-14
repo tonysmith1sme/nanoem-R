@@ -651,7 +651,15 @@ Win32ThreadedApplicationService::hasVideoRecorder() const noexcept
 bool
 Win32ThreadedApplicationService::isRendererAvailable(const char *value) const noexcept
 {
-    return StringUtils::equals(value, kRendererOpenGL) || StringUtils::equals(value, kRendererDirectX);
+    if (StringUtils::equals(value, kRendererOpenGL) || StringUtils::equals(value, kRendererDirectX)) {
+        return true;
+    }
+#if defined(NANOEM_HAS_WGPU)
+    if (StringUtils::equals(value, kRendererVulkan)) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 IVideoRecorder *

@@ -18,13 +18,16 @@ namespace {
 #include "emapp/private/shaders/grid_fs_glsl_core33.h"
 #include "emapp/private/shaders/grid_fs_glsl_es3.h"
 #include "emapp/private/shaders/grid_fs_msl_macos.h"
+#include "emapp/private/shaders/grid_fs_spirv.h"
 #include "emapp/private/shaders/grid_ps_dxbc.h"
 #include "emapp/private/shaders/grid_vs_dxbc.h"
 #include "emapp/private/shaders/grid_vs_glsl_core33.h"
 #include "emapp/private/shaders/grid_vs_glsl_es3.h"
 #include "emapp/private/shaders/grid_vs_msl_macos.h"
+#include "emapp/private/shaders/grid_vs_spirv.h"
 #include "emapp/private/shaders/pointed_grid_vs_dxbc.h"
 #include "emapp/private/shaders/pointed_grid_vs_msl_macos.h"
+#include "emapp/private/shaders/pointed_grid_vs_spirv.h"
 
 struct Uniform {
     Matrix4x4 m_viewProjection;
@@ -93,6 +96,12 @@ LineDrawer::initialize()
         sd.fs.source = reinterpret_cast<const char *>(g_nanoem_grid_fs_glsl_es3_data);
         sd.vs.source = reinterpret_cast<const char *>(g_nanoem_grid_vs_glsl_es3_data);
     }
+    else if (backend == SG_BACKEND_WGPU) {
+        sd.fs.bytecode.ptr = g_nanoem_grid_fs_spirv_data;
+        sd.fs.bytecode.size = g_nanoem_grid_fs_spirv_size;
+        sd.vs.bytecode.ptr = g_nanoem_grid_vs_spirv_data;
+        sd.vs.bytecode.size = g_nanoem_grid_vs_spirv_size;
+    }
     sd.vs.entry = "nanoemVSMain";
     sd.fs.entry = "nanoemPSMain";
     sd.attrs[0] = sg_shader_attr_desc { "a_position", "SV_POSITION", 0 };
@@ -119,6 +128,13 @@ LineDrawer::initialize()
     else if (sg::is_backend_metal(backend)) {
         sd.vs.bytecode.ptr = g_nanoem_pointed_grid_vs_msl_macos_data;
         sd.vs.bytecode.size = g_nanoem_pointed_grid_vs_msl_macos_size;
+        m_pointedShader = sg::make_shader(&sd);
+        nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
+        SG_LABEL_SHADER(m_pointedShader, sd.label);
+    }
+    else if (backend == SG_BACKEND_WGPU) {
+        sd.vs.bytecode.ptr = g_nanoem_pointed_grid_vs_spirv_data;
+        sd.vs.bytecode.size = g_nanoem_pointed_grid_vs_spirv_size;
         m_pointedShader = sg::make_shader(&sd);
         nanoem_assert(sg::query_shader_state(m_pointedShader) == SG_RESOURCESTATE_VALID, "shader must be valid");
         SG_LABEL_SHADER(m_pointedShader, sd.label);

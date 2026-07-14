@@ -258,6 +258,13 @@ CapturingPassState::ImageBlitter::setupShaderDescription(sg_shader_desc &desc)
             SG_SAMPLERTYPE_FLOAT };
 #endif /* NANOEM_ENABLE_SHADER_OPTIMIZED */
     }
+    else if (backend == SG_BACKEND_WGPU) {
+        desc.fs.bytecode.ptr = g_nanoem_color_transform_fs_spirv_data;
+        desc.fs.bytecode.size = g_nanoem_color_transform_fs_spirv_size;
+        desc.vs.bytecode.ptr = g_nanoem_color_transform_vs_spirv_data;
+        desc.vs.bytecode.size = g_nanoem_color_transform_vs_spirv_size;
+        desc.fs.images[0] = sg_shader_image_desc { nullptr, SG_IMAGETYPE_2D, SG_SAMPLERTYPE_FLOAT };
+    }
     desc.vs.entry = "nanoemVSMain";
     desc.fs.entry = "nanoemPSMain";
     desc.attrs[0] = sg_shader_attr_desc { "a_position", "SV_POSITION", 0 };

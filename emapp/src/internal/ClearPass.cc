@@ -97,6 +97,12 @@ ClearPass::setupShaderDescription(sg_shader_desc &desc)
         desc.fs.source = reinterpret_cast<const char *>(g_nanoem_clear_fs_glsl_es3_data);
         desc.vs.source = reinterpret_cast<const char *>(g_nanoem_clear_vs_glsl_es3_data);
     }
+    else if (backend == SG_BACKEND_WGPU) {
+        desc.fs.bytecode.ptr = g_nanoem_clear_fs_spirv_data;
+        desc.fs.bytecode.size = g_nanoem_clear_fs_spirv_size;
+        desc.vs.bytecode.ptr = g_nanoem_clear_vs_spirv_data;
+        desc.vs.bytecode.size = g_nanoem_clear_vs_spirv_size;
+    }
     desc.vs.entry = "nanoemVSMain";
     desc.fs.entry = "nanoemPSMain";
     desc.attrs[0] = sg_shader_attr_desc { "a_position", "SV_POSITION", 0 };

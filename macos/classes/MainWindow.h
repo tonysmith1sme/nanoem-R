@@ -124,6 +124,7 @@ private:
     float invertedDevicePixelRatio() const noexcept;
 
     void initializeMetal(id<MTLDevice> device, sg_pixel_format &pixelFormat);
+    bool initializeWebGPU(sg_pixel_format &pixelFormat);
     void initializeOpenGL();
     void getWindowCenterPoint(Vector2SI32 *value);
     bool getLogicalCursorPosition(const NSEvent *event, Vector2SI32 &position, Vector2SI32 &delta);

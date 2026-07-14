@@ -1437,6 +1437,12 @@ ImGuiWindow::initialize(nanoem_f32_t windowDevicePixelRatio, nanoem_f32_t viewpo
         sd.vs.source = reinterpret_cast<const char *>(g_nanoem_ui_vs_glsl_es3_data);
         sd.fs.source = reinterpret_cast<const char *>(g_nanoem_ui_fs_glsl_es3_data);
     }
+    else if (backend == SG_BACKEND_WGPU) {
+        sd.vs.bytecode.ptr = g_nanoem_ui_vs_spirv_data;
+        sd.vs.bytecode.size = g_nanoem_ui_vs_spirv_size;
+        sd.fs.bytecode.ptr = g_nanoem_ui_fs_spirv_data;
+        sd.fs.bytecode.size = g_nanoem_ui_fs_spirv_size;
+    }
     sd.vs.entry = "nanoemVSMain";
     sd.fs.uniform_blocks[0].size = sd.vs.uniform_blocks[0].size = sizeof(UniformBlock);
 #if defined(NANOEM_ENABLE_SHADER_OPTIMIZED)
