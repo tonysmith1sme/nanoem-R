@@ -5,8 +5,8 @@
  */
 
 #include "fx9/Compiler.h"
-#include "fx9/BackendCrossOptions.h"
-#include "fx9/EffectTranslator.h"
+#include "fx9/EffectSourcePipeline.h"
+#include "fx9/ShaderCrossTranslator.h"
 
 /* win32 */
 #if defined(_WIN32)
@@ -1554,37 +1554,39 @@ Compiler::DX9MSPassShader::translate(const InstructionList &vertexShaderInstruct
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    bool succeeded = false;
-    if (!vertexShaderInstructions.empty() && !fragmentShaderInstructions.empty()) {
-#if defined(FX9_DUMP) && defined(FX9_DISASSEMBLE) && FX9_DUMP && FX9_DISASSEMBLE
-        spv::Disassemble(std::cout, instructions);
-#endif
-        try {
-            fx9::translation::GLSLCrossConfig glslConfig;
-            glslConfig.es = m_parent->m_profile == EEsProfile;
-            glslConfig.version = m_parent->m_version;
-            auto compile = [this, glslConfig, &sink](EShLanguage language, const InstructionList &instructions) {
-                InstructionList newInstructions;
-                std::unordered_map<uint32_t, std::string> attributes;
-                m_parent->saveAttributeMap(instructions, attributes);
-                m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
-                spirv_cross::CompilerGLSL compiler(newInstructions);
-                fx9::translation::applyGLSLCrossOptions(compiler, glslConfig);
-                m_parent->restoreInterfaceVariableNames(language, attributes, compiler);
-                return compiler.compile();
-            };
-            translatedVertexShaderSource = compile(EShLangVertex, vertexShaderInstructions);
-            translatedFragmentShaderSource = compile(EShLangFragment, fragmentShaderInstructions);
-            Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
-            message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_GLSL;
-            m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->glsl);
-            m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->glsl);
-            succeeded = true;
-        } catch (const spirv_cross::CompilerError &e) {
-            sink.translator.insert(e.what());
-        } catch (const std::exception &e) {
-            sink.translator.insert(e.what());
-        }
+    fx9::translation::CrossHostServices host;
+    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
+                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+        m_parent->optimizeShaderInstructions(inWords, outWords, sink);
+    };
+    host.saveAttributes = [this](const fx9::translation::SPIRVWords &words,
+                              fx9::translation::AttributeNameMap &attributes) {
+        m_parent->saveAttributeMap(words, attributes);
+    };
+    host.restoreAttributes = [this](fx9::translation::ShaderStageLanguage language,
+                                 const fx9::translation::AttributeNameMap &attributes, void *spirvCrossCompiler) {
+        m_parent->restoreInterfaceVariableNames(static_cast<EShLanguage>(language), attributes,
+            *static_cast<spirv_cross::Compiler *>(spirvCrossCompiler));
+    };
+
+    fx9::translation::GLSLBackendOptions options;
+    options.es = m_parent->m_profile == EEsProfile;
+    options.version = m_parent->m_version;
+
+    fx9::translation::CrossTranslateRequest request;
+    request.vertexSPIRV = &vertexShaderInstructions;
+    request.fragmentSPIRV = &fragmentShaderInstructions;
+
+    fx9::translation::CrossTranslateResult result;
+    const bool succeeded =
+        fx9::translation::translateToGLSL(request, options, host, result, sink.translator);
+    if (succeeded) {
+        translatedVertexShaderSource = result.vertexSource;
+        translatedFragmentShaderSource = result.fragmentSource;
+        Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+        message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_GLSL;
+        m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->glsl);
+        m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->glsl);
     }
     return succeeded;
 }
@@ -1617,64 +1619,35 @@ Compiler::HLSLPassShader::translate(const InstructionList &vertexShaderInstructi
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    bool succeeded = false;
-    if (!vertexShaderInstructions.empty() && !fragmentShaderInstructions.empty()) {
-#if defined(FX9_DUMP) && defined(FX9_DISASSEMBLE) && FX9_DUMP && FX9_DISASSEMBLE
-        spv::Disassemble(std::cout, instructions);
-#endif
-        try {
-            fx9::translation::HLSLCrossConfig hlslConfig;
-            auto compile = [this, hlslConfig, &sink](EShLanguage language, const InstructionList &instructions,
-                               const std::vector<spirv_cross::HLSLVertexAttributeRemap> &mapping) {
-                InstructionList newInstructions;
-                m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
-                spirv_cross::CompilerHLSL compiler(newInstructions);
-                fx9::translation::applyHLSLCrossOptions(compiler, hlslConfig);
-                auto &samplerName2Index = m_samplerName2Index[language];
-                spirv_cross::ShaderResources resources = compiler.get_shader_resources();
-                for (const auto &it : resources.sampled_images) {
-                    auto it2 = samplerName2Index.find(it.name);
-                    if (it2 != samplerName2Index.end()) {
-                        compiler.set_decoration(it.id, spv::DecorationBinding, it2->second);
-                    }
-                }
-                for (const auto &it : mapping) {
-                    compiler.add_vertex_attribute_remap(it);
-                }
-                std::ostringstream stream;
-                stream << compiler.compile();
-                return stream.str();
-            };
-            std::vector<spirv_cross::HLSLVertexAttributeRemap> mapping;
-            uint32_t offset = 0x7ff;
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "SV_Position" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "NORMAL" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "TEXCOORD0" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "TEXCOORD1" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "TEXCOORD2" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "TEXCOORD3" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "TEXCOORD4" });
-            mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { offset--, "COLOR0" });
-            translatedVertexShaderSource = compile(EShLangVertex, vertexShaderInstructions, mapping);
-            mapping.clear();
-            std::ostringstream s;
-            for (uint32_t i = 0; i < 16; i++) {
-                s << "TEXCOORD";
-                s << i;
-                mapping.push_back(spirv_cross::HLSLVertexAttributeRemap { i, s.str() });
-                s.str(std::string());
-            }
-            translatedFragmentShaderSource = compile(EShLangFragment, fragmentShaderInstructions, mapping);
-            Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
-            message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_HLSL;
-            m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->hlsl);
-            m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->hlsl);
-            succeeded = true;
-        } catch (const spirv_cross::CompilerError &e) {
-            sink.translator.insert(e.what());
-        } catch (const std::exception &e) {
-            sink.translator.insert(e.what());
-        }
+    fx9::translation::CrossHostServices host;
+    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
+                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+        m_parent->optimizeShaderInstructions(inWords, outWords, sink);
+    };
+
+    fx9::translation::HLSLBackendOptions options;
+
+    fx9::translation::SamplerBindingMap vertexSamplers(
+        m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
+    fx9::translation::SamplerBindingMap fragmentSamplers(
+        m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
+
+    fx9::translation::CrossTranslateRequest request;
+    request.vertexSPIRV = &vertexShaderInstructions;
+    request.fragmentSPIRV = &fragmentShaderInstructions;
+    request.vertexSamplers = &vertexSamplers;
+    request.fragmentSamplers = &fragmentSamplers;
+
+    fx9::translation::CrossTranslateResult result;
+    const bool succeeded =
+        fx9::translation::translateToHLSL(request, options, host, result, sink.translator);
+    if (succeeded) {
+        translatedVertexShaderSource = result.vertexSource;
+        translatedFragmentShaderSource = result.fragmentSource;
+        Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+        message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_HLSL;
+        m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->hlsl);
+        m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->hlsl);
     }
     return succeeded;
 }
@@ -1703,86 +1676,59 @@ Compiler::MSLPassShader::translate(const InstructionList &vertexShaderInstructio
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    bool succeeded = false;
-    if (!vertexShaderInstructions.empty() && !fragmentShaderInstructions.empty()) {
-#if defined(FX9_DUMP) && defined(FX9_DISASSEMBLE) && FX9_DUMP && FX9_DISASSEMBLE
-        spv::Disassemble(std::cout, instructions);
-#endif
-        try {
-            std::unordered_map<std::string, int> builtInVariableMapper;
-            int index = 0;
-            const auto builtInVariables = { EbvVertex, EbvVertexIndex, EbvNormal, EbvMultiTexCoord0, EbvMultiTexCoord1,
-                EbvMultiTexCoord2, EbvMultiTexCoord3, EbvMultiTexCoord4, EbvMultiTexCoord5, EbvMultiTexCoord6,
-                EbvMultiTexCoord7, EbvFragDepthGreater, EbvFragDepthLesser, EbvFrontColor, EbvBackColor,
-                EbvFrontSecondaryColor, EbvBackSecondaryColor };
-            for (const auto variable : builtInVariables) {
-                auto it = m_parent->m_pixelShaderInputVariables.find(variable);
-                if (it != m_parent->m_pixelShaderInputVariables.end()) {
-                    builtInVariableMapper.insert(std::make_pair(it->second, index++));
-                }
+    fx9::translation::CrossHostServices host;
+    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
+                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+        m_parent->optimizeShaderInstructions(inWords, outWords, sink);
+    };
+    host.saveAttributes = [this](const fx9::translation::SPIRVWords &words,
+                              fx9::translation::AttributeNameMap &attributes) {
+        m_parent->saveAttributeMap(words, attributes);
+    };
+    host.restoreAttributes = [this](fx9::translation::ShaderStageLanguage language,
+                                 const fx9::translation::AttributeNameMap &attributes, void *spirvCrossCompiler) {
+        m_parent->restoreInterfaceVariableNames(static_cast<EShLanguage>(language), attributes,
+            *static_cast<spirv_cross::Compiler *>(spirvCrossCompiler));
+    };
+
+    fx9::translation::MSLBackendOptions options;
+    options.entryPoint = m_parent->m_metalShaderEntryPointName;
+    options.uniformBufferName = m_parent->m_metalShaderUniformBufferName;
+    {
+        int index = 0;
+        const auto builtInVariables = { EbvVertex, EbvVertexIndex, EbvNormal, EbvMultiTexCoord0, EbvMultiTexCoord1,
+            EbvMultiTexCoord2, EbvMultiTexCoord3, EbvMultiTexCoord4, EbvMultiTexCoord5, EbvMultiTexCoord6,
+            EbvMultiTexCoord7, EbvFragDepthGreater, EbvFragDepthLesser, EbvFrontColor, EbvBackColor,
+            EbvFrontSecondaryColor, EbvBackSecondaryColor };
+        for (const auto variable : builtInVariables) {
+            auto it = m_parent->m_pixelShaderInputVariables.find(variable);
+            if (it != m_parent->m_pixelShaderInputVariables.end()) {
+                options.interfaceLocations.insert(std::make_pair(it->second, index++));
             }
-            auto compile = [this, &sink, &builtInVariableMapper](
-                               EShLanguage language, const InstructionList &instructions) {
-                std::unordered_map<uint32_t, std::string> attributes;
-                InstructionList newInstructions;
-                m_parent->saveAttributeMap(instructions, attributes);
-                m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
-                spirv_cross::CompilerMSL compiler(newInstructions);
-                const spv::ExecutionModel stage =
-                    language == EShLangVertex ? spv::ExecutionModelVertex : spv::ExecutionModelFragment;
-                const auto &entryPoints = compiler.get_entry_points_and_stages();
-                auto it = std::find_if(entryPoints.begin(), entryPoints.end(),
-                    [&](const spirv_cross::EntryPoint &item) { return item.execution_model == stage; });
-                compiler.rename_entry_point(it->name, m_parent->m_metalShaderEntryPointName, stage);
-                fx9::translation::MSLCrossConfig mslConfig;
-                mslConfig.entryPoint = m_parent->m_metalShaderEntryPointName;
-                fx9::translation::applyMSLCrossOptions(compiler, mslConfig);
-                auto &samplerName2Index = m_samplerName2Index[language];
-                spirv_cross::ShaderResources resources = compiler.get_shader_resources();
-                for (const auto &it : resources.sampled_images) {
-                    auto it2 = samplerName2Index.find(it.name);
-                    if (it2 != samplerName2Index.end()) {
-                        spirv_cross::MSLResourceBinding binding = {};
-                        binding.stage = stage;
-                        binding.binding = it2->second;
-                        binding.msl_sampler = binding.msl_texture = it2->second;
-                        compiler.add_msl_resource_binding(binding);
-                        compiler.set_decoration(it.id, spv::DecorationBinding, it2->second);
-                    }
-                }
-                const spirv_cross::SmallVector<spirv_cross::Resource> *stageResources = nullptr;
-                if (language == EShLangVertex) {
-                    stageResources = &resources.stage_outputs;
-                }
-                else if (language == EShLangFragment) {
-                    stageResources = &resources.stage_inputs;
-                }
-                if (stageResources) {
-                    for (const auto &it : *stageResources) {
-                        auto it2 = builtInVariableMapper.find(it.name);
-                        if (it2 != builtInVariableMapper.end()) {
-                            compiler.set_decoration(it.id, spv::DecorationLocation, it2->second);
-                        }
-                    }
-                }
-                m_parent->restoreInterfaceVariableNames(language, attributes, compiler);
-                std::ostringstream os;
-                compiler.add_header_line(fx9::translation::metalShaderPreamble());
-                os << compiler.compile();
-                return os.str();
-            };
-            translatedVertexShaderSource = compile(EShLangVertex, vertexShaderInstructions);
-            translatedFragmentShaderSource = compile(EShLangFragment, fragmentShaderInstructions);
-            Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
-            message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_MSL;
-            m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->msl);
-            m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->msl);
-            succeeded = true;
-        } catch (const spirv_cross::CompilerError &e) {
-            sink.translator.insert(e.what());
-        } catch (const std::exception &e) {
-            sink.translator.insert(e.what());
         }
+    }
+
+    fx9::translation::SamplerBindingMap vertexSamplers(
+        m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
+    fx9::translation::SamplerBindingMap fragmentSamplers(
+        m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
+
+    fx9::translation::CrossTranslateRequest request;
+    request.vertexSPIRV = &vertexShaderInstructions;
+    request.fragmentSPIRV = &fragmentShaderInstructions;
+    request.vertexSamplers = &vertexSamplers;
+    request.fragmentSamplers = &fragmentSamplers;
+
+    fx9::translation::CrossTranslateResult result;
+    const bool succeeded =
+        fx9::translation::translateToMSL(request, options, host, result, sink.translator);
+    if (succeeded) {
+        translatedVertexShaderSource = result.vertexSource;
+        translatedFragmentShaderSource = result.fragmentSource;
+        Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+        message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_MSL;
+        m_parent->copyString(translatedVertexShaderSource.c_str(), &message->vertex_shader->msl);
+        m_parent->copyString(translatedFragmentShaderSource.c_str(), &message->pixel_shader->msl);
     }
     return succeeded;
 }

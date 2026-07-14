@@ -4,7 +4,7 @@
    This file is licensed under MIT license. for more details, see LICENSE.txt.
  */
 
-#include "fx9/EffectTranslator.h"
+#include "fx9/EffectSourcePipeline.h"
 
 #include <cctype>
 #include <cstdio>
@@ -379,7 +379,7 @@ runLegacyEffectRules(const std::string &source)
 }
 
 /* -------------------------------------------------------------------------- */
-/* Stage 3 – CompatibilityRules                                               */
+/* Stage 1 (pipeline order) – CompatibilityProfiles                            */
 /*                                                                            */
 /* Profile-driven rewrites for known large effects (primarily ray-mmd) where  */
 /* DX9 HLSL constructs or Metal/HLSL backend limits require IR-safe source    */

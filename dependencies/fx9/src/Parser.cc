@@ -6,7 +6,7 @@
 
 #include "fx9/Parser.h"
 #include "fx9/Lexer.h"
-#include "fx9/EffectTranslator.h"
+#include "fx9/EffectSourcePipeline.h"
 
 /* win32 */
 #if defined(_WIN32)
