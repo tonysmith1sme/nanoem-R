@@ -22,8 +22,8 @@ namespace translation {
  *   3. LegacyEffectRules     – DefTech expansion
  *   4. MacroHygiene          – #define redefinition cleanup (always last)
  *
- * Shader body cross-compilation lives in ShaderCrossTranslator (SPIR-V ->
- * GLSL / HLSL SM4.1 / MSL). This module never touches SPIRV-Cross.
+ * Shader body cross-compilation lives in GraphicsAPITranslator (SPIR-V ->
+ * GLSL / HLSL SM4.1 / MSL / Vulkan SPIR-V). This module never touches SPIRV-Cross.
  */
 std::string prepareEffectSource(const std::string &path, const std::string &source);
 

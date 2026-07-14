@@ -6,7 +6,7 @@
 
 #include "fx9/EffectPipeline.h"
 #include "fx9/EffectSourcePipeline.h"
-#include "fx9/ShaderCrossTranslator.h"
+#include "fx9/GraphicsAPITranslator.h"
 
 /* win32 */
 #if defined(_WIN32)
@@ -21,6 +21,7 @@
 #endif
 
 #include <regex>
+#include <cstring>
 #include <sstream>
 #include <unordered_map>
 
@@ -1553,39 +1554,39 @@ EffectPipeline::GLSLPassShader::translate(const InstructionList &vertexShaderIns
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    fx9::translation::CrossHostServices host;
-    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
-                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+    fx9::graphics::HostServices host;
+    host.optimize = [this, &sink](const fx9::graphics::SPIRVWords &inWords, fx9::graphics::SPIRVWords &outWords,
+                        fx9::graphics::ErrorSink &) {
         m_parent->optimizeShaderInstructions(inWords, outWords, sink);
     };
-    host.saveAttributes = [this](const fx9::translation::SPIRVWords &words,
-                              fx9::translation::AttributeNameMap &attributes) {
+    host.saveAttributes = [this](const fx9::graphics::SPIRVWords &words, fx9::graphics::AttributeNameMap &attributes) {
         m_parent->saveAttributeMap(words, attributes);
     };
-    host.restoreAttributes = [this](fx9::translation::ShaderStageLanguage language,
-                                 const fx9::translation::AttributeNameMap &attributes, void *spirvCrossCompiler) {
+    host.restoreAttributes = [this](fx9::graphics::ShaderStageLanguage language,
+                                 const fx9::graphics::AttributeNameMap &attributes, void *spirvCrossCompiler) {
         m_parent->restoreInterfaceVariableNames(static_cast<EShLanguage>(language), attributes,
             *static_cast<spirv_cross::Compiler *>(spirvCrossCompiler));
     };
 
-    fx9::translation::GLSLBackendOptions options;
-    options.es = m_parent->m_profile == EEsProfile;
+    fx9::graphics::OpenGLOptions options;
+    options.es = m_parent->m_language == kLanguageTypeESSL;
     options.version = m_parent->m_version;
 
-    fx9::translation::SamplerBindingMap vertexSamplers(
+    fx9::graphics::SamplerBindingMap vertexSamplers(
         m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
-    fx9::translation::SamplerBindingMap fragmentSamplers(
+    fx9::graphics::SamplerBindingMap fragmentSamplers(
         m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
 
-    fx9::translation::CrossTranslateRequest request;
+    fx9::graphics::TranslateRequest request;
     request.vertexSPIRV = &vertexShaderInstructions;
     request.fragmentSPIRV = &fragmentShaderInstructions;
     request.vertexSamplers = &vertexSamplers;
     request.fragmentSamplers = &fragmentSamplers;
 
-    fx9::translation::CrossTranslateResult result;
-    const bool succeeded =
-        fx9::translation::translateToGLSL(request, options, host, result, sink.translator);
+    fx9::graphics::TranslateResult result;
+    const bool succeeded = options.es
+        ? fx9::graphics::translateOpenGLES(request, options, host, result, sink.translator)
+        : fx9::graphics::translateOpenGL(request, options, host, result, sink.translator);
     if (succeeded) {
         translatedVertexShaderSource = result.vertexSource;
         translatedFragmentShaderSource = result.fragmentSource;
@@ -1625,28 +1626,27 @@ EffectPipeline::HLSLPassShader::translate(const InstructionList &vertexShaderIns
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    fx9::translation::CrossHostServices host;
-    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
-                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+    fx9::graphics::HostServices host;
+    host.optimize = [this, &sink](const fx9::graphics::SPIRVWords &inWords, fx9::graphics::SPIRVWords &outWords,
+                        fx9::graphics::ErrorSink &) {
         m_parent->optimizeShaderInstructions(inWords, outWords, sink);
     };
 
-    fx9::translation::HLSLBackendOptions options;
+    fx9::graphics::DirectXOptions options;
 
-    fx9::translation::SamplerBindingMap vertexSamplers(
+    fx9::graphics::SamplerBindingMap vertexSamplers(
         m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
-    fx9::translation::SamplerBindingMap fragmentSamplers(
+    fx9::graphics::SamplerBindingMap fragmentSamplers(
         m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
 
-    fx9::translation::CrossTranslateRequest request;
+    fx9::graphics::TranslateRequest request;
     request.vertexSPIRV = &vertexShaderInstructions;
     request.fragmentSPIRV = &fragmentShaderInstructions;
     request.vertexSamplers = &vertexSamplers;
     request.fragmentSamplers = &fragmentSamplers;
 
-    fx9::translation::CrossTranslateResult result;
-    const bool succeeded =
-        fx9::translation::translateToHLSL(request, options, host, result, sink.translator);
+    fx9::graphics::TranslateResult result;
+    const bool succeeded = fx9::graphics::translateDirectX(request, options, host, result, sink.translator);
     if (succeeded) {
         translatedVertexShaderSource = result.vertexSource;
         translatedFragmentShaderSource = result.fragmentSource;
@@ -1682,22 +1682,21 @@ EffectPipeline::MSLPassShader::translate(const InstructionList &vertexShaderInst
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    fx9::translation::CrossHostServices host;
-    host.optimize = [this, &sink](const fx9::translation::SPIRVWords &inWords,
-                        fx9::translation::SPIRVWords &outWords, fx9::translation::ErrorSink &) {
+    fx9::graphics::HostServices host;
+    host.optimize = [this, &sink](const fx9::graphics::SPIRVWords &inWords, fx9::graphics::SPIRVWords &outWords,
+                        fx9::graphics::ErrorSink &) {
         m_parent->optimizeShaderInstructions(inWords, outWords, sink);
     };
-    host.saveAttributes = [this](const fx9::translation::SPIRVWords &words,
-                              fx9::translation::AttributeNameMap &attributes) {
+    host.saveAttributes = [this](const fx9::graphics::SPIRVWords &words, fx9::graphics::AttributeNameMap &attributes) {
         m_parent->saveAttributeMap(words, attributes);
     };
-    host.restoreAttributes = [this](fx9::translation::ShaderStageLanguage language,
-                                 const fx9::translation::AttributeNameMap &attributes, void *spirvCrossCompiler) {
+    host.restoreAttributes = [this](fx9::graphics::ShaderStageLanguage language,
+                                 const fx9::graphics::AttributeNameMap &attributes, void *spirvCrossCompiler) {
         m_parent->restoreInterfaceVariableNames(static_cast<EShLanguage>(language), attributes,
             *static_cast<spirv_cross::Compiler *>(spirvCrossCompiler));
     };
 
-    fx9::translation::MSLBackendOptions options;
+    fx9::graphics::MetalOptions options;
     options.entryPoint = m_parent->m_metalShaderEntryPointName;
     options.uniformBufferName = m_parent->m_metalShaderUniformBufferName;
     {
@@ -1714,20 +1713,19 @@ EffectPipeline::MSLPassShader::translate(const InstructionList &vertexShaderInst
         }
     }
 
-    fx9::translation::SamplerBindingMap vertexSamplers(
+    fx9::graphics::SamplerBindingMap vertexSamplers(
         m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
-    fx9::translation::SamplerBindingMap fragmentSamplers(
+    fx9::graphics::SamplerBindingMap fragmentSamplers(
         m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
 
-    fx9::translation::CrossTranslateRequest request;
+    fx9::graphics::TranslateRequest request;
     request.vertexSPIRV = &vertexShaderInstructions;
     request.fragmentSPIRV = &fragmentShaderInstructions;
     request.vertexSamplers = &vertexSamplers;
     request.fragmentSamplers = &fragmentSamplers;
 
-    fx9::translation::CrossTranslateResult result;
-    const bool succeeded =
-        fx9::translation::translateToMSL(request, options, host, result, sink.translator);
+    fx9::graphics::TranslateResult result;
+    const bool succeeded = fx9::graphics::translateMetal(request, options, host, result, sink.translator);
     if (succeeded) {
         translatedVertexShaderSource = result.vertexSource;
         translatedFragmentShaderSource = result.fragmentSource;
@@ -1756,13 +1754,41 @@ EffectPipeline::SPIRVPassShader::configureParserContext(ParserContext &parser)
 }
 
 bool
-EffectPipeline::SPIRVPassShader::translate(const InstructionList & /* vertexShaderInstructions */,
-    const InstructionList & /* fragmentShaderInstructions */, std::string & /* translatedVertexShaderSource */,
-    std::string & /* translatedFragmentShaderSource */, EffectProduct::LogSink & /* message */)
+EffectPipeline::SPIRVPassShader::translate(const InstructionList &vertexShaderInstructions,
+    const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
+    std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
-    Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
-    message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_SPIRV;
-    return true;
+    fx9::graphics::HostServices host;
+    host.optimize = [this, &sink](const fx9::graphics::SPIRVWords &inWords, fx9::graphics::SPIRVWords &outWords,
+                        fx9::graphics::ErrorSink &) {
+        m_parent->optimizeShaderInstructions(inWords, outWords, sink);
+    };
+
+    fx9::graphics::VulkanOptions options;
+
+    fx9::graphics::SamplerBindingMap vertexSamplers(
+        m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
+    fx9::graphics::SamplerBindingMap fragmentSamplers(
+        m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
+
+    fx9::graphics::TranslateRequest request;
+    request.vertexSPIRV = &vertexShaderInstructions;
+    request.fragmentSPIRV = &fragmentShaderInstructions;
+    request.vertexSamplers = &vertexSamplers;
+    request.fragmentSamplers = &fragmentSamplers;
+
+    fx9::graphics::TranslateResult result;
+    const bool succeeded = fx9::graphics::translateVulkan(request, options, host, result, sink.translator);
+    if (succeeded) {
+        /* Vulkan product carries binary SPIR-V; source strings remain empty markers. */
+        translatedVertexShaderSource.clear();
+        translatedFragmentShaderSource.clear();
+        Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
+        message->vertex_shader->body_case = message->pixel_shader->body_case = FX9__EFFECT__SHADER__BODY_SPIRV;
+        m_parent->copySPIRVBinary(result.vertexSPIRV, &message->vertex_shader->spirv);
+        m_parent->copySPIRVBinary(result.fragmentSPIRV, &message->pixel_shader->spirv);
+    }
+    return succeeded;
 }
 
 EffectPipeline::EffectPipeline(EProfile profile, EShMessages messages)
@@ -2374,6 +2400,24 @@ void
 EffectPipeline::copyString(const glslang::TString &source, char **destination)
 {
     copyString(source, *m_allocator, destination);
+}
+
+void
+EffectPipeline::copySPIRVBinary(const std::vector<uint32_t> &words, ProtobufCBinaryData *destination)
+{
+    if (!destination) {
+        return;
+    }
+    destination->data = nullptr;
+    destination->len = 0;
+    if (words.empty()) {
+        return;
+    }
+    const size_t nbytes = words.size() * sizeof(uint32_t);
+    uint8_t *bytes = static_cast<uint8_t *>(m_allocator->allocate(nbytes));
+    std::memcpy(bytes, words.data(), nbytes);
+    destination->data = bytes;
+    destination->len = nbytes;
 }
 
 void

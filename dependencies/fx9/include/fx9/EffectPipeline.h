@@ -17,6 +17,8 @@
 
 #include "Parser.h"
 
+struct ProtobufCBinaryData;
+
 struct glslopt_ctx;
 
 namespace spv {
@@ -238,6 +240,7 @@ private:
     static void copyString(const glslang::TString &source, glslang::TPoolAllocator &allocator, char **destination);
 
     void copyString(const glslang::TString &source, char **destination);
+    void copySPIRVBinary(const std::vector<uint32_t> &words, ProtobufCBinaryData *destination);
     void initializeBuiltInSymbolTable(
         const glslang::TString &builtIn, EShLanguage language, glslang::TSymbolTable &outputSymbolTable);
     void initializeBuiltInSymbolTable(EShLanguage language, glslang::TBuiltInParseables &builtIn,

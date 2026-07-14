@@ -979,6 +979,10 @@ PluginFactory::createEffectPlugin(const URI &fileURI, IEventPublisher *publisher
         else if (backend == SG_BACKEND_GLCORE33) {
             plugin->setOption(NANOEM_APPLICATION_PLUGIN_EFFECT_OPTION_SHADER_VERSION, 330, error);
         }
+        else if (backend == SG_BACKEND_WGPU) {
+            /* WGPU consumes SPIR-V bytecode; use the Vulkan SPIR-V product path. */
+            plugin->setOption(NANOEM_APPLICATION_PLUGIN_EFFECT_OPTION_OUTPUT_SPIRV, 1, error);
+        }
     }
     else {
         destroyEffectPlugin(plugin);
