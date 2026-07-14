@@ -26,6 +26,21 @@ hasBothStages(const CrossTranslateRequest &request)
 }
 
 void
+applySamplerBindingsGLSL(spirv_cross::CompilerGLSL &compiler, const SamplerBindingMap *samplers)
+{
+    if (!samplers) {
+        return;
+    }
+    const spirv_cross::ShaderResources resources = compiler.get_shader_resources();
+    for (const auto &image : resources.sampled_images) {
+        auto it = samplers->find(image.name);
+        if (it != samplers->end()) {
+            compiler.set_decoration(image.id, spv::DecorationBinding, static_cast<uint32_t>(it->second));
+        }
+    }
+}
+
+void
 applySamplerBindingsHLSL(spirv_cross::CompilerHLSL &compiler, const SamplerBindingMap *samplers)
 {
     if (!samplers) {
@@ -177,18 +192,22 @@ translateToGLSL(const CrossTranslateRequest &request, const GLSLBackendOptions &
         return false;
     }
     try {
-        auto compileStage = [&](ShaderStageLanguage language, const SPIRVWords &words) {
+        auto compileStage = [&](ShaderStageLanguage language, const SPIRVWords &words,
+                                const SamplerBindingMap *samplers) {
             SPIRVWords optimized;
             AttributeNameMap attributes;
             saveStageAttributes(host, words, attributes);
             optimizeStage(host, words, optimized, errors);
             spirv_cross::CompilerGLSL compiler(optimized);
             configureGLSLBackend(&compiler, options);
+            applySamplerBindingsGLSL(compiler, samplers);
             restoreIfNeeded(host, language, attributes, compiler);
             return compiler.compile();
         };
-        result.vertexSource = compileStage(static_cast<ShaderStageLanguage>(EShLangVertex), *request.vertexSPIRV);
-        result.fragmentSource = compileStage(static_cast<ShaderStageLanguage>(EShLangFragment), *request.fragmentSPIRV);
+        result.vertexSource = compileStage(static_cast<ShaderStageLanguage>(EShLangVertex), *request.vertexSPIRV,
+            request.vertexSamplers);
+        result.fragmentSource = compileStage(static_cast<ShaderStageLanguage>(EShLangFragment), *request.fragmentSPIRV,
+            request.fragmentSamplers);
         result.succeeded = true;
     } catch (const spirv_cross::CompilerError &e) {
         errors.insert(e.what());

@@ -34,9 +34,6 @@
 
 /* SPIRV-Cross */
 #include "spirv_cross/spirv_cross.hpp"
-#include "spirv_cross/spirv_glsl.hpp"
-#include "spirv_cross/spirv_hlsl.hpp"
-#include "spirv_cross/spirv_msl.hpp"
 
 /* SPIRV-Tools */
 #if defined(FX9_ENABLE_OPTIMIZER)
@@ -1532,25 +1529,25 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
 
 } /* namespace anonymous */
 
-Compiler::DX9MSPassShader::DX9MSPassShader(
+Compiler::GLSLPassShader::GLSLPassShader(
     Compiler *parent, const char *path, const glslang::TString &source, EffectProduct &effectProduct, void *opaque)
     : BasePassShader(parent, path, source, effectProduct, opaque)
 {
 }
 
-Compiler::DX9MSPassShader::~DX9MSPassShader()
+Compiler::GLSLPassShader::~GLSLPassShader()
 {
 }
 
 void
-Compiler::DX9MSPassShader::configureParserContext(ParserContext &parser)
+Compiler::GLSLPassShader::configureParserContext(ParserContext &parser)
 {
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     configurePointSizeAssignment(parser, message);
 }
 
 bool
-Compiler::DX9MSPassShader::translate(const InstructionList &vertexShaderInstructions,
+Compiler::GLSLPassShader::translate(const InstructionList &vertexShaderInstructions,
     const InstructionList &fragmentShaderInstructions, std::string &translatedVertexShaderSource,
     std::string &translatedFragmentShaderSource, EffectProduct::LogSink &sink)
 {
@@ -1573,9 +1570,16 @@ Compiler::DX9MSPassShader::translate(const InstructionList &vertexShaderInstruct
     options.es = m_parent->m_profile == EEsProfile;
     options.version = m_parent->m_version;
 
+    fx9::translation::SamplerBindingMap vertexSamplers(
+        m_samplerName2Index[EShLangVertex].begin(), m_samplerName2Index[EShLangVertex].end());
+    fx9::translation::SamplerBindingMap fragmentSamplers(
+        m_samplerName2Index[EShLangFragment].begin(), m_samplerName2Index[EShLangFragment].end());
+
     fx9::translation::CrossTranslateRequest request;
     request.vertexSPIRV = &vertexShaderInstructions;
     request.fragmentSPIRV = &fragmentShaderInstructions;
+    request.vertexSamplers = &vertexSamplers;
+    request.fragmentSamplers = &fragmentSamplers;
 
     fx9::translation::CrossTranslateResult result;
     const bool succeeded =
@@ -2475,8 +2479,12 @@ Compiler::compileAllPasses(const ParserContext::Technique &technique, const char
             else if (m_language == kLanguageTypeMSL) {
                 parser.reset(new MSLPassShader(this, path, source, effectProduct, basePassPtr));
             }
+            else if (m_language == kLanguageTypeGLSL || m_language == kLanguageTypeESSL) {
+                parser.reset(new GLSLPassShader(this, path, source, effectProduct, basePassPtr));
+            }
             else {
-                parser.reset(new DX9MSPassShader(this, path, source, effectProduct, basePassPtr));
+                /* Fallback to desktop GLSL so unknown language values still produce a backend. */
+                parser.reset(new GLSLPassShader(this, path, source, effectProduct, basePassPtr));
             }
             /* needs for forcePointSizeAssignment detection required by MSL */
             parser->convertAllPassStates(pass);

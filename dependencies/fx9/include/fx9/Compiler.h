@@ -171,10 +171,10 @@ private:
         Compiler *m_parent = nullptr;
         void *m_opaque = nullptr;
     };
-    struct DX9MSPassShader : BasePassShader {
-        DX9MSPassShader(Compiler *parent, const char *path, const glslang::TString &source,
+    struct GLSLPassShader : BasePassShader {
+        GLSLPassShader(Compiler *parent, const char *path, const glslang::TString &source,
             EffectProduct &effectProduct, void *opaque);
-        ~DX9MSPassShader() override;
+        ~GLSLPassShader() override;
 
         void configureParserContext(ParserContext &parser) override;
         bool translate(const InstructionList &vertexShaderInstructions,
