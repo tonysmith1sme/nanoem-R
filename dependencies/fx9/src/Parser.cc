@@ -6,7 +6,7 @@
 
 #include "fx9/Parser.h"
 #include "fx9/Lexer.h"
-#include "fx9/EffectSourcePatch.h"
+#include "fx9/EffectTranslator.h"
 
 /* win32 */
 #if defined(_WIN32)
@@ -449,8 +449,9 @@ ParserContext::IncluderContext::addSource(const TString &path, const TString &so
 {
     TString normalized(path);
     PathUtils::normalize(normalized);
-    const std::string patchedSource(fx9::effect::patchLegacyEffectSource(normalized.c_str(), source.c_str()));
-    m_sources.insert(std::make_pair(normalized, new TString(patchedSource.c_str())));
+    const std::string preparedSource(
+        fx9::translation::prepareEffectSource(normalized.c_str(), source.c_str()));
+    m_sources.insert(std::make_pair(normalized, new TString(preparedSource.c_str())));
     m_includedSourePathList.push_back(normalized);
 }
 
@@ -496,9 +497,9 @@ ParserContext::IncluderContext::includeLocal(
                 DWORD numReadBytes = 0;
                 ::ReadFile(handle, bytes.data(), size, &numReadBytes, nullptr);
                 ::CloseHandle(handle);
-                const std::string patchedSource(
-                    fx9::effect::patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
-                TString *source = new TString(patchedSource.c_str());
+                const std::string preparedSource(fx9::translation::prepareEffectSource(
+                    path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                TString *source = new TString(preparedSource.c_str());
                 m_sources.insert(std::make_pair(path, source));
                 m_includedSourePathList.push_back(normalized);
                 result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };
@@ -511,9 +512,9 @@ ParserContext::IncluderContext::includeLocal(
                 if (S_ISREG(st.st_mode)) {
                     std::vector<char> bytes(st.st_size);
                     ::read(fd, bytes.data(), bytes.size());
-                    const std::string patchedSource(
-                        fx9::effect::patchLegacyEffectSource(path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
-                    TString *source = new TString(patchedSource.c_str());
+                    const std::string preparedSource(fx9::translation::prepareEffectSource(
+                        path.c_str(), decodeTextSource(bytes.data(), bytes.size()).c_str()));
+                    TString *source = new TString(preparedSource.c_str());
                     m_sources.insert(std::make_pair(path, source));
                     m_includedSourePathList.push_back(normalized);
                     result = new IncludeResult { normalized.c_str(), source->c_str(), source->size(), nullptr };

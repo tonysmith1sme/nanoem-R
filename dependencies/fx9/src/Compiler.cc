@@ -5,7 +5,8 @@
  */
 
 #include "fx9/Compiler.h"
-#include "fx9/EffectSourcePatch.h"
+#include "fx9/BackendCrossOptions.h"
+#include "fx9/EffectTranslator.h"
 
 /* win32 */
 #if defined(_WIN32)
@@ -1559,20 +1560,16 @@ Compiler::DX9MSPassShader::translate(const InstructionList &vertexShaderInstruct
         spv::Disassemble(std::cout, instructions);
 #endif
         try {
-            spirv_cross::CompilerGLSL::Options options;
-            options.enable_420pack_extension = false;
-            options.es = m_parent->m_profile == EEsProfile;
-            options.version = m_parent->m_version;
-            options.vertex.fixup_clipspace = true;
-            options.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
-            options.fragment.default_int_precision = spirv_cross::CompilerGLSL::Options::Highp;
-            auto compile = [this, &options, &sink](EShLanguage language, const InstructionList &instructions) {
+            fx9::translation::GLSLCrossConfig glslConfig;
+            glslConfig.es = m_parent->m_profile == EEsProfile;
+            glslConfig.version = m_parent->m_version;
+            auto compile = [this, glslConfig, &sink](EShLanguage language, const InstructionList &instructions) {
                 InstructionList newInstructions;
                 std::unordered_map<uint32_t, std::string> attributes;
                 m_parent->saveAttributeMap(instructions, attributes);
                 m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
                 spirv_cross::CompilerGLSL compiler(newInstructions);
-                compiler.set_common_options(options);
+                fx9::translation::applyGLSLCrossOptions(compiler, glslConfig);
                 m_parent->restoreInterfaceVariableNames(language, attributes, compiler);
                 return compiler.compile();
             };
@@ -1626,17 +1623,13 @@ Compiler::HLSLPassShader::translate(const InstructionList &vertexShaderInstructi
         spv::Disassemble(std::cout, instructions);
 #endif
         try {
-            spirv_cross::CompilerHLSL::Options options;
-            options.shader_model = 41;
-            /* Keep point size / point coord optional semantics for SM4.x translation stability. */
-            options.point_size_compat = true;
-            options.point_coord_compat = true;
-            auto compile = [this, &options, &sink](EShLanguage language, const InstructionList &instructions,
+            fx9::translation::HLSLCrossConfig hlslConfig;
+            auto compile = [this, hlslConfig, &sink](EShLanguage language, const InstructionList &instructions,
                                const std::vector<spirv_cross::HLSLVertexAttributeRemap> &mapping) {
                 InstructionList newInstructions;
                 m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
                 spirv_cross::CompilerHLSL compiler(newInstructions);
-                compiler.set_hlsl_options(options);
+                fx9::translation::applyHLSLCrossOptions(compiler, hlslConfig);
                 auto &samplerName2Index = m_samplerName2Index[language];
                 spirv_cross::ShaderResources resources = compiler.get_shader_resources();
                 for (const auto &it : resources.sampled_images) {
@@ -1734,15 +1727,6 @@ Compiler::MSLPassShader::translate(const InstructionList &vertexShaderInstructio
                 InstructionList newInstructions;
                 m_parent->saveAttributeMap(instructions, attributes);
                 m_parent->optimizeShaderInstructions(instructions, newInstructions, sink);
-                spirv_cross::CompilerMSL::Options options;
-                options.platform = spirv_cross::CompilerMSL::Options::macOS;
-                options.set_msl_version(2, 0);
-                /* Pad fragment outputs to avoid Metal driver undefined writes on partial MRT. */
-                options.pad_fragment_output_components = true;
-                /* Honor SPIR-V binding decorations for sampler/texture binding remaps. */
-                options.enable_decoration_binding = true;
-                /* Prefer native arrays on Intel Mac Metal to avoid pointer-to-array ABI issues. */
-                options.force_native_arrays = true;
                 spirv_cross::CompilerMSL compiler(newInstructions);
                 const spv::ExecutionModel stage =
                     language == EShLangVertex ? spv::ExecutionModelVertex : spv::ExecutionModelFragment;
@@ -1750,7 +1734,9 @@ Compiler::MSLPassShader::translate(const InstructionList &vertexShaderInstructio
                 auto it = std::find_if(entryPoints.begin(), entryPoints.end(),
                     [&](const spirv_cross::EntryPoint &item) { return item.execution_model == stage; });
                 compiler.rename_entry_point(it->name, m_parent->m_metalShaderEntryPointName, stage);
-                compiler.set_msl_options(options);
+                fx9::translation::MSLCrossConfig mslConfig;
+                mslConfig.entryPoint = m_parent->m_metalShaderEntryPointName;
+                fx9::translation::applyMSLCrossOptions(compiler, mslConfig);
                 auto &samplerName2Index = m_samplerName2Index[language];
                 spirv_cross::ShaderResources resources = compiler.get_shader_resources();
                 for (const auto &it : resources.sampled_images) {
@@ -1781,10 +1767,7 @@ Compiler::MSLPassShader::translate(const InstructionList &vertexShaderInstructio
                 }
                 m_parent->restoreInterfaceVariableNames(language, attributes, compiler);
                 std::ostringstream os;
-                compiler.add_header_line("#pragma clang diagnostic ignored \"-Wunused-variable\"\n"
-                                         "#include <metal_math>\n"
-                                         "using namespace metal;\n"
-                                         "float length(float x) { return sqrt(x * x); }\n");
+                compiler.add_header_line(fx9::translation::metalShaderPreamble());
                 os << compiler.compile();
                 return os.str();
             };
@@ -2197,8 +2180,9 @@ Compiler::compile(const std::string &source, const char *filename, EffectProduct
         for (auto it = m_includeSourceData.begin(), end = m_includeSourceData.end(); it != end; ++it) {
             parser.addIncludeSource(it->first.c_str(), it->second.c_str());
         }
-        const std::string patchedSource(fx9::effect::patchLegacyEffectSource(filename ? filename : std::string(), source));
-        TString inputSource(patchedSource.cbegin(), patchedSource.cend());
+        const std::string preparedSource(
+            fx9::translation::prepareEffectSource(filename ? filename : std::string(), source));
+        TString inputSource(preparedSource.cbegin(), preparedSource.cend());
         // ensure line feed to prevent "expected newline after header name"
         inputSource.append("\n");
         InstructionList instructions;
