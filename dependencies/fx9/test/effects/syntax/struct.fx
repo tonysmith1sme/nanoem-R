@@ -46,7 +46,7 @@ vs_output_t vs_syntax_struct(vs_input_t input)
 	return output;
 }
 
-ps_output_t vs_syntax_struct(vs_output_t input)
+ps_output_t ps_syntax_struct(vs_output_t input)
 {
 	ps_output_t output = (ps_output_t) 0;
 	output.color0 = input.color0;
@@ -58,7 +58,7 @@ ps_output_t vs_syntax_struct(vs_output_t input)
 
 technique syntax_test_technique {
   pass syntax_test_struct_pass {
-  	VertexShader = compile vs_3_0 vs_syntax_global_struct();
-  	PixelShader = compile vs_3_0 ps_syntax_global_struct();
+  	VertexShader = compile vs_3_0 vs_syntax_struct();
+  	PixelShader = compile ps_3_0 ps_syntax_struct();
   }
 }

@@ -145,19 +145,23 @@ else()
 endif()
 
 # fx9_test
-if(FALSE)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/test FX9_TEST_SOURCES)
-add_executable(fx9_test ${FX9_TEST_SOURCES})
-set_property(TARGET fx9_test APPEND PROPERTY CXX_STANDARD ${fx9_cxx_standard})
-set_property(TARGET fx9_test APPEND PROPERTY
+option(FX9_ENABLE_TEST "Enable building fx9 unit test option." OFF)
+if(FX9_ENABLE_TEST AND EXISTS ${FX9_DEPENDENCIES_PATH}/catch2/single_include/catch2/catch.hpp)
+  add_executable(fx9_test ${CMAKE_CURRENT_SOURCE_DIR}/test/main.cc
+                         ${CMAKE_CURRENT_SOURCE_DIR}/test/state.cc
+                         ${CMAKE_CURRENT_SOURCE_DIR}/test/syntax.cc)
+  set_property(TARGET fx9_test APPEND PROPERTY CXX_STANDARD ${fx9_cxx_standard})
+  set_property(TARGET fx9_test APPEND PROPERTY
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
     ${FX9_DEPENDENCIES_PATH}/glslang
     ${FX9_DEPENDENCIES_PATH}/protobuf-c
-    ${FX9_PROTOBUF_PATH})
-set_property(TARGET fx9_test APPEND PROPERTY
+    ${FX9_PROTOBUF_PATH}
+    ${FX9_DEPENDENCIES_PATH}/catch2/single_include)
+  set_property(TARGET fx9_test APPEND PROPERTY
     COMPILE_DEFINITIONS FX9_TEST_EFFECT_FIXTURES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/test/effects")
-if(UNIX)
-  target_link_libraries(fx9_test -ldl -lpthread)
-endif()
+  target_link_libraries(fx9_test fx9 protobuf-c fx9_protobuf)
+  if(UNIX)
+    target_link_libraries(fx9_test -ldl -lpthread)
+  endif()
 endif()

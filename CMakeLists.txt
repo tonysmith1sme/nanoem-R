@@ -440,5 +440,22 @@ if(NOT NANOEM_MINIMAL)
     include(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/catch2/contrib/Catch.cmake)
     nanoem_build_test()
     catch_discover_tests(nanoem_test)
+    if(TARGET fx9)
+      add_executable(fx9_test ${PROJECT_SOURCE_DIR}/dependencies/fx9/test/main.cc
+                              ${PROJECT_SOURCE_DIR}/dependencies/fx9/test/state.cc
+                              ${PROJECT_SOURCE_DIR}/dependencies/fx9/test/syntax.cc)
+      set_property(TARGET fx9_test PROPERTY CXX_STANDARD 11)
+      set_property(TARGET fx9_test APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${PROJECT_SOURCE_DIR}/dependencies/fx9/include
+        ${PROJECT_SOURCE_DIR}/dependencies/fx9/thirdparty
+        ${PROJECT_SOURCE_DIR}/dependencies/glslang
+        ${PROJECT_SOURCE_DIR}/dependencies/protobuf-c
+        ${PROJECT_SOURCE_DIR}/dependencies/catch2/single_include)
+      set_property(TARGET fx9_test APPEND PROPERTY COMPILE_DEFINITIONS
+        FX9_TEST_EFFECT_FIXTURES_PATH="${PROJECT_SOURCE_DIR}/dependencies/fx9/test/effects")
+      target_link_libraries(fx9_test fx9)
+      set_property(TARGET fx9_test PROPERTY FOLDER test)
+      catch_discover_tests(fx9_test)
+    endif()
   endif()
 endif()

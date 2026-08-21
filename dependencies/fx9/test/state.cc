@@ -1,16 +1,22 @@
-#include "criterion/criterion.h"
+/*
+   Copyright (c) 2015-2023 hkrn All rights reserved
+
+   This file is licensed under MIT license. for more details, see LICENSE.txt.
+ */
+
+#define CATCH_CONFIG_FAST_COMPILE
+#include <catch2/catch.hpp>
 
 #include "fx9/Compiler.h"
 
+#include <memory>
+#include <string>
+
+#include "fx9_test_common.h"
+
 using namespace fx9;
 
-Test(fx9, state)
+TEST_CASE("state")
 {
-    Compiler::initialize();
-    {
-        Compiler::EffectProduct product;
-        std::unique_ptr<Compiler> compiler(new Compiler(ECoreProfile, EShMsgDefault));
-        cr_assert(compiler->compile(FX9_TEST_EFFECT_FIXTURES_PATH "/state.fx", product));
-    }
-    Compiler::terminate();
+    compileAllPassesEffect(std::string(FX9_TEST_EFFECT_FIXTURES_PATH) + "/state.fx");
 }
