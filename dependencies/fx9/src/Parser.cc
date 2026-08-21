@@ -849,7 +849,13 @@ ParserContext::execute(const TString &source, const TString &preamble)
     const char *sources[] = { preamble.c_str(), source.c_str() };
     const char *names[] = { m_filename.c_str(), m_filename.c_str() };
     size_t lengths[] = { preamble.size(), source.size() };
-    TInputScanner scanner(2, sources, lengths, names);
+    /* an empty leading source makes TInputScanner duplicate the first character of the
+       following source (get() reads sources[1][0] while advance() resets currentChar to 0),
+       so pass the effect source alone when there is no preamble macro to inject */
+    TInputScanner scanner(preamble.empty() ? 1 : 2,
+        preamble.empty() ? &sources[1] : sources,
+        preamble.empty() ? &lengths[1] : lengths,
+        preamble.empty() ? &names[1] : names);
     m_context->setScanner(&scanner);
     if (const char *p = strrchr(m_filename.c_str(), '/')) {
         m_includer.setSourceBasePath(TString(m_filename.c_str(), p));
