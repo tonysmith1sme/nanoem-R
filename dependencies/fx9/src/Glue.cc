@@ -40,8 +40,18 @@ fx9ParserContextReportSyntaxError(fx9_parser_context_t *context, fx9_atom_t toke
 }
 
 void
-fx9ParserContextReportParseFailure(fx9_parser_context_t * /* context */)
+fx9ParserContextReportParseFailure(fx9_parser_context_t *context)
 {
+    ParserContext *parserContext = reinterpret_cast<ParserContext *>(context);
+    HlslParseContext *hlslParseContext = parserContext->parseContext();
+    TInfoSinkBase &output = hlslParseContext->infoSink.info;
+    output.prefix(EPrefixError);
+    output << "Syntax Error in ";
+    if (const char *filename = parserContext->currentProcessingFilename()) {
+        output << filename;
+    }
+    output << " (parse failure)\n";
+    hlslParseContext->addError();
 }
 
 void

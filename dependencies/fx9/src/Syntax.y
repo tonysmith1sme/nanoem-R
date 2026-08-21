@@ -17,6 +17,7 @@
     fx9ParserContextReportParseFailure(parser);
 }
 %stack_overflow {
+    fx9ParserContextReportParseFailure(parser);
 }
 %extra_argument { fx9_parser_context_t *parser }
 %token_type { fx9_atom_t }

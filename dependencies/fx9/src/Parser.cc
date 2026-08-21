@@ -1089,6 +1089,11 @@ ParserContext::acceptTranslationUnit(atom_t unit)
                 m_intermediate.setTreeRoot(unitNode);
             }
         }
+        else if (!m_entryPoint.first.empty()) {
+            /* an empty entry point name denotes the whole-file parse; otherwise report the
+               missing function instead of silently producing a shader without a main body */
+            m_context->error(TSourceLoc(), "entry point function not found", m_entryPoint.first.c_str(), "");
+        }
     }
 }
 

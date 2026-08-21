@@ -2165,9 +2165,11 @@ EffectPipeline::compile(const std::string &source, const char *filename, EffectP
             convertIncludePathSet(parser, &message);
             effectProduct.message.resize(fx9__effect__effect__get_packed_size(&message));
             fx9__effect__effect__pack(&message, effectProduct.message.data());
+            /* every declared pass must compile and validate, otherwise the effect is rejected
+               instead of being half-loaded (which renders broken downstream passes) */
             succeeded = effectProduct.numPasses == 0 ||
-                (effectProduct.numCompiledPasses > 0 &&
-                    effectProduct.numCompiledPasses == effectProduct.numValidatedPasses);
+                (effectProduct.numCompiledPasses == effectProduct.numPasses &&
+                    effectProduct.numValidatedPasses == effectProduct.numPasses);
         }
         else {
             effectProduct.sink.info = infoSink.info.c_str();
@@ -2522,7 +2524,22 @@ EffectPipeline::compileAllPasses(const ParserContext::Technique &technique, cons
             }
             /* needs for forcePointSizeAssignment detection required by MSL */
             parser->convertAllPassStates(pass);
-            if (parser->compile(EShLangVertex, pass.m_vertexShaderEntryPoint, vertexShaderInstructions) &&
+            const bool hasShaderEntryPoint = !pass.m_vertexShaderEntryPoint.first.empty() ||
+                !pass.m_pixelShaderEntryPoint.first.empty();
+            if (!hasShaderEntryPoint) {
+                /* MME "dummy" passes only carry render states and script commands without
+                   shader entry points, so emit empty shader bodies and count them compiled
+                   (the runtime skips drawing them like before) */
+                Fx9__Effect__Shader *vertexShader = basePassPtr->vertex_shader = allocate<Fx9__Effect__Shader>();
+                fx9__effect__shader__init(vertexShader);
+                vertexShader->type = FX9__EFFECT__SHADER__TYPE__ST_VERTEX;
+                Fx9__Effect__Shader *pixelShader = basePassPtr->pixel_shader = allocate<Fx9__Effect__Shader>();
+                fx9__effect__shader__init(pixelShader);
+                pixelShader->type = FX9__EFFECT__SHADER__TYPE__ST_PIXEL;
+                effectProduct.numCompiledPasses++;
+                effectProduct.numValidatedPasses++;
+            }
+            else if (parser->compile(EShLangVertex, pass.m_vertexShaderEntryPoint, vertexShaderInstructions) &&
                 parser->compile(EShLangFragment, pass.m_pixelShaderEntryPoint, fragmentShaderInstructions)) {
                 std::unique_ptr<TShader> vertexShader, fragmentShader;
                 std::string translatedVertexShaderSource, translatedFragmentShaderSource;
