@@ -3944,22 +3944,29 @@ ParserContext::createBuiltInVertexShaderOutputAssignmentNode(const TFunction *fu
     newOutputType.shallowCopy(outputCallNode->getType());
     newOutputType.getQualifier().makeTemporary();
     TString *outputName = NewPoolTString("vs_output_t");
+    /* a user-defined type or variable with the same name makes handleVariable resolve the
+       wrong symbol (and return null for a struct type), so rename until the slot is free */
+    while (m_context->symbolTable.find(*outputName) != nullptr) {
+        *outputName += "_";
+    }
     TIntermNode *initializerNode = m_context->declareVariable(TSourceLoc(), *outputName, newOutputType, outputCallNode);
     bodyNode = m_intermediate.growAggregate(bodyNode, initializerNode);
     TIntermNode *assignmentNode = m_context->handleVariable(TSourceLoc(), outputName);
     bodyNode = m_intermediate.growAggregate(bodyNode, assignmentNode);
-    if (TIntermTyped *outputVariableNode = assignmentNode->getAsTyped()) {
-        if (newOutputType.isStruct()) {
-            bodyNode = growVertexShaderOutputStructAssignment(newOutputType, outputVariableNode, bodyNode);
-        }
-        else if (newOutputType.isVector()) {
-            const TType &functionType = function->getType();
-            const TBuiltInVariable builtIn = functionType.getQualifier().builtIn;
-            bodyNode = growVertexShaderBuiltInVariableAssignment(functionType, builtIn, bodyNode, outputCallNode);
-        }
-        if (TIntermNode *pointSizeAssignmentNode =
-                createPointSizeAssignmentNode(newOutputType, outputVariableNode, initializerNode->getLoc())) {
-            bodyNode = m_intermediate.growAggregate(bodyNode, pointSizeAssignmentNode);
+    if (assignmentNode != nullptr) {
+        if (TIntermTyped *outputVariableNode = assignmentNode->getAsTyped()) {
+            if (newOutputType.isStruct()) {
+                bodyNode = growVertexShaderOutputStructAssignment(newOutputType, outputVariableNode, bodyNode);
+            }
+            else if (newOutputType.isVector()) {
+                const TType &functionType = function->getType();
+                const TBuiltInVariable builtIn = functionType.getQualifier().builtIn;
+                bodyNode = growVertexShaderBuiltInVariableAssignment(functionType, builtIn, bodyNode, outputCallNode);
+            }
+            if (TIntermNode *pointSizeAssignmentNode = createPointSizeAssignmentNode(
+                    newOutputType, outputVariableNode, initializerNode != nullptr ? initializerNode->getLoc() : TSourceLoc())) {
+                bodyNode = m_intermediate.growAggregate(bodyNode, pointSizeAssignmentNode);
+            }
         }
     }
     bodyNode->setOperator(EOpSequence);

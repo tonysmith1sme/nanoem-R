@@ -387,6 +387,9 @@ struct_member_declarator_list(A) ::= struct_member_declarator(B). {
 struct_member_declarator(A) ::= identifier(B) array_size_specifier(C) semantic_or_annotations(D). {
     A = fx9ParserContextCreateTypeSpecStructMemberDeclarator(parser, B, C, D);
  }
+struct_member_declarator(A) ::= identifier(B) array_size_specifier(C). {
+    A = fx9ParserContextCreateTypeSpecStructMemberDeclarator(parser, B, C, 0);
+}
 struct_member_declarator(A) ::= identifier(B) semantic_or_annotations(C). {
     A = fx9ParserContextCreateTypeSpecStructMemberDeclarator(parser, B, 0, C);
 }
