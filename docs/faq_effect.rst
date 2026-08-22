@@ -151,23 +151,22 @@ MotionBlur 系が動かないのですが...
 ``'#' : invalid directive`` が出る
 ============================================================
 
-これは以下のようなコードを利用していると未実装のために発生します。
+これは以下のようなコードを利用していると発生します。
 
 .. code-block:: none
 
   #define some_macro(n) replaced_result_##n
 
-文字列結合と呼ばれる処理のため、上記の ``define`` の行を削除し、例えば以下のように使われている場合は
+トークン連結（識別子やセマンティクスに対する ``##``）は現在のエフェクトコンパイラで
+サポートされています。ただし数値リテラル同士の連結（例: ``1##2``）は未対応のため、
+その場合は連結結果を直接記述してください。
 
 .. code-block:: none
 
-  some_macro(test)
+  #define some_macro(n) replaced_result_##n
+  some_macro(test)  // replaced_result_test へ展開される（サポート済み）
 
-文字列を置き換えた結果を使用箇所全てに適用してください。
-
-.. code-block:: none
-
-  replaced_result_test
+  #define A 1##2     // 未対応: 12 と直接記述する
 
 詳しくは `トークン連結演算子 <https://docs.microsoft.com/ja-jp/cpp/preprocessor/token-pasting-operator-hash-hash>`_ を参照してください。
 
