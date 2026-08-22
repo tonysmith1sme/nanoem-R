@@ -58,9 +58,11 @@ AAPass::draw(sg::PassBlock::IDrawQueue *drawQueue, sg_pass dest, sg_image source
     sg_bindings bindings(m_bindings);
     bindings.fs_images[0] = source;
     sg::PassBlock pb(drawQueue, dest, pa);
+    /* the pipeline must be applied before its uniform block, otherwise the draw
+     * queue replay leaves sokol without a current pipeline (null deref) */
+    pb.applyPipelineBindings(pipeline, bindings);
     const Vector4 texelSize(1.0f / sourceSize.x, 1.0f / sourceSize.y, sourceSize.x, sourceSize.y);
     pb.applyUniformBlock(SG_SHADERSTAGE_FS, &texelSize, sizeof(texelSize));
-    pb.applyPipelineBindings(pipeline, bindings);
     pb.draw(0, 4);
 }
 
