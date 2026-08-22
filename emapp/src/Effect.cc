@@ -42,6 +42,8 @@ pfn_D3DCompile g_D3DCompile = nullptr;
 #include "emapp/Project.h"
 #include "emapp/ShadowCamera.h"
 #include "emapp/StringUtils.h"
+#include "dx9rt/PixelFormat.h"
+
 #include "emapp/effect/AnimatedImageContainer.h"
 #include "emapp/effect/RenderTargetMipmapGenerator.h"
 #include "emapp/effect/RenderTargetNormalizer.h"
@@ -5067,6 +5069,26 @@ Effect::createOverrideImage(const String &name, const IImageView *image, bool mi
     return handle;
 }
 
+namespace {
+/* dx9rt authoritative D3DFMT lookup with the FMT_/D3DFMT_ prefix variants stripped,
+   so format resolution matches the dx9rt pixel format table exactly */
+sg_pixel_format
+resolveDX9PixelFormat(const String &name, sg_pixel_format defaultFormat) NANOEM_DECL_NOEXCEPT
+{
+    static const char *kPrefixes[] = { "", "FMT_", "D3DFMT_" };
+    for (size_t i = 0; i < BX_COUNTOF(kPrefixes); i++) {
+        const size_t length = StringUtils::length(kPrefixes[i]);
+        if (name.size() > length && strncmp(name.c_str(), kPrefixes[i], length) == 0) {
+            const dx9rt::PixelFormatResult result = dx9rt::pixelFormatFromName(name.c_str() + length);
+            if (result.isValid()) {
+                return result.format;
+            }
+        }
+    }
+    return defaultFormat;
+}
+} /* namespace anonymous */
+
 sg_pixel_format
 Effect::determinePixelFormat(const AnnotationMap &annotations, sg_pixel_format defaultFormat) const NANOEM_DECL_NOEXCEPT
 {
@@ -5075,6 +5097,9 @@ Effect::determinePixelFormat(const AnnotationMap &annotations, sg_pixel_format d
     if (it != annotations.end()) {
         ImageFormatMap::const_iterator it2 = m_imageFormats.find(it->second.m_string);
         choosedFormat = it2 != m_imageFormats.end() ? it2->second : defaultFormat;
+        if (choosedFormat == defaultFormat && effect::isDX9RuntimeEffectEnabled()) {
+            choosedFormat = resolveDX9PixelFormat(it->second.m_string, defaultFormat);
+        }
     }
     return choosedFormat;
 }
@@ -5088,6 +5113,9 @@ Effect::determineDepthStencilPixelFormat(
     if (it != annotations.end()) {
         ImageFormatMap::const_iterator it2 = m_depthStencilImageFormats.find(it->second.m_string);
         choosedFormat = it2 != m_depthStencilImageFormats.end() ? it2->second : defaultFormat;
+        if (choosedFormat == defaultFormat && effect::isDX9RuntimeEffectEnabled()) {
+            choosedFormat = resolveDX9PixelFormat(it->second.m_string, defaultFormat);
+        }
     }
     return choosedFormat;
 }
