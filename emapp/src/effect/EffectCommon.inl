@@ -53,6 +53,17 @@ static void
 convertImageDescription(const TTexture *texturePtr, sg_image_desc &desc)
 {
     const size_t numSamplerStates = texturePtr->n_sampler_states;
+    if (effect::isDX9RuntimeEffectEnabled()) {
+        /* resolve from the documented D3D9 sampler defaults (POINT filtering, WRAP
+           addressing, transparent black border) instead of the legacy presets */
+        dx9rt::StateVector states;
+        for (size_t i = 0; i < numSamplerStates; i++) {
+            const TSamplerState *state = texturePtr->sampler_states[i];
+            states.setSamplerState(0, state->key, state->value);
+        }
+        effect::applyDX9SamplerStateVector(states, 0, desc);
+        return;
+    }
     desc.mag_filter = desc.min_filter = SG_FILTER_LINEAR;
     desc.num_mipmaps = 1;
     desc.wrap_u = SG_WRAP_REPEAT;

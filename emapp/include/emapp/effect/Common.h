@@ -427,6 +427,11 @@ bool isDX9RuntimeEffectEnabled() NANOEM_DECL_NOEXCEPT;
    write, scissor) from the vector so legacy consumers stay consistent. */
 void applyDX9StateVector(PipelineDescriptor &pd) NANOEM_DECL_NOEXCEPT;
 
+/* Resolve the sampler states of one stage into the sampler owned fields of an
+   image description from the documented D3D9 defaults. */
+void applyDX9SamplerStateVector(
+    const dx9rt::StateVector &states, int stage, sg_image_desc &desc) NANOEM_DECL_NOEXCEPT;
+
 class Logger NANOEM_DECL_SEALED : private NonCopyable {
 public:
     Logger();

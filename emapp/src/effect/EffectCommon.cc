@@ -1962,5 +1962,11 @@ applyDX9StateVector(PipelineDescriptor &pd) NANOEM_DECL_NOEXCEPT
     pd.m_scissorTestEnabled = extra.scissorTestEnabled;
 }
 
+void
+applyDX9SamplerStateVector(const dx9rt::StateVector &states, int stage, sg_image_desc &desc) NANOEM_DECL_NOEXCEPT
+{
+    dx9rt::resolveSamplerImage(states, stage, desc, nullptr);
+}
+
 } /* namespace effect */
 } /* namespace nanoem */

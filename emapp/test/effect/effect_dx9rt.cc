@@ -103,3 +103,28 @@ TEST_CASE("effect_dx9rt_scissor_and_srgb", "[emapp][effect][dx9rt]")
     CHECK((pd.m_body.colors[0].write_mask & SG_COLORMASK_R) != 0);
     CHECK((pd.m_body.colors[0].write_mask & SG_COLORMASK_G) == 0);
 }
+
+TEST_CASE("effect_dx9rt_sampler_defaults", "[emapp][effect][dx9rt]")
+{
+    dx9rt::StateVector states;
+    sg_image_desc desc;
+    effect::applyDX9SamplerStateVector(states, 0, desc);
+    /* documented D3D9 sampler defaults */
+    CHECK(desc.mag_filter == SG_FILTER_NEAREST);
+    CHECK(desc.min_filter == SG_FILTER_NEAREST);
+    CHECK(desc.wrap_u == SG_WRAP_REPEAT);
+    CHECK(desc.wrap_v == SG_WRAP_REPEAT);
+    CHECK(desc.border_color == SG_BORDERCOLOR_TRANSPARENT_BLACK);
+    CHECK(desc.num_mipmaps == 1); /* MIPFILTER NONE */
+
+    dx9rt::StateVector linear;
+    linear.setSamplerState(0, dx9rt::kSamplerStateMagFilter, dx9rt::kTextureFilterLinear);
+    linear.setSamplerState(0, dx9rt::kSamplerStateMinFilter, dx9rt::kTextureFilterLinear);
+    linear.setSamplerState(0, dx9rt::kSamplerStateMipFilter, dx9rt::kTextureFilterLinear);
+    linear.setSamplerState(0, dx9rt::kSamplerStateAddressU, dx9rt::kTextureAddressClamp);
+    effect::applyDX9SamplerStateVector(linear, 0, desc);
+    CHECK(desc.mag_filter == SG_FILTER_LINEAR);
+    CHECK(desc.min_filter == SG_FILTER_LINEAR_MIPMAP_LINEAR);
+    CHECK(desc.wrap_u == SG_WRAP_CLAMP_TO_EDGE);
+    CHECK(desc.num_mipmaps == 0);
+}
