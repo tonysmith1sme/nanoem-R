@@ -1339,6 +1339,13 @@ EffectPipeline::BasePassShader::compile(
         if (shader) {
             // copyString(translatedShaderSource.c_str(), *allocator, &shader->code);
             const auto &samplerNodes = parser.findSamplerNodes(entryPoint);
+            if (parseContext.getNumErrors() > 0) {
+                /* post-parse validation (e.g. sampler stage exhaustion) reported into the
+                   parse context; surface it and fail this stage instead of emitting broken
+                   slot assignments */
+                m_effectProduct.sink.merge(entryPoint.first, parseContext.infoSink);
+                return false;
+            }
             const auto &uniformNodes = parser.uniformNodes();
             if (!uniformNodes.empty() || !samplerNodes.empty()) {
                 Fx9__Effect__Symbol **symbols = nullptr, *symbolPtr = nullptr;

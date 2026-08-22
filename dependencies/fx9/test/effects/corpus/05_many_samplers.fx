@@ -1,4 +1,4 @@
-// 17 samplers exceed the 16 slot limit (silent alias today, hard error wanted in P3)
+// 17 samplers exceed the 16 register limit (s0..s15) and must fail loudly
 sampler2D samp0 : register(s0);
 sampler2D samp1 : register(s1);
 sampler2D samp2 : register(s2);

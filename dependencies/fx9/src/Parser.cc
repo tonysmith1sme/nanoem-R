@@ -595,7 +595,7 @@ ParserContext::SamplerNodeTraverser::visitAggregate(TVisit, TIntermAggregate *ag
 size_t
 ParserContext::SamplerNodeTraverser::acquireSamplerSlot()
 {
-    size_t index = 0;
+    size_t index = SIZE_MAX;
     if (!m_slots.empty()) {
         index = m_slots.front();
         m_slots.erase(m_slots.begin());
@@ -935,7 +935,18 @@ ParserContext::findSamplerNodes(const Pass::EntryPoint &entryPoint)
             auto it3 = m_samplerNodes.find(name);
             if (it3 != m_samplerNodes.end()) {
                 SamplerNodeItem &node = it3->second;
-                node.m_samplerIndex = item.second != SIZE_MAX ? item.second : traverser.acquireSamplerSlot();
+                if (node.m_samplerIndex == SIZE_MAX && item.second == SIZE_MAX) {
+                    node.m_samplerIndex = traverser.acquireSamplerSlot();
+                    if (node.m_samplerIndex == SIZE_MAX) {
+                        /* more distinct samplers referenced by this entry point than the 16
+                           texture stages; aliasing silently to slot 0 corrupts sampling, so
+                           reject the effect loudly instead */
+                        m_context->error(TSourceLoc(), "too many samplers, no texture stage left", name.c_str(), "");
+                    }
+                }
+                else if (node.m_samplerIndex == SIZE_MAX) {
+                    node.m_samplerIndex = item.second;
+                }
                 nodes.insert(std::make_pair(name, node));
             }
         }
@@ -2210,8 +2221,14 @@ ParserContext::createSamplerState(atom_t type, atom_t identifier, atom_t index, 
             const TString &registerIndexString = registerIndexNode->getName();
             const TType &symbolType = typeNode->getType();
             size_t samplerIndex = registerIndexString.size() > 1
-                ? std::min(std::max(int(strtol(registerIndexString.c_str() + 1, 0, 10)), 0), 15)
+                ? size_t(std::max(int(strtol(registerIndexString.c_str() + 1, 0, 10)), 0))
                 : 0;
+            /* D3D9 exposes exactly 16 sampler registers (s0..s15); clamping a larger
+               register silently aliases another sampler, so reject like D3DX does */
+            if (samplerIndex > 15) {
+                m_context->error(nameNode->getLoc(), "sampler register out of range (s0..s15)",
+                    registerIndexString.c_str(), "");
+            }
             TString overridenSamplerName;
             node = createTextureSamplerAccessor(symbolType, nameNode, samplerIndex, nullptr, semanticAnnotationNode);
             hasTextureSamplerAccessor = true;
@@ -3852,6 +3869,27 @@ ParserContext::addPixelShaderEntryPointFunctionArgument(
     }
     case EbvFragDepth: {
         storageQualifier = EvqFragDepth;
+        break;
+    }
+    case EbvFace: {
+        /* VFACE: gl_FrontFacing is boolean on every backend while D3D exposes +1 (front)
+           / -1 (back), so select the float value and widen it to the parameter type */
+        TType boolType(EbtBool, EvqFace, 1);
+        boolType.getQualifier().builtIn = EbvFace;
+        TString *name = newAnonymousVariableString();
+        m_context->declareVariable(TSourceLoc(), *name, boolType);
+        TIntermTyped *faceNode = m_context->handleVariable(TSourceLoc(), name);
+        TIntermTyped *frontNode = m_intermediate.addConstantUnion(1.0, EbtFloat, TSourceLoc(), true);
+        TIntermTyped *backNode = m_intermediate.addConstantUnion(-1.0, EbtFloat, TSourceLoc(), true);
+        TIntermTyped *convertedNode =
+            m_intermediate.addSelection(faceNode, frontNode, backNode, TSourceLoc());
+        if (convertedNode && inputType.getVectorSize() > 1) {
+            convertedNode = handleSingleConstructorCall(TSourceLoc(), inputType, convertedNode);
+        }
+        if (convertedNode) {
+            m_context->handleFunctionArgument(declaration, argumentsNode, convertedNode);
+            return;
+        }
         break;
     }
     case EbvPointSize: {
