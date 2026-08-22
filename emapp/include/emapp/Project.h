@@ -74,6 +74,7 @@ class EffectPlugin;
 } /* namespace plugin */
 
 namespace internal {
+class AAPass;
 class BlitPass;
 class ClearPass;
 class DebugDrawer;
@@ -928,6 +929,7 @@ private:
     SerialDrawQueue *m_serialDrawQueue;
     effect::RenderPassScope *m_offscreenRenderPassScope;
     internal::BlitPass *m_viewportPassBlitter;
+    internal::AAPass *m_viewportPassAAPass;
     internal::BlitPass *m_renderPassBlitter;
     internal::BlitPass *m_sharedImageBlitter;
     internal::ClearPass *m_renderPassCleaner;

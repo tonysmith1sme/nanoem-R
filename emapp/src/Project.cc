@@ -41,6 +41,7 @@
 #include "emapp/command/BatchUndoCommandListCommand.h"
 #include "emapp/command/MotionSnapshotCommand.h"
 #include "emapp/command/TransformBoneCommand.h"
+#include "emapp/internal/AAPass.h"
 #include "emapp/internal/BlitPass.h"
 #include "emapp/internal/ClearPass.h"
 #include "emapp/internal/DebugDrawer.h"
@@ -1229,6 +1230,7 @@ Project::Project(const Injector &injector)
     , m_serialDrawQueue(nullptr)
     , m_offscreenRenderPassScope(nullptr)
     , m_viewportPassBlitter(nullptr)
+    , m_viewportPassAAPass(nullptr)
     , m_renderPassBlitter(nullptr)
     , m_sharedImageBlitter(nullptr)
     , m_renderPassCleaner(nullptr)
@@ -1287,6 +1289,7 @@ Project::Project(const Injector &injector)
     m_shadowCamera = nanoem_new(ShadowCamera(this));
     m_renderPassBlitter = nanoem_new(internal::BlitPass(this, !topLeft));
     m_viewportPassBlitter = nanoem_new(internal::BlitPass(this, false));
+    m_viewportPassAAPass = nanoem_new(internal::AAPass(this));
     m_renderPassCleaner = nanoem_new(internal::ClearPass(this));
     m_drawQueue = nanoem_new(DrawQueue);
     m_drawQueue->m_project = this;
@@ -1353,6 +1356,7 @@ Project::~Project() NANOEM_DECL_NOEXCEPT
     nanoem_delete_safe(m_sharedImageBlitter);
     nanoem_delete_safe(m_renderPassCleaner);
     nanoem_delete_safe(m_viewportPassBlitter);
+    nanoem_delete_safe(m_viewportPassAAPass);
 }
 
 bool
@@ -1455,6 +1459,7 @@ Project::destroy() NANOEM_DECL_NOEXCEPT
     m_renderPassBlitter->destroy();
     m_renderPassCleaner->destroy();
     m_viewportPassBlitter->destroy();
+    m_viewportPassAAPass->destroy();
     if (m_sharedImageBlitter) {
         m_sharedImageBlitter->destroy();
     }
@@ -3020,9 +3025,12 @@ Project::drawViewport()
             dd::flush();
             if (resolveChainActive) {
                 /* composite the post processed 1x result back into the primary image so
-                   downstream consumers (screentex blit, ImGui present, capture) are unchanged */
-                blitRenderPass(sharedBatchDrawQueue(), m_viewportPrimaryPass.m_handle,
-                    m_viewportResolvedPass.m_handle, m_viewportPassBlitter);
+                   downstream consumers (screentex blit, ImGui present, capture) are unchanged;
+                   run FXAA here so MME users keep visible anti-aliasing on the 1x chain */
+                const Vector2UI16 resolvedImageSize(deviceScaleViewportPrimaryImageSize());
+                m_viewportPassAAPass->draw(sharedBatchDrawQueue(), m_viewportPrimaryPass.m_handle,
+                    m_viewportResolvedPass.m_colorImage, resolvedImageSize,
+                    m_renderPassBundleMap[m_viewportPrimaryPass.m_handle.id].m_format);
             }
             blitRenderPass(sharedBatchDrawQueue(), m_viewportSecondaryPass.m_handle, m_viewportPrimaryPass.m_handle,
                 m_viewportPassBlitter);
