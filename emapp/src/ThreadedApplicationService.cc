@@ -163,7 +163,10 @@ CancelPublisherWorker::start()
 {
     char name[Inline::kNameStackBufferSize];
     StringUtils::format(name, sizeof(name), "%s.CancelWorker", ThreadedApplicationService::kOrganizationDomain);
-    m_thread.init(execute, this, 0, name);
+    /* 8MB stack (same as the main thread): the default 512KB pthread stack overflows while
+     * MME effect loading nests fx9 compilation (glslang recursive descent over ray-mmd scale
+     * include trees) on this thread - crashes deep in offscreen render target option copying */
+    m_thread.init(execute, this, 8 << 20, name);
 }
 
 void
@@ -443,7 +446,10 @@ ThreadedApplicationService::handleStartingApplicationThread()
 {
     char name[Inline::kNameStackBufferSize];
     StringUtils::format(name, sizeof(name), "%s.ThreadedApplicationService", kOrganizationDomain);
-    m_thread.init(run, this, 0, name);
+    /* 8MB stack (same as the main thread): the default 512KB pthread stack overflows while
+     * MME effect loading nests fx9 compilation (glslang recursive descent over ray-mmd scale
+     * include trees) on this thread */
+    m_thread.init(run, this, 8 << 20, name);
 }
 
 void
