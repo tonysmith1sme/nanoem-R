@@ -1032,6 +1032,13 @@ PrivateEffectUtils::injectPixelShaderOutputStateShaderSource(const Fx9__Effect__
         appendShaderVariablesHeaderComment(shaderPtr, newShaderCode);
         newShaderCode.append(shaderPtr->hlsl);
     }
+    /* the fx9 pipeline bakes alpha test and the sRGB write curve into the synthesized
+       pixel shader main for every backend language; re-applying the text injection here
+       would encode gamma twice, so only legacy (pre-baked) bodies take this path
+       (0.0031308 is the sRGB threshold constant unique to the injected curve) */
+    if (strstr(newShaderCode.c_str(), "0.0031308") != nullptr) {
+        return true;
+    }
     if (!injectPixelShaderOutputStateAssignmentBlock(bodyCase, pd, newShaderCode)) {
         return false;
     }
