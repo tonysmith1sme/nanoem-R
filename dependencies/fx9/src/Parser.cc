@@ -2596,6 +2596,152 @@ ParserContext::setPointScaleState(bool enabled, float a, float b, float c)
     m_pointScaleC = c;
 }
 
+void
+ParserContext::setPixelShaderOutputState(bool alphaTestEnabled, float alphaTestReference, int alphaTestCompareFunc,
+    bool srgbWriteEnabled)
+{
+    m_pixelShaderAlphaTestEnabled = alphaTestEnabled;
+    m_pixelShaderAlphaTestReference = alphaTestReference;
+    m_pixelShaderAlphaTestCompareFunc = alphaTestCompareFunc;
+    m_pixelShaderSRGBWriteEnabled = srgbWriteEnabled;
+}
+
+TIntermTyped *
+ParserContext::createFloatConstantNode(float value)
+{
+    return m_intermediate.addConstantUnion(double(value), EbtFloat, TSourceLoc(), true);
+}
+
+TIntermTyped *
+ParserContext::createVectorConstantNode(float x, float y, float z, int vectorSize)
+{
+    const float values[3] = { x, y, z };
+    TConstUnionArray unionArray(vectorSize);
+    for (int i = 0; i < vectorSize; i++) {
+        TConstUnion value;
+        value.setDConst(double(values[i]));
+        unionArray[i] = value;
+    }
+    TType type(EbtFloat, EvqConst, vectorSize);
+    return m_intermediate.addConstantUnion(unionArray, type, TSourceLoc(), true);
+}
+
+TIntermTyped *
+ParserContext::createBuiltInBinaryFunctionNode(TOperator op, TIntermTyped *leftNode, TIntermTyped *rightNode,
+    const TType &returnType)
+{
+    /* min/max/pow are builtin functions in glslang, not addBinaryMath operators */
+    TIntermAggregate *argumentsNode = m_intermediate.growAggregate(nullptr, leftNode);
+    argumentsNode = m_intermediate.growAggregate(argumentsNode, rightNode);
+    argumentsNode->setOperator(EOpNull);
+    return m_intermediate.addBuiltInFunctionCall(TSourceLoc(), op, false, argumentsNode, returnType);
+}
+
+TIntermTyped *
+ParserContext::createSRGBEncodeNode(TIntermTyped *colorNode)
+{
+    /* the assignment target is float4, so keep alpha and encode .rgb only */
+    TIntermTyped *alphaNode = indexVectorNode(colorNode, 3);
+    TIntermTyped *rgbNode = colorNode;
+    if (colorNode->getType().isVector() && colorNode->getType().getVectorSize() == 4) {
+        if (TIntermTyped *swizzledNode = m_context->handleDotDereference(TSourceLoc(), colorNode, "rgb")) {
+            rgbNode = swizzledNode;
+        }
+        else {
+            return nullptr;
+        }
+    }
+    const TType vec3Type(EbtFloat, EvqTemporary, 3);
+    /* lin = min(max(rgb, 0), 1) */
+    TIntermTyped *linearNode = createBuiltInBinaryFunctionNode(EOpMax,
+        rgbNode, createVectorConstantNode(0.0f, 0.0f, 0.0f, 3), vec3Type);
+    if (!linearNode) {
+        return nullptr;
+    }
+    if (TIntermTyped *minNode = createBuiltInBinaryFunctionNode(EOpMin,
+            linearNode, createVectorConstantNode(1.0f, 1.0f, 1.0f, 3), vec3Type)) {
+        linearNode = minNode;
+    }
+    /* low = lin * 12.92 */
+    TIntermTyped *lowNode = m_intermediate.addBinaryMath(EOpMul,
+        linearNode, createVectorConstantNode(12.92f, 12.92f, 12.92f, 3), TSourceLoc());
+    if (!lowNode) {
+        return nullptr;
+    }
+    /* high = 1.055 * pow(lin, 1/2.4) - 0.055 */
+    TIntermTyped *powNode = createBuiltInBinaryFunctionNode(EOpPow,
+        linearNode, createVectorConstantNode(1.0f / 2.4f, 1.0f / 2.4f, 1.0f / 2.4f, 3), vec3Type);
+    if (!powNode) {
+        return nullptr;
+    }
+    TIntermTyped *highNode = m_intermediate.addBinaryMath(EOpMul,
+        powNode, createVectorConstantNode(1.055f, 1.055f, 1.055f, 3), TSourceLoc());
+    if (!highNode) {
+        return nullptr;
+    }
+    if (TIntermTyped *subNode = m_intermediate.addBinaryMath(EOpSub,
+            highNode, createVectorConstantNode(0.055f, 0.055f, 0.055f, 3), TSourceLoc())) {
+        highNode = subNode;
+    }
+    /* select(low, high, lin <= 0.0031308) matching the D3D9 sRGB write curve */
+    TIntermTyped *conditionNode = m_intermediate.addBinaryMath(EOpLessThanEqual,
+        linearNode, createVectorConstantNode(0.0031308f, 0.0031308f, 0.0031308f, 3), TSourceLoc());
+    if (!conditionNode) {
+        return nullptr;
+    }
+    TIntermTyped *encodedNode = m_intermediate.addSelection(conditionNode, lowNode, highNode, TSourceLoc());
+    if (!encodedNode) {
+        return nullptr;
+    }
+    /* float4(encoded.rgb, alpha) */
+    TType float4Type(EbtFloat, EvqTemporary, 4);
+    if (TFunction *function = m_context->makeConstructorCall(TSourceLoc(), float4Type)) {
+        TIntermTyped *argumentsNode = nullptr;
+        m_context->handleFunctionArgument(function, argumentsNode, encodedNode);
+        m_context->handleFunctionArgument(function, argumentsNode, alphaNode);
+        return m_context->handleFunctionCall(TSourceLoc(), function, argumentsNode);
+    }
+    return nullptr;
+}
+
+TIntermNode *
+ParserContext::createAlphaTestDiscardNode(TIntermTyped *colorNode)
+{
+    /* D3D9 rejects the fragment when the output alpha fails ALPHAFUNC against ALPHAREF/255;
+       build the inverted comparison directly so no logical-not node is needed */
+    TIntermTyped *alphaNode = indexVectorNode(colorNode, 3);
+    TIntermTyped *referenceNode = createFloatConstantNode(m_pixelShaderAlphaTestReference);
+    TOperator operatorType = EOpNull;
+    switch (m_pixelShaderAlphaTestCompareFunc) {
+    case 1: /* NEVER: always fails, always discard */
+        return m_intermediate.addBranch(EOpKill, TSourceLoc());
+    case 2: /* LESS: discard when alpha >= ref */
+        operatorType = EOpGreaterThanEqual;
+        break;
+    case 3: /* EQUAL: discard when alpha != ref */
+        operatorType = EOpNotEqual;
+        break;
+    case 4: /* LESSEQUAL: discard when alpha > ref */
+        operatorType = EOpGreaterThan;
+        break;
+    case 5: /* GREATER: discard when alpha <= ref */
+        operatorType = EOpLessThanEqual;
+        break;
+    case 6: /* NOTEQUAL: discard when alpha == ref */
+        operatorType = EOpEqual;
+        break;
+    case 7: /* GREATEREQUAL: discard when alpha < ref */
+        operatorType = EOpLessThan;
+        break;
+    case 8: /* ALWAYS: never discards */
+    default:
+        return nullptr;
+    }
+    TIntermTyped *conditionNode = m_intermediate.addBinaryMath(operatorType, alphaNode, referenceNode, TSourceLoc());
+    TIntermNodePair codeBlock = { m_intermediate.addBranch(EOpKill, TSourceLoc()), nullptr };
+    return m_intermediate.addSelection(conditionNode, codeBlock, TSourceLoc());
+}
+
 atom_t
 ParserContext::allocateIntermNode(TIntermNode *node)
 {
@@ -4037,6 +4183,19 @@ ParserContext::createBuiltInPixelShaderOutputAssignmentNode(const TType &outputT
                 if (TIntermTyped *derefOut = createOutputNode(fieldType, builtIn, it2->second)) {
                     TIntermTyped *derefIn =
                         m_context->handleDotDereference(TSourceLoc(), variableNode, fieldType->getFieldName());
+                    /* D3DRS_ALPHATESTENABLE / D3DRS_SRGBWRITEENABLE apply to the color member */
+                    const bool isColorOutput = builtIn == EbvColor || builtIn == EbvFrontColor ||
+                        builtIn == EbvBackColor || builtIn == EbvFrontSecondaryColor || builtIn == EbvBackSecondaryColor;
+                    if (isColorOutput && fieldType->isVector() && fieldType->getVectorSize() >= 4) {
+                        if (TIntermNode *discardNode = createAlphaTestDiscardNode(derefIn)) {
+                            aggregateNode = m_intermediate.growAggregate(aggregateNode, discardNode);
+                        }
+                        if (m_pixelShaderSRGBWriteEnabled) {
+                            if (TIntermTyped *encodedNode = createSRGBEncodeNode(derefIn)) {
+                                derefIn = encodedNode;
+                            }
+                        }
+                    }
                     aggregateNode = m_intermediate.growAggregate(
                         aggregateNode, m_intermediate.addAssign(EOpAssign, derefOut, derefIn, TSourceLoc()));
                 }
@@ -4050,7 +4209,28 @@ ParserContext::createBuiltInPixelShaderOutputAssignmentNode(const TType &outputT
         auto it = m_pixelShaderBuiltInVariableConversions.find(builtIn);
         if (it != m_pixelShaderBuiltInVariableConversions.end()) {
             if (TIntermTyped *derefOut = createOutputNode(&outputType, builtIn, it->second)) {
-                assignmentNode = m_intermediate.addAssign(EOpAssign, derefOut, node, TSourceLoc());
+                TIntermTyped *valueNode = node;
+                TIntermNode *statementNode = nullptr;
+                if (outputType.getVectorSize() >= 4) {
+                    if (TIntermNode *discardNode = createAlphaTestDiscardNode(node)) {
+                        statementNode = discardNode;
+                    }
+                    if (m_pixelShaderSRGBWriteEnabled) {
+                        if (TIntermTyped *encodedNode = createSRGBEncodeNode(node)) {
+                            valueNode = encodedNode;
+                        }
+                    }
+                }
+                TIntermTyped *assignStatementNode = m_intermediate.addAssign(EOpAssign, derefOut, valueNode, TSourceLoc());
+                if (statementNode != nullptr) {
+                    TIntermAggregate *sequenceNode = m_intermediate.growAggregate(nullptr, statementNode);
+                    sequenceNode = m_intermediate.growAggregate(sequenceNode, assignStatementNode);
+                    sequenceNode->setOperator(EOpSequence);
+                    assignmentNode = sequenceNode;
+                }
+                else {
+                    assignmentNode = assignStatementNode;
+                }
             }
         }
     }

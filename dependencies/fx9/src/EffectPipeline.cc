@@ -1530,6 +1530,37 @@ configurePointSizeAssignment(ParserContext &parser, Fx9__Effect__Pass *message)
     parser.setPointScaleState(pointScaleEnabled, pointScaleA, pointScaleB, pointScaleC);
 }
 
+static void
+configurePixelShaderOutputState(ParserContext &parser, Fx9__Effect__Pass *message)
+{
+    bool alphaTestEnabled = false;
+    uint32_t alphaTestReference = 0;
+    uint32_t alphaTestCompareFunc = 8 /* D3DCMP_ALWAYS */;
+    bool srgbWriteEnabled = false;
+    for (size_t i = 0, numStates = message->n_render_states; i < numStates; i++) {
+        const Fx9__Effect__RenderState *state = message->render_states[i];
+        /* D3DRS_ALPHATESTENABLE */
+        if (state->key == 15) {
+            alphaTestEnabled = state->value != 0;
+        }
+        /* D3DRS_ALPHAREF (0..255) */
+        else if (state->key == 24) {
+            alphaTestReference = state->value;
+        }
+        /* D3DRS_ALPHAFUNC (D3DCMP values) */
+        else if (state->key == 25) {
+            alphaTestCompareFunc = state->value;
+        }
+        /* D3DRS_SRGBWRITEENABLE */
+        else if (state->key == 194) {
+            srgbWriteEnabled = state->value != 0;
+        }
+    }
+    const uint32_t clampedReference = alphaTestReference > 0xff ? 0xff : alphaTestReference;
+    const float reference = static_cast<float>(clampedReference) / 255.0f;
+    parser.setPixelShaderOutputState(alphaTestEnabled, reference, int(alphaTestCompareFunc), srgbWriteEnabled);
+}
+
 } /* namespace anonymous */
 
 EffectPipeline::GLSLPassShader::GLSLPassShader(
@@ -1547,6 +1578,8 @@ EffectPipeline::GLSLPassShader::configureParserContext(ParserContext &parser)
 {
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     configurePointSizeAssignment(parser, message);
+    configurePixelShaderOutputState(parser, message);
+    configurePixelShaderOutputState(parser, message);
 }
 
 bool
@@ -1613,6 +1646,7 @@ EffectPipeline::HLSLPassShader::configureParserContext(ParserContext &parser)
 {
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     configurePointSizeAssignment(parser, message);
+    configurePixelShaderOutputState(parser, message);
     parser.enableUniformBuffer();
     ParserContext::BuiltInLocationMap value;
     for (auto it : m_parent->m_vertexShaderInputLocations) {
@@ -1673,6 +1707,7 @@ EffectPipeline::MSLPassShader::configureParserContext(ParserContext &parser)
 {
     Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     configurePointSizeAssignment(parser, message);
+    configurePixelShaderOutputState(parser, message);
     parser.enableUniformBuffer();
     parser.setVertexShaderInputMap(m_parent->m_vertexShaderInputLocations);
 }
@@ -1750,7 +1785,9 @@ EffectPipeline::SPIRVPassShader::~SPIRVPassShader()
 void
 EffectPipeline::SPIRVPassShader::configureParserContext(ParserContext &parser)
 {
+    Fx9__Effect__Pass *message = static_cast<Fx9__Effect__Pass *>(m_opaque);
     parser.enableUniformBuffer();
+    configurePixelShaderOutputState(parser, message);
 }
 
 bool

@@ -8,7 +8,7 @@ float4 ps_main(float4 color : COLOR0) : COLOR0 { return color; }
 technique alpha_test < string ScriptClass = "object"; > {
   pass main {
     AlphaTestEnable = true;
-    AlphaRef = 0.5;
+    AlphaRef = 128;
     AlphaFunc = Greater;
     SrcBlend = SrcAlpha;
     DestBlend = InvSrcAlpha;

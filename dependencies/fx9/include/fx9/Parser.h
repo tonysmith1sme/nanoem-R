@@ -243,6 +243,11 @@ public:
     void setPointSizeRange(float minValue, float maxValue);
     void setPointSpriteEnabled(bool value);
     void setPointScaleState(bool enabled, float a, float b, float c);
+    /* D3DRS_ALPHATESTENABLE/ALPHAREF/ALPHAFUNC + D3DRS_SRGBWRITEENABLE are baked into the
+       synthetic pixel shader main so every backend language (GLSL/ESSL/HLSL/MSL/SPIR-V)
+       receives them, replacing the source-text injection that only covered HLSL/GLSL */
+    void setPixelShaderOutputState(bool alphaTestEnabled, float alphaTestReference, int alphaTestCompareFunc,
+        bool srgbWriteEnabled);
 
     atom_t allocateIntermNode(TIntermNode *node);
     atom_t acceptTrueLiteral(const LexerToken *token);
@@ -357,6 +362,12 @@ private:
     glslang::TIntermTyped *swizzleVectorNode(glslang::TIntermTyped *baseNode, const glslang::TType &type);
     glslang::TIntermTyped *swizzleVectorNode(glslang::TIntermTyped *baseNode, int index);
     glslang::TIntermTyped *indexVectorNode(glslang::TIntermTyped *baseNode, int index);
+    glslang::TIntermTyped *createFloatConstantNode(float value);
+    glslang::TIntermTyped *createVectorConstantNode(float x, float y, float z, int vectorSize);
+    glslang::TIntermTyped *createBuiltInBinaryFunctionNode(
+        glslang::TOperator op, glslang::TIntermTyped *leftNode, glslang::TIntermTyped *rightNode, const glslang::TType &returnType);
+    glslang::TIntermTyped *createSRGBEncodeNode(glslang::TIntermTyped *colorNode);
+    TIntermNode *createAlphaTestDiscardNode(glslang::TIntermTyped *colorNode);
     TIntermNode *createTextureSamplerAccessor(const glslang::TType &samplerType,
         const glslang::TIntermSymbol *textureNameNode, size_t samplerIndex, glslang::TIntermAggregate *argumentsNode,
         glslang::TIntermBinary *semanticAnnotationNode);
@@ -501,6 +512,10 @@ private:
     float m_pointScaleA = 1.0f;
     float m_pointScaleB = 0.0f;
     float m_pointScaleC = 0.0f;
+    bool m_pixelShaderAlphaTestEnabled = false;
+    float m_pixelShaderAlphaTestReference = 0.0f;
+    int m_pixelShaderAlphaTestCompareFunc = 8 /* D3DCMP_ALWAYS */;
+    bool m_pixelShaderSRGBWriteEnabled = false;
     int m_uniqueID = 1;
     bool m_enableAcceptingVariable = true;
     bool m_enableUniformBuffer = false;
