@@ -144,6 +144,7 @@ jobs:
             -DNANOEM_ENABLE_ICU=ON \
             -DNANOEM_ENABLE_MIMALLOC=ON \
             -DNANOEM_ENABLE_NMD=ON \
+            -DNANOEM_ENABLE_SANDBOX=ON \
             -DNANOEM_ENABLE_TBB=OFF \
             -DNANOEM_ENABLE_TEST=ON \
             -DNANOEM_INSTALL_EFFECT_PLUGIN=ON \
@@ -158,6 +159,12 @@ jobs:
         run: |
           cd ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}
           ctest
+      - name: test fx9 effect corpus baseline
+        run: |
+          cd ${{ github.workspace }}
+          ${{ env.NANOEM_BUILD_ARTIFACT_DIRECTORY }}/sandbox/nanoem_sandbox_effect_corpus --language glsl \
+            --manifest dependencies/fx9/test/effects/corpus/manifest.txt \
+            dependencies/fx9/test/effects/corpus --output /tmp/effect_corpus.jsonl
       - name: archive out directory
         run: |
           cd ${{ github.workspace }}
