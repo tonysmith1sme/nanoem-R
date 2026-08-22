@@ -668,12 +668,26 @@ prepareEffectSource(const std::string &path, const std::string &source)
          2) Source normalizer (encoding / escapes)
          3) Legacy effect construct expansion (DefTech)
          4) Macro redefinition hygiene (must run last so injected #defines are clean)
-     */
+     Each stage reports when it rewrites the source (FX9_LOG_SOURCE_SHIMS=1) so applied
+     compatibility shims stay observable instead of silently morphing effect sources. */
+    static const bool reportShims = [] {
+        const char *value = getenv("FX9_LOG_SOURCE_SHIMS");
+        return value != nullptr && *value != '\0' && strcmp(value, "0") != 0;
+    }();
+    auto reportStage = [&path](const char *stage, const std::string &before, const std::string &after) {
+        if (reportShims && before != after) {
+            fprintf(stderr, "[fx9] source shim applied: %s (%s)\n", stage, path.c_str());
+        }
+    };
     std::string stage = runCompatibilityRules(path, source);
-    stage = runSourceNormalizer(stage);
-    stage = runLegacyEffectRules(stage);
-    stage = normalizeRedefineMacros(stage);
-    return stage;
+    reportStage("compatibility", source, stage);
+    std::string normalized = runSourceNormalizer(stage);
+    reportStage("normalizer", stage, normalized);
+    std::string expanded = runLegacyEffectRules(normalized);
+    reportStage("legacy", normalized, expanded);
+    std::string hygiened = normalizeRedefineMacros(expanded);
+    reportStage("macro-hygiene", expanded, hygiened);
+    return hygiened;
 }
 
 } /* namespace translation */
