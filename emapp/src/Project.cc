@@ -52,6 +52,9 @@
 #include "emapp/internal/project/Track.h"
 #include "emapp/model/Morph.h"
 #include "emapp/private/CommonInclude.h"
+
+#include <stdlib.h> /* getenv */
+#include <string.h> /* strcmp */
 #include "protoc/application.pb-c.h"
 
 #include "bx/handlealloc.h"
@@ -292,6 +295,7 @@ const char *const Project::kFileSystemBasedNativeFormatFileExtension = "nmm";
 const char *const Project::kPolygonMovieMakerFileExtension = "pmm";
 const char *const Project::kViewportPrimaryName = "@nanoem/Viewport/Primary";
 const char *const Project::kViewportSecondaryName = "@nanoem/Viewport/Secondary";
+const char *const Project::kViewportResolvedName = "@nanoem/Viewport/Resolved";
 const nanoem_frame_index_t Project::kMinimumBaseDuration = 300u;
 const nanoem_frame_index_t Project::kMaximumBaseDuration = (1u << 31) - 1; // INT32_MAX
 const nanoem_f32_t Project::kDefaultCircleRadiusSize = 7.5f;
@@ -924,7 +928,7 @@ Project::Pass::Pass(Project *project, const char *name)
 }
 
 void
-Project::Pass::update(const Vector2UI16 &size)
+Project::Pass::update(const Vector2UI16 &size, int sampleCountOverride)
 {
     SG_PUSH_GROUPF("Project::Pass::update(name=%s, width=%d, height=%d)", m_name.c_str(), size.x, size.y);
     sg_image_desc id;
@@ -942,7 +946,7 @@ Project::Pass::update(const Vector2UI16 &size)
     id.pixel_format = colorPixelFormat;
     id.mag_filter = id.min_filter = SG_FILTER_LINEAR;
     id.wrap_u = id.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    id.sample_count = enableMSAA ? m_project->sampleCount() : 1;
+    id.sample_count = sampleCountOverride > 0 ? sampleCountOverride : (enableMSAA ? m_project->sampleCount() : 1);
     sg::destroy_image(m_colorImage);
     m_colorImage = sg::make_image(&id);
     nanoem_assert(sg::query_image_state(m_colorImage) == SG_RESOURCESTATE_VALID, "color image must be valid");
@@ -1248,6 +1252,7 @@ Project::Project(const Injector &injector)
     , m_objectHandleAllocator(nullptr)
     , m_viewportPrimaryPass(this, kViewportPrimaryName)
     , m_viewportSecondaryPass(this, kViewportSecondaryName)
+    , m_viewportResolvedPass(this, kViewportResolvedName)
     , m_context2DPass(this, "@nanoem/Context2D")
     , m_editingFPS(0)
     , m_boneInterpolationType(NANOEM_MOTION_BONE_KEYFRAME_INTERPOLATION_TYPE_FIRST_ENUM)
@@ -2751,6 +2756,7 @@ Project::resetAllPasses()
             internalResetAllRenderTargets(imageSize);
             m_viewportPrimaryPass.update(imageSize);
             m_viewportSecondaryPass.update(imageSize);
+            m_viewportResolvedPass.update(imageSize, 1);
             m_context2DPass.update(layoutSize);
             m_camera->update();
             m_lastDrawnRenderPass = m_viewportPrimaryPass.m_handle;
@@ -2990,9 +2996,16 @@ Project::drawViewport()
             }
         }
         drawViewport(IEffect::kScriptOrderTypeStandard, m_drawType);
+        const bool resolveChainActive = isEffectResolveChainActive();
         if (isDrawingColorType) {
             if (isGroundShadowEnabled()) {
                 drawViewport(IEffect::kScriptOrderTypeStandard, IDrawable::kDrawTypeGroundShadow);
+            }
+            if (resolveChainActive) {
+                /* resolve the multisampled scene into the 1x image so the whole post
+                   process effect chain runs at 1x like D3D9/MMD semantics dictate */
+                blitRenderPass(sharedBatchDrawQueue(), m_viewportResolvedPass.m_handle,
+                    m_viewportPrimaryPass.m_handle, m_viewportPassBlitter);
             }
             drawViewport(IEffect::kScriptOrderTypePostProcess, IDrawable::kDrawTypeColor);
             if (m_physicsEngine->debugGeometryFlags() != 0) {
@@ -3005,6 +3018,12 @@ Project::drawViewport()
                 }
             }
             dd::flush();
+            if (resolveChainActive) {
+                /* composite the post processed 1x result back into the primary image so
+                   downstream consumers (screentex blit, ImGui present, capture) are unchanged */
+                blitRenderPass(sharedBatchDrawQueue(), m_viewportPrimaryPass.m_handle,
+                    m_viewportResolvedPass.m_handle, m_viewportPassBlitter);
+            }
             blitRenderPass(sharedBatchDrawQueue(), m_viewportSecondaryPass.m_handle, m_viewportPrimaryPass.m_handle,
                 m_viewportPassBlitter);
         }
@@ -3215,6 +3234,51 @@ Project::getViewportRenderPassDepthImageDescription(sg_pass_desc &pd, sg_image_d
 {
     pd.depth_stencil_attachment.image = m_viewportPrimaryPass.m_depthImage;
     BX_UNUSED_1(id);
+}
+
+void
+Project::getViewportRenderPassResolvedColorImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT
+{
+    id.pixel_format = viewportPixelFormat();
+    id.sample_count = 1;
+    pd.color_attachments[0].image = m_viewportResolvedPass.m_colorImage;
+    const Vector2UI16 imageSize(deviceScaleViewportPrimaryImageSize());
+    id.width = imageSize.x;
+    id.height = imageSize.y;
+}
+
+void
+Project::getViewportRenderPassResolvedDepthImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT
+{
+    pd.depth_stencil_attachment.image = m_viewportResolvedPass.m_depthImage;
+    id.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+    id.sample_count = 1;
+    const Vector2UI16 imageSize(deviceScaleViewportPrimaryImageSize());
+    id.width = imageSize.x;
+    id.height = imageSize.y;
+}
+
+bool
+Project::hasActiveScriptOrderEffect(IEffect::ScriptOrderType order) const NANOEM_DECL_NOEXCEPT
+{
+    EffectOrderSet::const_iterator it = m_effectOrderSet.find(order);
+    return it != m_effectOrderSet.end() && !it->second.empty();
+}
+
+bool
+Project::isEffectResolveChainEnabled() const NANOEM_DECL_NOEXCEPT
+{
+    static const bool disabled = [] {
+        const char *value = getenv("NANOEM_DISABLE_EFFECT_RESOLVE_CHAIN");
+        return value != nullptr && *value != '\0' && strcmp(value, "0") != 0;
+    }();
+    return !disabled;
+}
+
+bool
+Project::isEffectResolveChainActive() const NANOEM_DECL_NOEXCEPT
+{
+    return isEffectResolveChainEnabled() && sampleCount() > 1 && hasActiveScriptOrderEffect(IEffect::kScriptOrderTypePostProcess);
 }
 
 bool

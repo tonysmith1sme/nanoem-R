@@ -6398,8 +6398,17 @@ Effect::setRenderTargetColorImageDescription(const IDrawable *drawable, size_t r
                     m_currentRenderTargetPassDescription, destColorImageDescription) &&
                 !m_project->getScriptExternalRenderPassColorImageDescription(
                     m_currentRenderTargetPassDescription, destColorImageDescription)) {
-                m_project->getViewportRenderPassColorImageDescription(
-                    m_currentRenderTargetPassDescription, destColorImageDescription);
+                if (m_scriptOrder == kScriptOrderTypePostProcess && m_project->isEffectResolveChainActive()) {
+                    /* the resolve chain moved the post process viewport to the 1x image;
+                       keep the whole effect chain single sampled to avoid mixed passes */
+                    m_project->getViewportRenderPassResolvedColorImageDescription(
+                        m_currentRenderTargetPassDescription, destColorImageDescription);
+                    numSamples = 1;
+                }
+                else {
+                    m_project->getViewportRenderPassColorImageDescription(
+                        m_currentRenderTargetPassDescription, destColorImageDescription);
+                }
             }
             else if (destColorImageDescription.sample_count > 0) {
                 numSamples = destColorImageDescription.sample_count;
@@ -6443,7 +6452,11 @@ Effect::setRenderTargetDepthStencilImageDescription(const String &value)
         sg_image_desc &colorImageDesc = m_currentNamedPrimaryRenderTargetColorImageDescription.second;
         if (!m_project->getOriginOffscreenRenderPassDepthImageDescription(
                 m_currentRenderTargetPassDescription, colorImageDesc)) {
-            if (m_scriptOrder == kScriptOrderTypePostProcess ||
+            if (m_scriptOrder == kScriptOrderTypePostProcess && m_project->isEffectResolveChainActive()) {
+                m_project->getViewportRenderPassResolvedDepthImageDescription(
+                    m_currentRenderTargetPassDescription, colorImageDesc);
+            }
+            else if (m_scriptOrder == kScriptOrderTypePostProcess ||
                 !m_project->getCurrentRenderPassDepthImageDescription(
                     m_currentRenderTargetPassDescription, colorImageDesc)) {
                 m_project->getViewportRenderPassDepthImageDescription(

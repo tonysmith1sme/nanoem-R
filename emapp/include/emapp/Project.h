@@ -216,6 +216,7 @@ public:
     static const char *const kPolygonMovieMakerFileExtension;
     static const char *const kViewportPrimaryName;
     static const char *const kViewportSecondaryName;
+    static const char *const kViewportResolvedName;
     static const nanoem_frame_index_t kMinimumBaseDuration;
     static const nanoem_frame_index_t kMaximumBaseDuration;
     static const nanoem_f32_t kDefaultCircleRadiusSize;
@@ -388,6 +389,15 @@ public:
     bool getRenderPassColorImageDescription(
         sg_pass pass, sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
     void getViewportRenderPassColorImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
+    /* 1x resolved copies of the viewport images feeding the post process effect chain */
+    void getViewportRenderPassResolvedColorImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
+    void getViewportRenderPassResolvedDepthImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
+    /* true when any drawable registers an effect of the given script order */
+    bool hasActiveScriptOrderEffect(IEffect::ScriptOrderType order) const NANOEM_DECL_NOEXCEPT;
+    /* resolve chain inserts an Nx -> 1x boundary so the whole post process effect chain
+       runs at 1x like D3D9/MMD does (NANOEM_DISABLE_EFFECT_RESOLVE_CHAIN turns it off) */
+    bool isEffectResolveChainEnabled() const NANOEM_DECL_NOEXCEPT;
+    bool isEffectResolveChainActive() const NANOEM_DECL_NOEXCEPT;
     bool getOriginOffscreenRenderPassDepthImageDescription(
         sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
     bool getCurrentRenderPassDepthImageDescription(sg_pass_desc &pd, sg_image_desc &id) const NANOEM_DECL_NOEXCEPT;
@@ -619,6 +629,7 @@ public:
     sg_pass viewportPrimaryPass() const NANOEM_DECL_NOEXCEPT;
     sg_image viewportPrimaryImage() const NANOEM_DECL_NOEXCEPT;
     sg_image viewportSecondaryImage() const NANOEM_DECL_NOEXCEPT;
+    sg_image viewportResolvedImage() const NANOEM_DECL_NOEXCEPT;
     sg_image context2DImage() const NANOEM_DECL_NOEXCEPT;
     sg_pass context2DPass() const NANOEM_DECL_NOEXCEPT;
     bool containsDrawableToAttachOffscreenRenderTargetEffect(
@@ -744,7 +755,7 @@ private:
     struct SerialDrawQueue;
     struct Pass {
         Pass(Project *project, const char *name);
-        void update(const Vector2UI16 &size);
+        void update(const Vector2UI16 &size, int sampleCountOverride = 0);
         void getDescription(sg_pass_desc &pd) const NANOEM_DECL_NOEXCEPT;
         void destroy();
         Project *m_project;
@@ -965,6 +976,7 @@ private:
     SGHandleStringMap m_renderPipelineStringMap;
     Pass m_viewportPrimaryPass;
     Pass m_viewportSecondaryPass;
+    Pass m_viewportResolvedPass;
     Pass m_context2DPass;
     FPSUnit m_preferredMotionFPS;
     nanoem_u32_t m_editingFPS;
