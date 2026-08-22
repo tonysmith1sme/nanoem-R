@@ -353,7 +353,7 @@ main(int argc, char *argv[])
     }
 
     Compiler::initialize();
-    size_t numOK = 0, numFail = 0, numCached = 0, numRegressions = 0;
+    size_t numOK = 0, numFail = 0, numCached = 0, numFragments = 0, numRegressions = 0;
     for (auto it = effects.begin(), end = effects.end(); it != end; ++it) {
         const std::string &path = *it;
         struct stat st;
@@ -370,6 +370,7 @@ main(int argc, char *argv[])
             numCached++;
             numOK += cacheIt->second.status == "ok";
             numFail += cacheIt->second.status == "fail";
+            numFragments += cacheIt->second.status == "fragment";
             continue;
         }
         std::string status = "fail", reason, bucket;
@@ -439,8 +440,16 @@ main(int argc, char *argv[])
                 }
             }
         }
+        /* .fxsub files are include fragments: failing to compile standalone is expected
+           because they reference symbols provided by their includer, so classify them
+           separately instead of polluting the failure statistics */
+        const bool isFragment = status != "ok" && path.size() > 6 && path.compare(path.size() - 6, 6, ".fxsub") == 0;
+        if (isFragment) {
+            status = "fragment";
+        }
         numOK += status == "ok";
         numFail += status == "fail";
+        numFragments += isFragment;
         fputc('{', output);
         fputs("\"path\":", output);
         writeJSONString(output, path);
@@ -474,7 +483,7 @@ main(int argc, char *argv[])
         fclose(output);
     }
     fprintf(stderr,
-        "effect_corpus: %zu effects (%zu ok, %zu fail, %zu cached) language=%s%s\n", effects.size(), numOK, numFail,
-        numCached, languageName, numRegressions > 0 ? " - REGRESSIONS DETECTED" : "");
+        "effect_corpus: %zu effects (%zu ok, %zu fail, %zu fragments, %zu cached) language=%s%s\n", effects.size(),
+        numOK, numFail, numFragments, numCached, languageName, numRegressions > 0 ? " - REGRESSIONS DETECTED" : "");
     return numRegressions > 0 ? 2 : 0;
 }

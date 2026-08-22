@@ -32,15 +32,18 @@ def main():
     if len(sys.argv) == 2:
         entries, order = load(sys.argv[1])
         num_ok = sum(1 for p in order if entries[p]["status"] == "ok")
-        num_fail = len(order) - num_ok
+        num_fragment = sum(1 for p in order if entries[p]["status"] == "fragment")
+        num_fail = len(order) - num_ok - num_fragment
         for path in order:
             entry = entries[path]
             name = path.rsplit("/", 1)[-1]
             if entry["status"] == "ok":
-                print("  ok    %-32s %d/%d passes" % (name, entry["numCompiled"], entry["numPasses"]))
+                print("  ok       %-32s %d/%d passes" % (name, entry["numCompiled"], entry["numPasses"]))
+            elif entry["status"] == "fragment":
+                print("  fragment %-32s %s" % (name, short_reason(entry)))
             else:
-                print("  FAIL  %-32s [%s] %s" % (name, entry.get("bucket", "?"), short_reason(entry)))
-        print("\ntotal: %d effects, %d ok, %d fail" % (len(order), num_ok, num_fail))
+                print("  FAIL     %-32s [%s] %s" % (name, entry.get("bucket", "?"), short_reason(entry)))
+        print("\ntotal: %d effects, %d ok, %d fail, %d fragments" % (len(order), num_ok, num_fail, num_fragment))
         return 0 if num_fail == 0 else 1
     if len(sys.argv) == 3:
         old, _ = load(sys.argv[1])
