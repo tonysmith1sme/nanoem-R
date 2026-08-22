@@ -132,6 +132,14 @@ function(nanoem_emapp_build_emapp suffix)
   aux_source_directory(${PROJECT_SOURCE_DIR}/emapp/src/internal/project EMAPP_NS_INTERNAL_PROJECT_SOURCES)
   aux_source_directory(${PROJECT_SOURCE_DIR}/emapp/src/plugin EMAPP_NS_PLUGIN_SOURCES)
   aux_source_directory(${PROJECT_SOURCE_DIR}/emapp/include EMAPP_CORE_HEADERS)
+  # Finder-style duplicates ("Effect 2.cc") previously sneaked into these globs and
+  # linked stale implementations over the live ones; reject any path with a space.
+  foreach(_sources
+      EMAPP_PROTOC_SOURCES EMAPP_CORE_SOURCES EMAPP_NS_COMMAND_SOURCES EMAPP_NS_EFFECT_SOURCES
+      EMAPP_NS_MODEL_SOURCES EMAPP_NS_INTERNAL_SOURCES EMAPP_NS_INTERNAL_IMGUI_SOURCES
+      EMAPP_NS_INTERNAL_PROJECT_SOURCES EMAPP_NS_PLUGIN_SOURCES EMAPP_CORE_HEADERS)
+    list(FILTER ${_sources} EXCLUDE REGEX " ")
+  endforeach()
   add_library(${_emapp_protoc_name} STATIC ${EMAPP_PROTOC_SOURCES})
   nanoem_cmake_enable_lto(${_emapp_protoc_name})
   set_property(TARGET ${_emapp_protoc_name} PROPERTY FOLDER nanoem/resources)
