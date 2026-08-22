@@ -6,6 +6,8 @@
 
 #include "emapp/effect/Common.h"
 
+#include "dx9rt/Resolver.h"
+
 #include "emapp/Constants.h"
 #include "emapp/StringUtils.h"
 #include "emapp/effect/GlobalUniform.h"
@@ -17,6 +19,8 @@
 #include "../protoc/effect.pb-c.h"
 
 #include <ctype.h> /* tolower */
+#include <cstdlib> /* getenv */
+#include <string.h> /* strcmp */
 
 namespace nanoem {
 namespace effect {
@@ -1906,6 +1910,56 @@ Logger::log(const char *format, ...)
     int length = StringUtils::formatVA(message, sizeof(message), format, args);
     va_end(args);
     add(message, length);
+}
+
+bool
+isDX9RuntimeEffectEnabled() NANOEM_DECL_NOEXCEPT
+{
+    static const bool enabled = [] {
+        const char *value = getenv("NANOEM_ENABLE_DX9RT_EFFECT");
+        return value != nullptr && *value != '\0' && strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+void
+applyDX9StateVector(PipelineDescriptor &pd) NANOEM_DECL_NOEXCEPT
+{
+    sg_pipeline_desc &body = pd.m_body;
+    dx9rt::ResolvedExtraStates extra;
+    dx9rt::ResolveDiagnostics diagnostics;
+    dx9rt::resolvePipeline(pd.m_stateVector, body, extra, &diagnostics);
+    /* cull mode is declared relative to the winding the drawable established, so
+       translate D3DCULL_* against body.face_winding like resolveCullMode does */
+    if (body.face_winding != _SG_FACEWINDING_DEFAULT) {
+        switch (pd.m_stateVector.renderState(dx9rt::kRenderStateCullMode)) {
+        case dx9rt::kCullModeNone:
+            body.cull_mode = SG_CULLMODE_NONE;
+            break;
+        case dx9rt::kCullModeCW:
+            body.cull_mode = body.face_winding == SG_FACEWINDING_CCW ? SG_CULLMODE_BACK : SG_CULLMODE_FRONT;
+            break;
+        case dx9rt::kCullModeCCW:
+        default:
+            body.cull_mode = body.face_winding == SG_FACEWINDING_CCW ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK;
+            break;
+        }
+    }
+    /* keep shader/runtime level consumers consistent with the resolved vector:
+       legacy binary effects still rely on the text injection driven by these flags,
+       and the scissor reset in Effect::internalDrawRenderPass reads them too */
+    pd.m_hasAlphaTestEnabled = true;
+    pd.m_alphaTestEnabled = extra.alphaTestEnabled;
+    pd.m_hasAlphaTestReference = true;
+    pd.m_alphaTestReference = extra.alphaTestReference;
+    pd.m_hasAlphaTestCompareFunc = true;
+    pd.m_alphaTestCompareFunc = _SG_COMPAREFUNC_DEFAULT;
+    RenderState::convertCompareFunc(
+        static_cast<nanoem_u32_t>(extra.alphaTestCompareFunc), pd.m_alphaTestCompareFunc);
+    pd.m_hasSRGBWriteEnabled = true;
+    pd.m_srgbWriteEnabled = extra.srgbWriteEnabled;
+    pd.m_hasScissorTestEnabled = true;
+    pd.m_scissorTestEnabled = extra.scissorTestEnabled;
 }
 
 } /* namespace effect */

@@ -11,6 +11,8 @@
 #include "emapp/IEffect.h"
 #include "emapp/PixelFormat.h"
 
+#include "dx9rt/StateVector.h"
+
 #include "emapp/effect/GlobalUniform.h"
 
 namespace nanoem {
@@ -89,6 +91,11 @@ struct PipelineDescriptor {
     bool m_hasStencilRef;
     bool m_hasStencilReadMask;
     bool m_hasStencilWriteMask;
+    /* authoritative D3D9 state vector captured from the pass render states; when the
+       dx9rt effect runtime is enabled (NANOEM_ENABLE_DX9RT_EFFECT) it resolves the
+       pipeline description from the documented D3D9 defaults instead of the
+       incremental sokol-default merge above */
+    dx9rt::StateVector m_stateVector;
 };
 
 enum ParameterType {
@@ -408,6 +415,17 @@ public:
     static void convertPipeline(nanoem_u32_t key, nanoem_u32_t value, PipelineDescriptor &desc);
     static void normalizeMinFilter(sg_filter &value);
 };
+
+/* Returns true when the dx9rt effect runtime is activated through the
+   NANOEM_ENABLE_DX9RT_EFFECT environment variable (evaluated once). While
+   enabled, pipeline descriptions resolve from the captured D3D9 state vector
+   with the documented Direct3D 9 defaults instead of the incremental merge. */
+bool isDX9RuntimeEffectEnabled() NANOEM_DECL_NOEXCEPT;
+
+/* Resolve pd.m_stateVector into pd.m_body honoring faceWinding for cull mode
+   translation, and refresh the shader/runtime level flags (alpha test, sRGB
+   write, scissor) from the vector so legacy consumers stay consistent. */
+void applyDX9StateVector(PipelineDescriptor &pd) NANOEM_DECL_NOEXCEPT;
 
 class Logger NANOEM_DECL_SEALED : private NonCopyable {
 public:

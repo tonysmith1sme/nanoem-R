@@ -2075,6 +2075,9 @@ Effect::load(const nanoem_u8_t *data, size_t size, Progress &progress, Error &er
                         for (RenderStateList::const_iterator it = states.begin(), end = states.end(); it != end; ++it) {
                             const Fx9__Effect__RenderState *state = *it;
                             effect::RenderState::convertPipeline(state->key, state->value, pd);
+                            /* capture the pass states into the authoritative D3D9 vector for
+                               the dx9rt effect runtime (NANOEM_ENABLE_DX9RT_EFFECT) */
+                            pd.m_stateVector.setRenderState(state->key, state->value);
                         }
                         SG_POP_GROUP();
                         if (const char *name = vertexShader->uniform_block_name) {

@@ -525,6 +525,9 @@ Technique::overrideObjectPipelineDescription(
     }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
+    if (isDX9RuntimeEffectEnabled()) {
+        applyDX9StateVector(pd);
+    }
     m_effect->overridePipelineDescription(body, Effect::kScriptClassTypeObject);
     SG_POP_GROUP();
 }
@@ -557,6 +560,9 @@ Technique::overrideScenePipelineDescription(
     }
     overrideDepthState(pd, m_pipelineDescription.depth, body.depth);
     overrideStencilState(pd, m_pipelineDescription.stencil, body.stencil);
+    if (isDX9RuntimeEffectEnabled()) {
+        applyDX9StateVector(pd);
+    }
     m_effect->overridePipelineDescription(body, Effect::kScriptClassTypeScene);
 }
 
