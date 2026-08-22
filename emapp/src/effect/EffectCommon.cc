@@ -1929,6 +1929,17 @@ applyDX9StateVector(PipelineDescriptor &pd) NANOEM_DECL_NOEXCEPT
     dx9rt::ResolvedExtraStates extra;
     dx9rt::ResolveDiagnostics diagnostics;
     dx9rt::resolvePipeline(pd.m_stateVector, body, extra, &diagnostics);
+    /* surface non-exact dispositions once per state so degraded MME behavior is
+       observable instead of silent (the degradation report) */
+    static tinystl::unordered_set<nanoem_u32_t, TinySTLAllocator> reportedStates;
+    for (int i = 0; i < diagnostics.numNotes; i++) {
+        const dx9rt::ResolveNote &note = diagnostics.notes[i];
+        if (note.disposition != dx9rt::kDispositionImplemented &&
+            reportedStates.find(note.key) == reportedStates.end()) {
+            reportedStates.insert(note.key);
+            EMLOG_INFO("[dx9rt] render state {} disposition={} ({})", note.key, int(note.disposition), note.note);
+        }
+    }
     /* cull mode is declared relative to the winding the drawable established, so
        translate D3DCULL_* against body.face_winding like resolveCullMode does */
     if (body.face_winding != _SG_FACEWINDING_DEFAULT) {
