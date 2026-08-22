@@ -195,11 +195,24 @@ RenderTargetMipmapGenerator::generateAllMipmapImages(
 void
 RenderTargetMipmapGenerator::destroy(Effect *effect) NANOEM_DECL_NOEXCEPT
 {
-    SG_PUSH_GROUPF("effect::RenderTargetMipmapGenerator::destroy(name=%s)", effect->nameConstString());
+    SG_PUSH_GROUPF("effect::RenderTargetMipmapGenerator::destroy(name=%s)",
+        effect ? effect->nameConstString() : "(orphaned)");
     destroyAllPasses(m_sourcePasses);
     destroyAllPasses(m_destPasses);
-    destroyAllImages(effect, m_sourceColorImages);
-    destroyAllImages(effect, m_sourceDepthImages);
+    if (effect) {
+        destroyAllImages(effect, m_sourceColorImages);
+        destroyAllImages(effect, m_sourceDepthImages);
+    }
+    else {
+        for (SGImageList::const_iterator it = m_sourceColorImages.begin(), end = m_sourceColorImages.end(); it != end;
+             ++it) {
+            sg::destroy_image(*it);
+        }
+        for (SGImageList::const_iterator it = m_sourceDepthImages.begin(), end = m_sourceDepthImages.end(); it != end;
+             ++it) {
+            sg::destroy_image(*it);
+        }
+    }
     m_blitter->destroy();
     SG_POP_GROUP();
 }

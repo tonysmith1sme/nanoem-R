@@ -647,6 +647,11 @@ public:
     void setSharedRenderTargetImageContainer(
         const String &name, const IEffect *parent, effect::RenderTargetColorImageContainer *container);
     void removeAllSharedRenderTargetImageContainers(const IEffect *parent);
+    /* when the dying effect owns a shared render target that other effects still reference,
+     * take the container over so its image survives until the last sharer is destroyed;
+     * returns true when the caller must NOT destroy or delete the container itself */
+    bool detachSharedRenderTargetImageContainer(const String &name, const IEffect *parent,
+        effect::RenderTargetColorImageContainer *container);
     const ITrack *selectedTrack() const NANOEM_DECL_NOEXCEPT;
     ITrack *selectedTrack() NANOEM_DECL_NOEXCEPT;
     void setSelectedTrack(ITrack *value);
@@ -789,6 +794,12 @@ private:
         effect::RenderTargetColorImageContainer *m_container;
         int m_count;
     };
+    /* a shared render target outliving its first (owning) effect: the container is
+     * detached from the dying owner and destroyed when the last sharer goes away */
+    struct OrphanedSharedRenderTargetImage {
+        effect::RenderTargetColorImageContainer *m_container;
+        bool m_offscreen;
+    };
     struct OffscreenRenderTargetCondition {
         String m_pattern;
         Effect *m_passiveEffect;
@@ -813,6 +824,8 @@ private:
         OffscreenRenderTargetEffectSetMap;
     typedef tinystl::unordered_map<String, SharedRenderTargetImageContainer, TinySTLAllocator>
         SharedRenderTargetImageContainerMap;
+    typedef tinystl::unordered_map<String, OrphanedSharedRenderTargetImage, TinySTLAllocator>
+        OrphanedSharedRenderTargetImageMap;
     typedef tinystl::unordered_map<Motion *, IDrawable *, TinySTLAllocator> DrawableMotionSet;
     typedef tinystl::unordered_map<nanoem_u32_t, nanoem_u16_t, TinySTLAllocator> RedoObjectHandleMap;
     typedef tinystl::vector<const effect::OffscreenRenderTargetOption *, TinySTLAllocator>
@@ -947,6 +960,7 @@ private:
     sg_pass m_originOffscreenRenderPass;
     sg_pass m_scriptExternalRenderPass;
     SharedRenderTargetImageContainerMap m_sharedRenderTargetImageContainers;
+    OrphanedSharedRenderTargetImageMap m_orphanedSharedRenderTargetImages;
     EditingMode m_editingMode;
     FilePathMode m_filePathMode;
     TimelineSegment m_playingSegment;

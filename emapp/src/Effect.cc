@@ -2633,6 +2633,34 @@ Effect::destroy()
     destroyAllTechniques();
     destroyAllSemanticImages(m_resourceImages);
     destroyAllRenderTargetDepthStencilImages(m_renderTargetDepthStencilImages);
+    {
+        /* shared render targets this effect created but other effects still sample must
+         * survive this destroy: hand their containers to the project instead of deleting
+         * them below, otherwise every surviving effect samples a destroyed image */
+        DrawableNamedRenderTargetColorImageContainerMap::iterator itDrawable =
+            m_drawableNamedRenderTargetColorImages.find(nullptr);
+        if (itDrawable != m_drawableNamedRenderTargetColorImages.end()) {
+            NamedRenderTargetColorImageContainerMap &containers = itDrawable->second;
+            NamedRenderTargetColorImageContainerMap retained;
+            for (NamedRenderTargetColorImageContainerMap::const_iterator it = containers.begin(),
+                                                                         end = containers.end();
+                 it != end; ++it) {
+                if (!m_project->detachSharedRenderTargetImageContainer(it->first, this, it->second)) {
+                    retained.insert(tinystl::make_pair(it->first, it->second));
+                }
+            }
+            containers = retained;
+        }
+        OffscreenRenderTargetImageContainerMap retainedOffscreen;
+        for (OffscreenRenderTargetImageContainerMap::const_iterator it = m_offscreenRenderTargetImages.begin(),
+                                                                   end = m_offscreenRenderTargetImages.end();
+             it != end; ++it) {
+            if (!m_project->detachSharedRenderTargetImageContainer(it->first, this, it->second)) {
+                retainedOffscreen.insert(tinystl::make_pair(it->first, it->second));
+            }
+        }
+        m_offscreenRenderTargetImages = retainedOffscreen;
+    }
     destroyAllDrawableNamedRenderTargetColorImages();
     destroyAllOffscreenRenderTargetImages(m_offscreenRenderTargetImages);
     destroyAllAnimatedImages(m_animatedTextureImages);

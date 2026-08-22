@@ -4424,6 +4424,17 @@ Project::destroyEffect(Effect *effect)
                     }
                 }
             }
+            /* drop dangling drawable references before freeing the object: holders set
+             * through direct setActiveEffect (e.g. PMM offscreen owners) never bumped the
+             * reference count, so their pointers would read freed memory while rendering */
+            for (DrawableList::const_iterator itDrawable = m_drawableOrderList.begin(),
+                                              endDrawable = m_drawableOrderList.end();
+                 itDrawable != endDrawable; ++itDrawable) {
+                IDrawable *drawable = *itDrawable;
+                if (upcastEffect(drawable->activeEffect()) == effect) {
+                    drawable->setActiveEffect(nullptr);
+                }
+            }
             cancelRenderOffscreenRenderTarget(effect);
             destroyDetachedEffect(effect);
         }
@@ -5559,12 +5570,52 @@ Project::removeAllSharedRenderTargetImageContainers(const IEffect *parent)
     }
     SG_PUSH_GROUPF("Project::removeAllSharedRenderTargetImageContainers(size=%d)", targets.size());
     for (StringList::const_iterator it = targets.begin(), end = targets.end(); it != end; ++it) {
-        SharedRenderTargetImageContainerMap::const_iterator it2 = m_sharedRenderTargetImageContainers.find(*it);
+        SharedRenderTargetImageContainerMap::iterator it2 = m_sharedRenderTargetImageContainers.find(*it);
         if (it2 != m_sharedRenderTargetImageContainers.end()) {
-            m_sharedRenderTargetImageContainers.erase(it2);
+            /* count aware removal: the entry (and an orphaned shared image) only dies when
+             * the last sharer goes away, otherwise surviving effects keep sampling a
+             * destroyed texture ("all materials white" after deleting one MME effect) */
+            if (--it2->second.m_count <= 0) {
+                OrphanedSharedRenderTargetImageMap::iterator it3 = m_orphanedSharedRenderTargetImages.find(*it);
+                if (it3 != m_orphanedSharedRenderTargetImages.end()) {
+                    effect::RenderTargetColorImageContainer *container = it3->second.m_container;
+                    if (it3->second.m_offscreen) {
+                        if (effect::OffscreenRenderTargetImageContainer *offscreen =
+                                static_cast<effect::OffscreenRenderTargetImageContainer *>(container)) {
+                            offscreen->destroy(nullptr);
+                        }
+                    }
+                    else {
+                        container->destroy(nullptr);
+                    }
+                    nanoem_delete(container);
+                    m_orphanedSharedRenderTargetImages.erase(it3);
+                }
+                m_sharedRenderTargetImageContainers.erase(it2);
+            }
         }
     }
     SG_POP_GROUP();
+}
+
+bool
+Project::detachSharedRenderTargetImageContainer(
+    const String &name, const IEffect *parent, effect::RenderTargetColorImageContainer *container)
+{
+    SharedRenderTargetImageContainerMap::iterator it = m_sharedRenderTargetImageContainers.find(name);
+    if (it == m_sharedRenderTargetImageContainers.end() || it->second.m_parent != parent ||
+        it->second.m_container != container || it->second.m_count <= 1) {
+        return false;
+    }
+    /* other effects still share this image: hand the container to the project so the dying
+     * owner must not destroy it; the last sharer releases it through the count above */
+    OrphanedSharedRenderTargetImage orphan;
+    orphan.m_container = container;
+    orphan.m_offscreen = dynamic_cast<const effect::OffscreenRenderTargetImageContainer *>(container) != nullptr;
+    m_orphanedSharedRenderTargetImages.insert(tinystl::make_pair(name, orphan));
+    it->second.m_parent = nullptr;
+    it->second.m_count--;
+    return true;
 }
 
 const ITrack *

@@ -166,7 +166,9 @@ RenderTargetColorImageContainer::destroy(Effect *effect) NANOEM_DECL_NOEXCEPT
 {
     SG_PUSH_GROUPF("effect::RenderTargetColorImageContainer::destroy(name=%s)", m_name.c_str());
     if (!m_sharedTexture) {
-        effect->removeImageLabel(m_colorImage);
+        if (effect) {
+            effect->removeImageLabel(m_colorImage);
+        }
         sg::destroy_image(m_colorImage);
     }
     m_colorImage = { SG_INVALID_ID };

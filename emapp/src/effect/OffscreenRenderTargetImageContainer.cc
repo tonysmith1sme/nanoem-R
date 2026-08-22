@@ -134,9 +134,19 @@ OffscreenRenderTargetImageContainer::destroy(Effect *effect) NANOEM_DECL_NOEXCEP
 {
     SG_PUSH_GROUPF("effect::OffscreenRenderTargetImageContainer::destroy(name=%s)", nameConstString());
     RenderTargetColorImageContainer::destroy(effect);
-    destroyAllImages(effect, m_depthStencilMipmapImages);
+    if (effect) {
+        destroyAllImages(effect, m_depthStencilMipmapImages);
+    }
+    else {
+        for (SGImageList::const_iterator it = m_depthStencilMipmapImages.begin(), end = m_depthStencilMipmapImages.end();
+             it != end; ++it) {
+            sg::destroy_image(*it);
+        }
+    }
     m_depthStencilMipmapImages.clear();
-    effect->removeImageLabel(m_depthStencilImage);
+    if (effect) {
+        effect->removeImageLabel(m_depthStencilImage);
+    }
     sg::destroy_image(m_depthStencilImage);
     m_depthStencilImage = { SG_INVALID_ID };
     SG_POP_GROUP();
