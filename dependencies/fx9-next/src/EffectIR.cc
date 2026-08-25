@@ -20,7 +20,11 @@ EffectModuleIR::canonicalDump() const
     }
     for (std::vector<EffectBindingIR>::const_iterator it = bindings.begin(); it != bindings.end(); ++it) {
         stream << "binding " << it->registerSet << " " << it->registerIndex << " " << it->registerCount << " "
-               << it->type.toString() << " " << it->name << "\n";
+               << it->type.toString() << " " << it->name;
+        if (!it->textureName.empty()) {
+            stream << " -> " << it->textureName;
+        }
+        stream << "\n";
     }
     for (std::vector<EffectTechniqueIR>::const_iterator technique = techniques.begin(); technique != techniques.end();
          ++technique) {

@@ -141,6 +141,7 @@ reserveBinding(std::vector<EffectBindingIR> &bindings, const Variable &variable,
     }
     EffectBindingIR binding;
     binding.name = variable.name;
+    binding.textureName = variable.textureName;
     binding.type = variable.type;
     binding.registerSet = set;
     binding.registerIndex = index;

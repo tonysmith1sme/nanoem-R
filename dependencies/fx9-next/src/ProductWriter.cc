@@ -178,7 +178,9 @@ fillSamplers(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &ef
             s->index = static_cast<uint32_t>(std::atoi(samps[i]->registerName.c_str() + 1));
         }
         s->sampler_name = arena.copy(samps[i]->name);
-        s->texture_name = arena.copy(samps[i]->textureName.empty() ? samps[i]->name : samps[i]->textureName);
+        const std::string &textureName = binding && !binding->textureName.empty() ? binding->textureName :
+            (samps[i]->textureName.empty() ? samps[i]->name : samps[i]->textureName);
+        s->texture_name = arena.copy(textureName);
     }
 }
 

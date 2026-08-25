@@ -13,10 +13,55 @@
 #include "effect.pb-c.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <unistd.h>
+#endif
+
 using namespace fx9next;
+
+bool
+compileMetalSource(const char *source, const char *label)
+{
+#if defined(__APPLE__)
+    if (std::system("xcrun --find metal >/dev/null 2>&1") != 0) {
+        WARN("Apple Metal compiler is unavailable");
+        return true;
+    }
+    char input[] = "/tmp/fx9next-metal-XXXXXX";
+    const int fd = mkstemp(input);
+    if (fd < 0) {
+        WARN("cannot create temporary Metal source");
+        return false;
+    }
+    FILE *fp = fdopen(fd, "w");
+    if (!fp) {
+        close(fd);
+        std::remove(input);
+        return false;
+    }
+    std::fputs(source, fp);
+    std::fclose(fp);
+    std::string output(input);
+    output += ".air";
+    const std::string command = "xcrun metal -c " + output.substr(0, output.size() - 4) + " -o " + output +
+        " >/dev/null 2>&1";
+    const bool ok = std::system(command.c_str()) == 0;
+    if (!ok) {
+        WARN(std::string("Apple Metal compiler rejected ") + label);
+    }
+    std::remove(input);
+    std::remove(output.c_str());
+    return ok;
+#else
+    (void) source;
+    (void) label;
+    return true;
+#endif
+}
 
 TEST_CASE("fx9next parses a pass-through effect")
 {
@@ -37,6 +82,28 @@ TEST_CASE("fx9next parses a pass-through effect")
     REQUIRE(unit.techniques[0].passes.size() == 1);
     REQUIRE(unit.techniques[0].passes[0].vsEntry == "vs_main");
     REQUIRE(unit.techniques[0].passes[0].psEntry == "ps_main");
+}
+
+TEST_CASE("fx9next preserves sampler texture relationship")
+{
+    const char *src =
+        "texture2D diffuseTexture : DIFFUSE;\n"
+        "sampler2D diffuseSampler = sampler_state { Texture = <diffuseTexture>; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
+        "PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "sampler.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->pixel_shader->n_samplers == 1);
+    REQUIRE(std::string(effect->techniques[0]->passes[0]->pixel_shader->samplers[0]->texture_name) ==
+        "diffuseTexture");
+    fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
 TEST_CASE("fx9next compiles pass-through effect to protobuf")
@@ -192,6 +259,29 @@ TEST_CASE("fx9next validates a pass-through product")
     REQUIRE(product.sink.validator.empty());
 }
 
+TEST_CASE("fx9next generated MSL passes Apple Metal compiler")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "metal.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->vertex_shader->msl != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->pixel_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(effect->techniques[0]->passes[0]->vertex_shader->msl, "vertex shader"));
+    REQUIRE(compileMetalSource(effect->techniques[0]->passes[0]->pixel_shader->msl, "pixel shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles ray-mmd to MSL")
 {
     static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx" };
@@ -218,6 +308,19 @@ TEST_CASE("fx9next compiles ray-mmd to MSL")
     CHECK(ok);
     CHECK(product.numPasses > 0);
     CHECK(product.numCompiledPasses == product.numPasses);
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    for (size_t ti = 0; ti < effect->n_techniques; ti++) {
+        for (size_t pi = 0; pi < effect->techniques[ti]->n_passes; pi++) {
+            Fx9__Effect__Pass *pass = effect->techniques[ti]->passes[pi];
+            REQUIRE(pass->vertex_shader->msl != nullptr);
+            REQUIRE(pass->pixel_shader->msl != nullptr);
+            CHECK(compileMetalSource(pass->vertex_shader->msl, "ray-mmd vertex shader"));
+            CHECK(compileMetalSource(pass->pixel_shader->msl, "ray-mmd pixel shader"));
+        }
+    }
+    fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
 TEST_CASE("fx9next bakes alpha test into pixel shader")

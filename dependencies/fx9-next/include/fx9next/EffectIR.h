@@ -48,6 +48,7 @@ enum EffectRegisterSetIR {
 
 struct EffectBindingIR {
     std::string name;
+    std::string textureName;
     Type type;
     EffectRegisterSetIR registerSet;
     int registerIndex;
