@@ -220,53 +220,34 @@ function(nanoem_emapp_shader_compile_vertex_shader_msl _source _intermediate_pat
                        ${intermediate_spirv_vs_filename}
                      MAIN_DEPENDENCY ${intermediate_spirv_vs_filename}
                      VERBATIM)
-  if(APPLE)
-    find_program(XCRUN_METAL_TOOL metal)
-    if(XCRUN_METAL_TOOL)
-      execute_process(COMMAND ${XCRUN_PATH} metal -v RESULT_VARIABLE _metal_check_res OUTPUT_QUIET ERROR_QUIET)
-      if(NOT ${_metal_check_res} EQUAL 0)
-        set(XCRUN_METAL_TOOL "")
-      endif()
-    endif()
-  endif()
-  if(APPLE AND XCRUN_METAL_TOOL)
-    add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.air
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal ${xcrun_metal_macos_options}
-                         -o ${intermediate_msl_vs_filename}.air
-                         ${intermediate_msl_vs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_vs_filename}
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.ar
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal-ar r
-                         ${intermediate_msl_vs_filename}.ar
-                         ${intermediate_msl_vs_filename}.air
-                       MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.air
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.lib
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metallib
-                         -o ${intermediate_msl_vs_filename}.lib
-                         ${intermediate_msl_vs_filename}.ar
-                       MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.ar
-                       VERBATIM)
-    add_custom_command(OUTPUT ${output_msl_vs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_vs_filename}.lib
-                         --symbol=g_nanoem_${source_without_extension}_vs_msl_macos
-                         --output=${output_msl_vs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.lib
-                       VERBATIM)
-  else()
-    add_custom_command(OUTPUT ${output_msl_vs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_vs_filename}
-                         --symbol=g_nanoem_${source_without_extension}_vs_msl_macos
-                         --output=${output_msl_vs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_vs_filename}
-                       VERBATIM)
-  endif()
+  add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.air
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal ${xcrun_metal_macos_options}
+                       -o ${intermediate_msl_vs_filename}.air
+                       ${intermediate_msl_vs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_vs_filename}
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.ar
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal-ar r
+                       ${intermediate_msl_vs_filename}.ar
+                       ${intermediate_msl_vs_filename}.air
+                     MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.air
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_vs_filename}.lib
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metallib
+                       -o ${intermediate_msl_vs_filename}.lib
+                       ${intermediate_msl_vs_filename}.ar
+                     MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.ar
+                     VERBATIM)
+  add_custom_command(OUTPUT ${output_msl_vs_filename}
+                     COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
+                       --input=${intermediate_msl_vs_filename}.lib
+                       --symbol=g_nanoem_${source_without_extension}_vs_msl_macos
+                       --output=${output_msl_vs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_vs_filename}.lib
+                     VERBATIM)
   set(${_generated_sources} "${${_generated_sources}};${output_msl_vs_filename}" PARENT_SCOPE)
 endfunction()
 
@@ -382,44 +363,34 @@ function(nanoem_emapp_shader_compile_pixel_shader_msl _source _intermediate_path
                        ${intermediate_spirv_fs_filename}
                      MAIN_DEPENDENCY ${intermediate_spirv_fs_filename}
                      VERBATIM)
-  if(APPLE AND XCRUN_METAL_TOOL)
-    add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.air
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal ${xcrun_metal_macos_options}
-                         -o ${intermediate_msl_fs_filename}.air
-                         ${intermediate_msl_fs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_fs_filename}
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.ar
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal-ar r
-                         ${intermediate_msl_fs_filename}.ar
-                         ${intermediate_msl_fs_filename}.air
-                       MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.air
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.lib
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metallib
-                         -o ${intermediate_msl_fs_filename}.lib
-                         ${intermediate_msl_fs_filename}.ar
-                       MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.ar
-                       VERBATIM)
-    add_custom_command(OUTPUT ${output_msl_fs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_fs_filename}.lib
-                         --symbol=g_nanoem_${source_without_extension}_fs_msl_macos
-                         --output=${output_msl_fs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.lib
-                       VERBATIM)
-  else()
-    add_custom_command(OUTPUT ${output_msl_fs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_fs_filename}
-                         --symbol=g_nanoem_${source_without_extension}_fs_msl_macos
-                         --output=${output_msl_fs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_fs_filename}
-                       VERBATIM)
-  endif()
+  add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.air
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal ${xcrun_metal_macos_options}
+                       -o ${intermediate_msl_fs_filename}.air
+                       ${intermediate_msl_fs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_fs_filename}
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.ar
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal-ar r
+                       ${intermediate_msl_fs_filename}.ar
+                       ${intermediate_msl_fs_filename}.air
+                     MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.air
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_fs_filename}.lib
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metallib
+                       -o ${intermediate_msl_fs_filename}.lib
+                       ${intermediate_msl_fs_filename}.ar
+                     MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.ar
+                     VERBATIM)
+  add_custom_command(OUTPUT ${output_msl_fs_filename}
+                     COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
+                       --input=${intermediate_msl_fs_filename}.lib
+                       --symbol=g_nanoem_${source_without_extension}_fs_msl_macos
+                       --output=${output_msl_fs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_fs_filename}.lib
+                     VERBATIM)
   set(${_generated_sources} "${${_generated_sources}};${output_msl_fs_filename}" PARENT_SCOPE)
 endfunction()
 
@@ -526,44 +497,34 @@ function(nanoem_emapp_shader_compile_compute_shader_msl _source _intermediate_pa
                        ${intermediate_spirv_cs_filename}
                      MAIN_DEPENDENCY ${intermediate_spirv_cs_filename}
                      VERBATIM)
-  if(APPLE AND XCRUN_METAL_TOOL)
-    add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.air
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal ${xcrun_metal_macos_options}
-                         -o ${intermediate_msl_cs_filename}.air
-                         ${intermediate_msl_cs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_cs_filename}
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.ar
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metal-ar r
-                         ${intermediate_msl_cs_filename}.ar
-                         ${intermediate_msl_cs_filename}.air
-                       MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.air
-                       VERBATIM)
-    add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.lib
-                       COMMAND ${XCRUN_PATH} ARGS
-                         metallib
-                         -o ${intermediate_msl_cs_filename}.lib
-                         ${intermediate_msl_cs_filename}.ar
-                       MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.ar
-                       VERBATIM)
-    add_custom_command(OUTPUT ${output_msl_cs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_cs_filename}.lib
-                         --symbol=g_nanoem_${source_without_extension}_cs_msl_macos
-                         --output=${output_msl_cs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.lib
-                       VERBATIM)
-  else()
-    add_custom_command(OUTPUT ${output_msl_cs_filename}
-                       COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
-                         --input=${intermediate_msl_cs_filename}
-                         --symbol=g_nanoem_${source_without_extension}_cs_msl_macos
-                         --output=${output_msl_cs_filename}
-                       MAIN_DEPENDENCY ${intermediate_msl_cs_filename}
-                       VERBATIM)
-  endif()
+  add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.air
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal ${xcrun_metal_macos_options}
+                       -o ${intermediate_msl_cs_filename}.air
+                       ${intermediate_msl_cs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_cs_filename}
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.ar
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metal-ar r
+                       ${intermediate_msl_cs_filename}.ar
+                       ${intermediate_msl_cs_filename}.air
+                     MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.air
+                     VERBATIM)
+  add_custom_command(OUTPUT ${intermediate_msl_cs_filename}.lib
+                     COMMAND ${XCRUN_PATH} ARGS
+                       metallib
+                       -o ${intermediate_msl_cs_filename}.lib
+                       ${intermediate_msl_cs_filename}.ar
+                     MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.ar
+                     VERBATIM)
+  add_custom_command(OUTPUT ${output_msl_cs_filename}
+                     COMMAND $<TARGET_FILE:emarb_bin2c> ARGS
+                       --input=${intermediate_msl_cs_filename}.lib
+                       --symbol=g_nanoem_${source_without_extension}_cs_msl_macos
+                       --output=${output_msl_cs_filename}
+                     MAIN_DEPENDENCY ${intermediate_msl_cs_filename}.lib
+                     VERBATIM)
   set(${_generated_sources} "${${_generated_sources}};${output_msl_cs_filename}" PARENT_SCOPE)
 endfunction()
 
