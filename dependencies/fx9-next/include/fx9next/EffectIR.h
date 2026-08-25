@@ -40,6 +40,20 @@ struct EffectResourceIR {
     bool shared;
 };
 
+enum EffectRegisterSetIR {
+    kEffectRegisterFloat4,
+    kEffectRegisterSampler,
+    kEffectRegisterTexture
+};
+
+struct EffectBindingIR {
+    std::string name;
+    Type type;
+    EffectRegisterSetIR registerSet;
+    int registerIndex;
+    int registerCount;
+};
+
 struct EffectPassIR {
     std::string name;
     std::vector<EffectScriptCommandIR> script;
@@ -55,6 +69,7 @@ struct EffectTechniqueIR {
 
 struct EffectModuleIR {
     std::vector<EffectResourceIR> resources;
+    std::vector<EffectBindingIR> bindings;
     std::vector<EffectTechniqueIR> techniques;
 
     std::string canonicalDump() const;

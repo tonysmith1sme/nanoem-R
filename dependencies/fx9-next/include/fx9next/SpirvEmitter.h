@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "fx9next/AST.h"
+#include "fx9next/EffectIR.h"
 #include "fx9next/ShaderIR.h"
 
 namespace fx9next {
@@ -21,8 +22,8 @@ enum SpirvShaderStage { kStageVertex, kStageFragment };
 
 bool emitFunctionSPIRV(const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage,
     std::vector<uint32_t> &words, std::string &error);
-bool emitShaderSPIRV(const TranslationUnit &unit, const ShaderModuleIR &shader, std::vector<uint32_t> &words,
-    std::string &error);
+bool emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &shader,
+    std::vector<uint32_t> &words, std::string &error);
 
 } /* namespace fx9next */
 

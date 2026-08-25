@@ -118,7 +118,7 @@ Pipeline::compile(const std::string &source, const char *filename, EffectProduct
         return false;
     }
     const bool ok = writeEffectProduct(
-        unit, shaders, m_language, m_metalEntry, m_metalUbo, m_version, m_validate, effectProduct);
+        unit, effect, shaders, m_language, m_metalEntry, m_metalUbo, m_version, m_validate, effectProduct);
     if (!ok && effectProduct.sink.info.empty()) {
         effectProduct.sink.info = "passes=" + std::to_string(effectProduct.numPasses) +
             " compiled=" + std::to_string(effectProduct.numCompiledPasses) +

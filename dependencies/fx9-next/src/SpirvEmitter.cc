@@ -481,6 +481,20 @@ semanticLocation(const std::string &semantic)
     return 15;
 }
 
+const EffectBindingIR *
+findEffectBinding(const EffectModuleIR *effect, const std::string &name, EffectRegisterSetIR set)
+{
+    if (!effect) {
+        return nullptr;
+    }
+    for (std::vector<EffectBindingIR>::const_iterator it = effect->bindings.begin(); it != effect->bindings.end(); ++it) {
+        if (it->name == name && it->registerSet == set) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
 bool
 isPositionSemantic(const std::string &semantic)
 {
@@ -523,6 +537,7 @@ findFunction(const TranslationUnit &unit, const std::string &name)
 struct Emitter {
     Builder b;
     const TranslationUnit *unit;
+    const EffectModuleIR *effect;
     SpirvShaderStage stage;
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
@@ -1641,12 +1656,12 @@ makeStatement(const ShaderStatementIR *source)
 } /* namespace anonymous */
 
 bool
-emitFunctionSPIRV(
-    const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage, std::vector<uint32_t> &words,
-    std::string &error)
+emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *effect, const Function &fn,
+    SpirvShaderStage stage, std::vector<uint32_t> &words, std::string &error)
 {
     Emitter e;
     e.unit = &unit;
+    e.effect = effect;
     e.stage = stage;
     e.b.emit1(e.b.header, kOpCapability, kCapShader);
     e.b.idGlsl = e.b.nextId();
@@ -1765,7 +1780,11 @@ emitFunctionSPIRV(
         uint32_t var = e.b.nextId();
         e.b.emit3(e.b.types, kOpVariable, ptr, var, kStorageUniformConstant);
         int binding = samplerIndex;
-        if (!unit.variables[i].registerName.empty() &&
+        const EffectBindingIR *effectBinding = findEffectBinding(e.effect, unit.variables[i].name, kEffectRegisterSampler);
+        if (effectBinding) {
+            binding = effectBinding->registerIndex;
+        }
+        else if (!unit.variables[i].registerName.empty() &&
             (unit.variables[i].registerName[0] == 's' || unit.variables[i].registerName[0] == 'S')) {
             binding = std::atoi(unit.variables[i].registerName.c_str() + 1);
         }
@@ -1893,7 +1912,16 @@ emitFunctionSPIRV(
 }
 
 bool
-emitShaderSPIRV(const TranslationUnit &unit, const ShaderModuleIR &shader, std::vector<uint32_t> &words, std::string &error)
+emitFunctionSPIRV(
+    const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage, std::vector<uint32_t> &words,
+    std::string &error)
+{
+    return emitFunctionSPIRVWithEffect(unit, nullptr, fn, stage, words, error);
+}
+
+bool
+emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &shader,
+    std::vector<uint32_t> &words, std::string &error)
 {
     if (shader.functions.empty()) {
         error = "shader IR has no entry function";
@@ -1913,7 +1941,8 @@ emitShaderSPIRV(const TranslationUnit &unit, const ShaderModuleIR &shader, std::
         function.params.push_back(parameter);
     }
     function.body = makeStatement(source.body.get());
-    return emitFunctionSPIRV(unit, function, shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
+    return emitFunctionSPIRVWithEffect(
+        unit, &effect, function, shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
 }
 
 } /* namespace fx9next */

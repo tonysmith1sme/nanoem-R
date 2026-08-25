@@ -7,6 +7,7 @@
 #include "fx9next/Lowering.h"
 
 #include <sstream>
+#include <cctype>
 #include <unordered_map>
 
 namespace fx9next {
@@ -97,6 +98,56 @@ binaryType(const std::string &operation, const Type &left, const Type &right)
         return left;
     }
     return right;
+}
+
+int
+registerIndex(const std::string &value, char prefix)
+{
+    if (value.size() < 2 || std::tolower(static_cast<unsigned char>(value[0])) != prefix) {
+        return -1;
+    }
+    int index = 0;
+    for (size_t i = 1; i < value.size(); i++) {
+        if (!std::isdigit(static_cast<unsigned char>(value[i]))) {
+            return -1;
+        }
+        index = index * 10 + value[i] - '0';
+    }
+    return index;
+}
+
+int
+registerCount(const Type &type)
+{
+    const int arraySize = type.arraySize > 0 ? type.arraySize : 1;
+    return (type.kind == kTypeMatrix ? type.rows : 1) * arraySize;
+}
+
+bool
+reserveBinding(std::vector<EffectBindingIR> &bindings, const Variable &variable, EffectRegisterSetIR set,
+    char registerPrefix, int &next, DiagnosticSink &diagnostics)
+{
+    const int count = set == kEffectRegisterFloat4 ? registerCount(variable.type) : 1;
+    int index = registerIndex(variable.registerName, registerPrefix);
+    if (index < 0) {
+        index = next;
+    }
+    for (std::vector<EffectBindingIR>::const_iterator it = bindings.begin(); it != bindings.end(); ++it) {
+        if (it->registerSet == set && index < it->registerIndex + it->registerCount && it->registerIndex < index + count) {
+            diagnostics.add(kDiagnosticType, kDiagnosticError, "FX9T1004", SourceLocation(), variable.name,
+                "register range overlaps " + it->name);
+            return false;
+        }
+    }
+    EffectBindingIR binding;
+    binding.name = variable.name;
+    binding.type = variable.type;
+    binding.registerSet = set;
+    binding.registerIndex = index;
+    binding.registerCount = count;
+    bindings.push_back(binding);
+    next = std::max(next, index + count);
+    return true;
 }
 
 std::unique_ptr<ShaderExpressionIR>
@@ -317,10 +368,30 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
 {
     shaders.clear();
     effect.resources.clear();
+    effect.bindings.clear();
     effect.techniques.clear();
     diagnostics.clear();
+    int nextFloat4 = 0, nextSampler = 0, nextTexture = 0;
     for (std::vector<Variable>::const_iterator variable = unit.variables.begin(); variable != unit.variables.end();
          ++variable) {
+        EffectRegisterSetIR set = kEffectRegisterFloat4;
+        char prefix = 'c';
+        int *next = &nextFloat4;
+        if (variable->type.isSampler()) {
+            set = kEffectRegisterSampler;
+            prefix = 's';
+            next = &nextSampler;
+        }
+        else if (variable->type.kind == kTypeTexture) {
+            set = kEffectRegisterTexture;
+            prefix = 't';
+            next = &nextTexture;
+        }
+        if (variable->type.kind != kTypeString && variable->type.kind != kTypeStruct) {
+            if (!reserveBinding(effect.bindings, *variable, set, prefix, *next, diagnostics)) {
+                return false;
+            }
+        }
         if (variable->type.kind == kTypeTexture) {
             EffectResourceIR resource;
             resource.name = variable->name;

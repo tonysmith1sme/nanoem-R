@@ -139,8 +139,19 @@ fillShaderBody(Arena &arena, Fx9__Effect__Shader *shader, LanguageType language,
     }
 }
 
+const EffectBindingIR *
+findBinding(const EffectModuleIR &effect, const std::string &name, EffectRegisterSetIR set)
+{
+    for (std::vector<EffectBindingIR>::const_iterator it = effect.bindings.begin(); it != effect.bindings.end(); ++it) {
+        if (it->name == name && it->registerSet == set) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
 void
-fillSamplers(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Shader *shader)
+fillSamplers(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &effect, Fx9__Effect__Shader *shader)
 {
     std::vector<const Variable *> samps;
     for (size_t i = 0; i < unit.variables.size(); i++) {
@@ -160,8 +171,9 @@ fillSamplers(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Shader *sha
         else if (samps[i]->type.samplerDim == kSampler3D) {
             s->type = FX9__EFFECT__SAMPLER__TYPE__SAMPLER_VOLUME;
         }
-        s->index = static_cast<uint32_t>(i);
-        if (!samps[i]->registerName.empty() &&
+        const EffectBindingIR *binding = findBinding(effect, samps[i]->name, kEffectRegisterSampler);
+        s->index = binding ? static_cast<uint32_t>(binding->registerIndex) : static_cast<uint32_t>(i);
+        if (!binding && !samps[i]->registerName.empty() &&
             (samps[i]->registerName[0] == 's' || samps[i]->registerName[0] == 'S')) {
             s->index = static_cast<uint32_t>(std::atoi(samps[i]->registerName.c_str() + 1));
         }
@@ -510,7 +522,8 @@ semanticIndex(const std::string &semantic)
 }
 
 void
-fillShaderInterface(Arena &arena, const TranslationUnit &unit, const Function &fn, Fx9__Effect__Shader *shader)
+fillShaderInterface(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &effect, const Function &fn,
+    Fx9__Effect__Shader *shader)
 {
     shader->n_inputs = fn.params.size();
     shader->inputs = arena.allocArray<Fx9__Effect__Attribute>(fn.params.size());
@@ -561,17 +574,19 @@ fillShaderInterface(Arena &arena, const TranslationUnit &unit, const Function &f
         Fx9__Effect__Uniform *u = shader->uniforms[i] = arena.alloc<Fx9__Effect__Uniform>();
         fx9__effect__uniform__init(u);
         u->type = FX9__EFFECT__UNIFORM__TYPE__UT_FLOAT;
-        u->index = reg;
-        u->num_elements = uniforms[i]->type.kind == kTypeMatrix ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
-        u->constant_index = reg;
+        const EffectBindingIR *binding = findBinding(effect, uniforms[i]->name, kEffectRegisterFloat4);
+        u->index = binding ? static_cast<uint32_t>(binding->registerIndex) : reg;
+        u->num_elements = binding ? static_cast<uint32_t>(binding->registerCount)
+                                  : uniforms[i]->type.kind == kTypeMatrix ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
+        u->constant_index = u->index;
         u->name = arena.copy(uniforms[i]->name);
         Fx9__Effect__Symbol *sym = shader->symbols[i] = arena.alloc<Fx9__Effect__Symbol>();
         fx9__effect__symbol__init(sym);
         sym->name = arena.copy(uniforms[i]->name);
         sym->register_set = FX9__EFFECT__SYMBOL__REGISTER_SET__RS_FLOAT4;
-        sym->register_index = reg;
+        sym->register_index = u->index;
         sym->register_count = u->num_elements;
-        reg += u->num_elements;
+        reg = u->index + u->num_elements;
     }
 }
 
@@ -590,7 +605,8 @@ fillIncludes(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Effect *mes
 } /* namespace anonymous */
 
 bool
-writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR> &shaders, LanguageType language,
+writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, const std::vector<ShaderModuleIR> &shaders,
+    LanguageType language,
     const std::string &metalEntry, const std::string &metalUbo, int version, bool /*validate*/, EffectProduct &product)
 {
     Arena arena;
@@ -664,7 +680,7 @@ writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR
             fx9__effect__shader__init(passMsg->pixel_shader);
             passMsg->pixel_shader->type = FX9__EFFECT__SHADER__TYPE__ST_PIXEL;
             passMsg->pixel_shader->uniform_block_name = arena.copy("ps_uniforms_vec4");
-            fillSamplers(arena, unit, passMsg->pixel_shader);
+            fillSamplers(arena, unit, effect, passMsg->pixel_shader);
 
             if (pass.vsEntry.empty() && pass.psEntry.empty()) {
                 product.numCompiledPasses++;
@@ -690,11 +706,11 @@ writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR
             std::vector<uint32_t> vsWords, psWords;
             std::string err;
             try {
-                if (!emitShaderSPIRV(unit, *vsIR, vsWords, err)) {
+                if (!emitShaderSPIRV(unit, effect, *vsIR, vsWords, err)) {
                     product.sink.builder = err.empty() ? "vertex emit failed" : err;
                     continue;
                 }
-                if (!emitShaderSPIRV(unit, *psIR, psWords, err)) {
+                if (!emitShaderSPIRV(unit, effect, *psIR, psWords, err)) {
                     product.sink.builder = err.empty() ? "fragment emit failed" : err;
                     continue;
                 }
@@ -711,8 +727,8 @@ writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR
                     continue;
                 }
                 bakePixelOutput(language, pass, psSrc);
-                fillShaderInterface(arena, unit, *vs, passMsg->vertex_shader);
-                fillShaderInterface(arena, unit, *ps, passMsg->pixel_shader);
+                fillShaderInterface(arena, unit, effect, *vs, passMsg->vertex_shader);
+                fillShaderInterface(arena, unit, effect, *ps, passMsg->pixel_shader);
                 fillShaderBody(arena, passMsg->vertex_shader, language, vsSrc, vsOut);
                 fillShaderBody(arena, passMsg->pixel_shader, language, psSrc, psOut);
                 product.numCompiledPasses++;

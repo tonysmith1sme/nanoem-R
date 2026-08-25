@@ -18,6 +18,10 @@ EffectModuleIR::canonicalDump() const
         stream << "resource " << it->type << " " << it->name << " " << it->format << " " << it->mipLevels << " "
                << (it->shared ? "shared" : "local") << "\n";
     }
+    for (std::vector<EffectBindingIR>::const_iterator it = bindings.begin(); it != bindings.end(); ++it) {
+        stream << "binding " << it->registerSet << " " << it->registerIndex << " " << it->registerCount << " "
+               << it->type.toString() << " " << it->name << "\n";
+    }
     for (std::vector<EffectTechniqueIR>::const_iterator technique = techniques.begin(); technique != techniques.end();
          ++technique) {
         stream << "technique " << technique->name << "\n";

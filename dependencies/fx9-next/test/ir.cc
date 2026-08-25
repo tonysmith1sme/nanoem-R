@@ -90,6 +90,10 @@ TEST_CASE("fx9next lowers parsed effect scripts and shader entries")
     REQUIRE(effect.resources.size() == 1);
     REQUIRE(effect.resources[0].name == "Gbuffer2RT");
     REQUIRE(effect.resources[0].format == "A8R8G8B8");
+    REQUIRE(effect.bindings.size() == 1);
+    REQUIRE(effect.bindings[0].name == "Gbuffer2RT");
+    REQUIRE(effect.bindings[0].registerSet == kEffectRegisterTexture);
+    REQUIRE(effect.bindings[0].registerIndex == 0);
     REQUIRE(effect.techniques.size() == 1);
     REQUIRE(effect.techniques[0].script.size() == 2);
     REQUIRE(effect.techniques[0].passes.size() == 1);
@@ -152,7 +156,7 @@ TEST_CASE("fx9next emits lowered shader IR deterministically")
     REQUIRE(shaders.size() == 2);
     std::vector<uint32_t> legacy, lowered;
     REQUIRE(emitFunctionSPIRV(unit, unit.functions[0], kStageVertex, legacy, error));
-    REQUIRE(emitShaderSPIRV(unit, shaders[0], lowered, error));
+    REQUIRE(emitShaderSPIRV(unit, effect, shaders[0], lowered, error));
     REQUIRE(lowered == legacy);
 }
 
@@ -174,4 +178,23 @@ TEST_CASE("fx9next rejects unknown effect script commands")
     REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
     REQUIRE(diagnostics.hasErrors());
     REQUIRE(diagnostics.diagnostics()[0].code == "FX9E1002");
+}
+
+TEST_CASE("fx9next rejects overlapping DX9 register bindings")
+{
+    const char *source =
+        "float4 first : register(c0);\n"
+        "float4 second : register(c0);\n"
+        "float4 ps_main() : COLOR0 { return first + second; }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "overlap.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1004");
 }
