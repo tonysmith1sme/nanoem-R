@@ -693,10 +693,8 @@ writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std
                 }
                 std::string vsSrc, psSrc;
                 std::vector<uint32_t> vsOut, psOut;
-                std::string transErr;
-                bool trOk = translateSPIRV(vsWords, psWords, options, vsSrc, psSrc, vsOut, psOut, transErr);
-                if (!trOk) {
-                    product.sink.translator.insert(transErr.empty() ? "translate failed" : transErr);
+                if (!translateSPIRV(vsWords, psWords, options, vsSrc, psSrc, vsOut, psOut, err)) {
+                    product.sink.translator.insert(err.empty() ? "translate failed" : err);
                     continue;
                 }
                 if (language != kLanguageTypeSPIRV && (vsSrc.empty() || psSrc.empty())) {

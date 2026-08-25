@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace fx9next {
 namespace {
@@ -783,7 +782,6 @@ Emitter::emitIndexPtr(const Expr *expr, uint32_t &elemTy)
     uint32_t ptrTy = b.ptrType(elemTy, storage);
     uint32_t ptr = b.nextId();
     b.emit4(b.code, kOpAccessChain, ptrTy, ptr, lit->second, idx);
-    note(ptr, ptrTy);
     return ptr;
 }
 
@@ -1130,33 +1128,11 @@ Emitter::emitExpr(const Expr *expr)
         }
         if (expr->op == "+") {
             op = ints ? kOpIAdd : kOpFAdd;
-            if (ints) {
-                ty = b.typeInt();
-            }
-            else if (isVec(l)) {
-                ty = valueTypes[l];
-            }
-            else if (isVec(r)) {
-                ty = valueTypes[r];
-            }
-            else {
-                ty = b.typeFloat();
-            }
+            ty = ints ? b.typeInt() : b.typeFloat();
         }
         else if (expr->op == "-") {
             op = ints ? kOpISub : kOpFSub;
-            if (ints) {
-                ty = b.typeInt();
-            }
-            else if (isVec(l)) {
-                ty = valueTypes[l];
-            }
-            else if (isVec(r)) {
-                ty = valueTypes[r];
-            }
-            else {
-                ty = b.typeFloat();
-            }
+            ty = ints ? b.typeInt() : b.typeFloat();
         }
         else if (expr->op == "*") {
             if (isVec(l) && !isVec(r)) {
@@ -1172,24 +1148,9 @@ Emitter::emitExpr(const Expr *expr)
                 return note(idv, ty);
             }
             op = kOpFMul;
-            if (isVec(l)) {
-                ty = valueTypes[l];
-            }
-            else if (isVec(r)) {
-                ty = valueTypes[r];
-            }
-            else {
-                ty = ints ? b.typeInt() : b.typeFloat();
-            }
         }
         else if (expr->op == "/") {
-            op = ints ? kOpSDiv : kOpFDiv;
-            if (isVec(l)) {
-                ty = valueTypes[l];
-            }
-            else {
-                ty = ints ? b.typeInt() : b.typeFloat();
-            }
+            op = kOpFDiv;
         }
         else if (expr->op == "%") {
             op = kOpFMod;
@@ -1827,41 +1788,6 @@ emitFunctionSPIRV(
         e.rememberArray(gv.name, gv.type, kStoragePrivate);
     }
 
-    enum {
-        kDecorationBlock = 2,
-        kDecorationOffset = 35
-    };
-    uint32_t uboBlockVar = 0;
-    std::vector<const Variable *> uboVars;
-    for (size_t i = 0; i < unit.variables.size(); i++) {
-        const Variable &gv = unit.variables[i];
-        if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
-            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid) {
-            continue;
-        }
-        uboVars.push_back(&gv);
-    }
-    uint32_t structTy = 0;
-    if (!uboVars.empty()) {
-        uint32_t float4Ty = e.b.typeVec(4);
-        uint32_t len256 = e.b.constU32(256);
-        uint32_t arrTy = e.b.nextId();
-        e.b.emit3(e.b.types, kOpTypeArray, arrTy, float4Ty, len256);
-        e.b.emit3(e.b.decorations, kOpDecorate, arrTy, kDecorationArrayStride, 16);
-
-        structTy = e.b.nextId();
-        uint32_t sops[2] = { structTy, arrTy };
-        e.b.emit(e.b.types, kOpTypeStruct, sops, 2);
-        e.b.emit2(e.b.decorations, kOpDecorate, structTy, kDecorationBlock);
-        e.b.emit4(e.b.decorations, kOpMemberDecorate, structTy, 0, kDecorationOffset, 0);
-
-        uint32_t uboPtrTy = e.b.ptrType(structTy, kStorageUniform);
-        uboBlockVar = e.b.nextId();
-        e.b.emit3(e.b.types, kOpVariable, uboPtrTy, uboBlockVar, kStorageUniform);
-        e.b.decorate(uboBlockVar, kDecorationDescriptorSet, 0, true);
-        e.b.decorate(uboBlockVar, kDecorationBinding, 0, true);
-    }
-
     uint32_t fnType = e.b.nextId();
     e.b.emit2(e.b.types, kOpTypeFunction, fnType, e.b.typeVoid());
     uint32_t mainId = e.b.nextId();
@@ -1890,23 +1816,13 @@ emitFunctionSPIRV(
             nameIndex = ep.size() - 1;
         }
     }
-    std::unordered_set<uint32_t> epInterfaceSet;
     for (size_t i = 0; i < inVars.size(); i++) {
-        if (inVars[i] && epInterfaceSet.find(inVars[i]) == epInterfaceSet.end()) {
-            ep.push_back(inVars[i]);
-            epInterfaceSet.insert(inVars[i]);
-        }
+        ep.push_back(inVars[i]);
     }
     for (size_t i = 0; i < extraOuts.size(); i++) {
-        if (extraOuts[i] && epInterfaceSet.find(extraOuts[i]) == epInterfaceSet.end()) {
-            ep.push_back(extraOuts[i]);
-            epInterfaceSet.insert(extraOuts[i]);
-        }
+        ep.push_back(extraOuts[i]);
     }
-    if (outVar && epInterfaceSet.find(outVar) == epInterfaceSet.end()) {
-        ep.push_back(outVar);
-        epInterfaceSet.insert(outVar);
-    }
+    ep.push_back(outVar);
     e.b.emit(e.b.header, kOpEntryPoint, ep.data(), static_cast<uint16_t>(ep.size()));
     if (stage == kStageFragment) {
         e.b.emit2(e.b.header, kOpExecutionMode, mainId, kExecOriginUpperLeft);
@@ -1916,121 +1832,6 @@ emitFunctionSPIRV(
     e.b.emit4(e.b.code, kOpFunction, e.b.typeVoid(), mainId, kFunctionControlNone, fnType);
     uint32_t label = e.b.nextId();
     e.b.emit1(e.b.code, kOpLabel, label);
-
-    if (uboBlockVar) {
-        uint32_t regOffset = 0;
-        uint32_t ptrFloat4Uniform = e.b.ptrType(e.b.typeVec(4), kStorageUniform);
-        for (size_t i = 0; i < uboVars.size(); i++) {
-            const Variable &gv = *uboVars[i];
-            auto locIt = e.locals.find(gv.name);
-            if (locIt == e.locals.end()) {
-                continue;
-            }
-            uint32_t targetVar = locIt->second;
-            uint32_t count = gv.type.kind == kTypeMatrix ? static_cast<uint32_t>(gv.type.rows) : 1;
-            if (gv.type.kind == kTypeArray) {
-                uint32_t arrayElements = gv.type.arraySize > 0 ? static_cast<uint32_t>(gv.type.arraySize) : 1;
-                uint32_t rowCount = (gv.type.rows > 1 && gv.type.columns > 1) ? static_cast<uint32_t>(gv.type.rows) : 1;
-                count = arrayElements * rowCount;
-            }
-
-            if (gv.type.kind == kTypeVector) {
-                uint32_t zero = e.b.constU32(0);
-                uint32_t idx = e.b.constU32(regOffset);
-                uint32_t ptrVal = e.b.nextId();
-                uint32_t aOps[5] = { ptrFloat4Uniform, ptrVal, uboBlockVar, zero, idx };
-                e.b.emit(e.b.code, kOpAccessChain, aOps, 5);
-                e.note(ptrVal, ptrFloat4Uniform);
-                uint32_t val4 = e.b.nextId();
-                e.b.emit3(e.b.code, kOpLoad, e.b.typeVec(4), val4, ptrVal);
-                e.note(val4, e.b.typeVec(4));
-                uint32_t finalVal = val4;
-                if (gv.type.rows < 4) {
-                    uint32_t sid = e.b.nextId();
-                    std::vector<uint32_t> sops;
-                    sops.push_back(e.b.typeVec(gv.type.rows));
-                    sops.push_back(sid);
-                    sops.push_back(val4);
-                    sops.push_back(val4);
-                    for (int r = 0; r < gv.type.rows; r++) {
-                        sops.push_back(static_cast<uint32_t>(r));
-                    }
-                    e.b.emit(e.b.code, kOpVectorShuffle, sops.data(), static_cast<uint16_t>(sops.size()));
-                    e.note(sid, e.b.typeVec(gv.type.rows));
-                    finalVal = sid;
-                }
-                e.b.emit2(e.b.code, kOpStore, targetVar, finalVal);
-            }
-            else if (gv.type.kind == kTypeFloat || gv.type.kind == kTypeInt || gv.type.kind == kTypeBool) {
-                uint32_t zero = e.b.constU32(0);
-                uint32_t idx = e.b.constU32(regOffset);
-                uint32_t ptrVal = e.b.nextId();
-                uint32_t aOps[5] = { ptrFloat4Uniform, ptrVal, uboBlockVar, zero, idx };
-                e.b.emit(e.b.code, kOpAccessChain, aOps, 5);
-                e.note(ptrVal, ptrFloat4Uniform);
-                uint32_t val4 = e.b.nextId();
-                e.b.emit3(e.b.code, kOpLoad, e.b.typeVec(4), val4, ptrVal);
-                e.note(val4, e.b.typeVec(4));
-                uint32_t fVal = e.b.nextId();
-                e.b.emit4(e.b.code, kOpCompositeExtract, e.b.typeFloat(), fVal, val4, 0);
-                e.note(fVal, e.b.typeFloat());
-                uint32_t finalVal = fVal;
-                if (gv.type.kind == kTypeInt) {
-                    finalVal = e.b.nextId();
-                    e.b.emit2(e.b.code, kOpConvertFToS, finalVal, fVal);
-                    e.note(finalVal, e.b.typeInt());
-                }
-                else if (gv.type.kind == kTypeBool) {
-                    uint32_t zeroF = e.b.constF32(0.0f);
-                    finalVal = e.b.nextId();
-                    e.b.emit3(e.b.code, kOpFOrdNotEqual, finalVal, fVal, zeroF);
-                    e.note(finalVal, e.b.typeBool());
-                }
-                e.b.emit2(e.b.code, kOpStore, targetVar, finalVal);
-            }
-            else if (gv.type.kind == kTypeMatrix) {
-                std::vector<uint32_t> colVecs;
-                for (int c = 0; c < gv.type.columns; c++) {
-                    uint32_t zero = e.b.constU32(0);
-                    uint32_t idx = e.b.constU32(regOffset + c);
-                    uint32_t ptrVal = e.b.nextId();
-                    uint32_t aOps[5] = { ptrFloat4Uniform, ptrVal, uboBlockVar, zero, idx };
-                    e.b.emit(e.b.code, kOpAccessChain, aOps, 5);
-                    e.note(ptrVal, ptrFloat4Uniform);
-                    uint32_t val4 = e.b.nextId();
-                    e.b.emit3(e.b.code, kOpLoad, e.b.typeVec(4), val4, ptrVal);
-                    e.note(val4, e.b.typeVec(4));
-                    uint32_t colVal = val4;
-                    if (gv.type.rows < 4) {
-                        uint32_t sid = e.b.nextId();
-                        std::vector<uint32_t> sops;
-                        sops.push_back(e.b.typeVec(gv.type.rows));
-                        sops.push_back(sid);
-                        sops.push_back(val4);
-                        sops.push_back(val4);
-                        for (int r = 0; r < gv.type.rows; r++) {
-                            sops.push_back(static_cast<uint32_t>(r));
-                        }
-                        e.b.emit(e.b.code, kOpVectorShuffle, sops.data(), static_cast<uint16_t>(sops.size()));
-                        e.note(sid, e.b.typeVec(gv.type.rows));
-                        colVal = sid;
-                    }
-                    colVecs.push_back(colVal);
-                }
-                uint32_t matId = e.b.nextId();
-                std::vector<uint32_t> mOps;
-                mOps.push_back(e.b.typeOf(gv.type));
-                mOps.push_back(matId);
-                for (size_t c = 0; c < colVecs.size(); c++) {
-                    mOps.push_back(colVecs[c]);
-                }
-                e.b.emit(e.b.code, kOpCompositeConstruct, mOps.data(), static_cast<uint16_t>(mOps.size()));
-                e.note(matId, e.b.typeOf(gv.type));
-                e.b.emit2(e.b.code, kOpStore, targetVar, matId);
-            }
-            regOffset += count;
-        }
-    }
 
     if (!e.emitStmt(fn.body.get(), retType)) {
         error = e.b.error.empty() ? "emit failed" : e.b.error;
@@ -2064,7 +1865,6 @@ emitFunctionSPIRV(
     words.insert(words.end(), e.b.code.begin(), e.b.code.end());
     (void) entryOps;
     (void) findFunction;
-
     size_t cursor = 5;
     while (cursor < words.size()) {
         uint32_t wordCount = words[cursor] >> 16;
@@ -2075,6 +1875,10 @@ emitFunctionSPIRV(
             return false;
         }
         cursor += wordCount;
+    }
+    if (cursor != words.size()) {
+        error = "SPIR-V trailing words";
+        return false;
     }
     return true;
 }
