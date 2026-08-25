@@ -1,6 +1,6 @@
 # effect
 option(${PROJECT_NAME_PREFIX}_INSTALL_EFFECT_PLUGIN ON)
-set(NANOEM_EFFECT_COMPILER "fx9" CACHE STRING "MME effect compiler implementation (fx9 or fx9-next)")
+set(NANOEM_EFFECT_COMPILER "fx9-next" CACHE STRING "MME effect compiler implementation (fx9 or fx9-next)")
 set_property(CACHE NANOEM_EFFECT_COMPILER PROPERTY STRINGS "fx9;fx9-next")
 file(GLOB EFFECT_PROTO_SOURCES ${PROJECT_SOURCE_DIR}/emapp/src/effect*.pb-c.c)
 if(${PROJECT_NAME_PREFIX}_INSTALL_EFFECT_PLUGIN)

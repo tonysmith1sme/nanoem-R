@@ -1,11 +1,9 @@
 # effect_corpus manifest: <status> <path> relative to repository root
-# entries marked fail are documented known gaps (texM3x3 unsupported;
-# 17 samplers intentionally rejected past register s15)
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/01_tex2D_basic.fx
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/02_tex2Dlod_bias_proj.fx
-fail /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/03_texM3x3.fx
+ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/03_texM3x3.fx
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/04_token_pasting.fx
-fail /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/05_many_samplers.fx
+ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/05_many_samplers.fx
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/06_alpha_test_states.fx
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/07_stencil_states.fx
 ok /Users/seele/Documents/GitRepo/nanoem-R/dependencies/fx9/test/effects/corpus/08_two_sided_stencil.fx
