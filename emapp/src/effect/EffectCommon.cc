@@ -1915,7 +1915,11 @@ Logger::log(const char *format, ...)
 bool
 isDX9RuntimeEffectEnabled() NANOEM_DECL_NOEXCEPT
 {
-    return true;
+    static const bool enabled = [] {
+        const char *value = getenv("NANOEM_ENABLE_DX9RT_EFFECT");
+        return value != nullptr && *value != '\0' && strcmp(value, "0") != 0;
+    }();
+    return enabled;
 }
 
 void

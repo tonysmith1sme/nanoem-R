@@ -388,21 +388,3 @@ TEST_CASE("fx9next compiles dummy pass")
     REQUIRE(product.numPasses == 2);
     REQUIRE(product.numCompiledPasses == 2);
 }
-
-TEST_CASE("fx9next compiles offscreen effect")
-{
-    const std::string path = "/Users/seele/Documents/GitRepo/nanoem-R/emapp/test/fixtures/effects/offscreen.fx";
-    Compiler compiler;
-    compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
-    Compiler::EffectProduct product;
-    const bool ok = compiler.compile(path.c_str(), product);
-    INFO(path);
-    INFO(product.sink.info);
-    INFO(product.sink.builder);
-    if (!product.sink.translator.empty()) {
-        for (auto it = product.sink.translator.begin(); it != product.sink.translator.end(); ++it) {
-            INFO(*it);
-        }
-    }
-    REQUIRE(ok);
-}

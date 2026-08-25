@@ -95,7 +95,6 @@ Pipeline::compile(const std::string &source, const char *filename, EffectProduct
 {
     const char *name = filename ? filename : "";
     std::string prepared, error;
-    m_pp.clearIncludedPaths();
     if (!m_pp.process(source, name, prepared, error)) {
         effectProduct.sink.info = error;
         return false;
@@ -129,12 +128,6 @@ void
 Pipeline::addIncludeSource(const std::string &filePath, const std::string &sourceData)
 {
     m_pp.addIncludeSource(filePath, sourceData);
-}
-
-void
-Pipeline::clearIncludeSources()
-{
-    m_pp.clearIncludeSources();
 }
 
 void
