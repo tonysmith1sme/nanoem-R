@@ -9,6 +9,7 @@
 #include "spirv_cross/spirv_glsl.hpp"
 #include "spirv_cross/spirv_hlsl.hpp"
 #include "spirv_cross/spirv_msl.hpp"
+#include "spirv_cross/spirv_cross_error_handling.hpp"
 
 #include <exception>
 
@@ -41,7 +42,19 @@ crossCompile(const std::vector<uint32_t> &words, const TranslateOptions &options
                 compiler.rename_entry_point("main", options.metalEntry,
                     fragment ? spv::ExecutionModelFragment : spv::ExecutionModelVertex);
             }
+            try {
+                const spirv_cross::ShaderResources res = compiler.get_shader_resources();
+                for (const auto &ub : res.uniform_buffers) {
+                    compiler.set_name(ub.id, options.metalUbo.empty() ? "nanoem_uniforms" : options.metalUbo);
+                    auto type = compiler.get_type_from_variable(ub.id);
+                    compiler.set_member_name(type.self, 0, fragment ? "ps_uniforms_vec4" : "vs_uniforms_vec4");
+                }
+            } catch (...) {}
             source = compiler.compile();
+            if (source.empty()) {
+                error = "MSL compiler returned empty source";
+                return false;
+            }
             return true;
         }
         if (options.language == kLanguageTypeSPIRV) {
@@ -53,8 +66,20 @@ crossCompile(const std::vector<uint32_t> &words, const TranslateOptions &options
         glsl.es = options.language == kLanguageTypeESSL;
         glsl.version = options.version > 0 ? static_cast<uint32_t>(options.version) : (glsl.es ? 300u : 330u);
         compiler.set_common_options(glsl);
+        try {
+            const spirv_cross::ShaderResources res = compiler.get_shader_resources();
+            for (const auto &ub : res.uniform_buffers) {
+                compiler.set_name(ub.id, fragment ? "ps_uniforms_vec4_buffer" : "vs_uniforms_vec4_buffer");
+                auto type = compiler.get_type_from_variable(ub.id);
+                compiler.set_member_name(type.self, 0, fragment ? "ps_uniforms_vec4" : "vs_uniforms_vec4");
+            }
+        } catch (...) {}
         source = compiler.compile();
         return true;
+    }
+    catch (const spirv_cross::CompilerError &ex) {
+        error = ex.what();
+        return false;
     }
     catch (const std::exception &ex) {
         error = ex.what();
@@ -75,6 +100,7 @@ translateSPIRV(const std::vector<uint32_t> &vertex, const std::vector<uint32_t> 
 {
     vertexOut = vertex;
     fragmentOut = fragment;
+    error.clear();
     if (options.language == kLanguageTypeSPIRV) {
         vertexSource.clear();
         fragmentSource.clear();
