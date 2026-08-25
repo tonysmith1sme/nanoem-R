@@ -22,7 +22,7 @@
 ///
 /// Exit codes: 0 = completed, 2 = manifest regressions found.
 
-#include "fx9next/Compiler.h"
+#include "fx9/Compiler.h"
 
 #include <sys/stat.h>
 
@@ -34,7 +34,7 @@
 #include <string>
 #include <vector>
 
-using namespace fx9next;
+using namespace fx9;
 
 namespace {
 
@@ -377,7 +377,7 @@ main(int argc, char *argv[])
         size_t numPasses = 0, numCompiled = 0, numValidated = 0;
         std::string sinkInfo, sinkValidator, sinkBuilder, sinkTranslator, sinkOptimizer;
         {
-            Compiler compiler;
+            Compiler compiler(ECoreProfile, EShMsgDefault);
             compiler.setTargetLanguage(language);
             compiler.setOptimizeEnabled(optimize);
             compiler.setValidationEnabled(validate);
