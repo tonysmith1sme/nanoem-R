@@ -53,6 +53,7 @@ enum {
     kOpAccessChain = 65,
     kOpDecorate = 71,
     kOpMemberDecorate = 72,
+    kOpVectorExtractDynamic = 77,
     kOpVectorShuffle = 79,
     kOpCompositeConstruct = 80,
     kOpCompositeExtract = 81,
@@ -126,6 +127,7 @@ enum {
     kStorageUniformConstant = 0,
     kStorageUniform = 2,
     kStoragePrivate = 6,
+    kDecorationArrayStride = 6,
     kDecorationLocation = 30,
     kDecorationBinding = 33,
     kDecorationDescriptorSet = 34,
@@ -337,6 +339,33 @@ struct Builder {
         if (t.kind == kTypeVector) {
             return typeVec(t.rows);
         }
+        if (t.kind == kTypeArray) {
+            Type elem = t;
+            elem.kind = (t.rows > 1 && t.columns > 1) ? kTypeMatrix : (t.rows > 1 ? kTypeVector : t.scalar);
+            if (elem.kind == kTypeVector || elem.kind == kTypeMatrix) {
+                elem.arraySize = 0;
+            }
+            else {
+                elem.kind = t.scalar;
+                elem.rows = 1;
+                elem.columns = 1;
+                elem.arraySize = 0;
+            }
+            uint32_t elemTy = typeOf(elem);
+            uint32_t n = static_cast<uint32_t>(t.arraySize > 0 ? t.arraySize : 1);
+            uint32_t len = constU32(n);
+            uint32_t id = nextId();
+            emit3(types, kOpTypeArray, id, elemTy, len);
+            uint32_t stride = 4;
+            if (elem.kind == kTypeVector) {
+                stride = static_cast<uint32_t>(elem.rows * 4);
+            }
+            else if (elem.kind == kTypeMatrix) {
+                stride = static_cast<uint32_t>(elem.rows * elem.columns * 4);
+            }
+            emit3(decorations, kOpDecorate, id, kDecorationArrayStride, stride);
+            return id;
+        }
         if (t.kind == kTypeMatrix) {
             uint32_t *slot = (t.rows == 3 && t.columns == 3) ? &idMat3 : &idMat4;
             if (t.rows == 4 && t.columns == 4) {
@@ -489,6 +518,8 @@ struct Emitter {
     ShaderStage stage;
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
+    std::unordered_map<std::string, uint32_t> arrayElems;
+    std::unordered_map<std::string, uint32_t> arrayStorage;
     std::unordered_map<std::string, uint32_t> valueOverlay;
     std::unordered_map<std::string, uint32_t> samplers;
     std::unordered_map<uint32_t, uint32_t> valueTypes;
@@ -518,8 +549,12 @@ struct Emitter {
     uint32_t sample2D(const std::string &sampName, uint32_t uv);
     uint32_t callUser(const std::string &name, const Expr *expr);
     uint32_t asBool(uint32_t id);
+    uint32_t asInt(uint32_t id);
+    uint32_t emitIndexPtr(const Expr *expr, uint32_t &elemTy);
     void emitIf(const Stmt *stmt, uint32_t returnType);
     void emitFor(const Stmt *stmt, uint32_t returnType);
+    void emitWhile(const Stmt *stmt, uint32_t returnType, bool doWhile);
+    void rememberArray(const std::string &name, const Type &type, uint32_t storage);
 };
 
 uint32_t
@@ -599,6 +634,56 @@ Emitter::callUser(const std::string &name, const Expr *expr)
     pendingReturn = savedRet;
     valueOverlay = savedOverlay;
     return result;
+}
+
+uint32_t
+Emitter::asInt(uint32_t id)
+{
+    if (valueTypes.count(id) && (valueTypes[id] == b.typeInt() || valueTypes[id] == b.typeUInt())) {
+        return id;
+    }
+    uint32_t conv = b.nextId();
+    b.emit3(b.code, kOpConvertFToS, b.typeInt(), conv, id);
+    return note(conv, b.typeInt());
+}
+
+void
+Emitter::rememberArray(const std::string &name, const Type &type, uint32_t storage)
+{
+    if (type.kind != kTypeArray) {
+        return;
+    }
+    Type elem = type;
+    elem.kind = (type.rows > 1 && type.columns > 1) ? kTypeMatrix : (type.rows > 1 ? kTypeVector : type.scalar);
+    elem.arraySize = 0;
+    if (elem.kind != kTypeVector && elem.kind != kTypeMatrix) {
+        elem.kind = type.scalar;
+        elem.rows = 1;
+        elem.columns = 1;
+    }
+    arrayElems[name] = b.typeOf(elem);
+    arrayStorage[name] = storage;
+}
+
+uint32_t
+Emitter::emitIndexPtr(const Expr *expr, uint32_t &elemTy)
+{
+    elemTy = b.typeFloat();
+    if (!expr || expr->kids.size() < 2 || expr->kids[0]->kind != kExprIdent) {
+        return 0;
+    }
+    const std::string &name = expr->kids[0]->name;
+    auto lit = locals.find(name);
+    if (lit == locals.end() || arrayElems.find(name) == arrayElems.end()) {
+        return 0;
+    }
+    elemTy = arrayElems[name];
+    uint32_t idx = asInt(emitExpr(expr->kids[1].get()));
+    uint32_t storage = arrayStorage.count(name) ? arrayStorage[name] : kStoragePrivate;
+    uint32_t ptrTy = b.ptrType(elemTy, storage);
+    uint32_t ptr = b.nextId();
+    b.emit4(b.code, kOpAccessChain, ptrTy, ptr, lit->second, idx);
+    return ptr;
 }
 
 uint32_t
@@ -682,6 +767,36 @@ Emitter::emitFor(const Stmt *stmt, uint32_t returnType)
     if (stmt->expr3) {
         emitExpr(stmt->expr3.get());
     }
+    b.emit1(b.code, kOpBranch, header);
+    b.emit1(b.code, kOpLabel, merge);
+}
+
+void
+Emitter::emitWhile(const Stmt *stmt, uint32_t returnType, bool doWhile)
+{
+    uint32_t header = b.nextId();
+    uint32_t condL = b.nextId();
+    uint32_t body = b.nextId();
+    uint32_t cont = b.nextId();
+    uint32_t merge = b.nextId();
+    b.emit1(b.code, kOpBranch, doWhile ? body : header);
+    b.emit1(b.code, kOpLabel, header);
+    b.emit3(b.code, kOpLoopMerge, merge, cont, 0);
+    b.emit1(b.code, kOpBranch, condL);
+    b.emit1(b.code, kOpLabel, condL);
+    if (stmt->expr) {
+        uint32_t cond = asBool(emitExpr(stmt->expr.get()));
+        b.emit3(b.code, kOpBranchConditional, cond, body, merge);
+    }
+    else {
+        b.emit1(b.code, kOpBranch, body);
+    }
+    b.emit1(b.code, kOpLabel, body);
+    if (stmt->thenStmt) {
+        emitStmt(stmt->thenStmt.get(), returnType);
+    }
+    b.emit1(b.code, kOpBranch, cont);
+    b.emit1(b.code, kOpLabel, cont);
     b.emit1(b.code, kOpBranch, header);
     b.emit1(b.code, kOpLabel, merge);
 }
@@ -866,6 +981,14 @@ Emitter::emitExpr(const Expr *expr)
             ty = b.typeBool();
         }
         else if (expr->op == "=") {
+            if (expr->kids[0]->kind == kExprIndex) {
+                uint32_t elemTy = 0;
+                uint32_t ptr = emitIndexPtr(expr->kids[0].get(), elemTy);
+                if (ptr) {
+                    b.emit2(b.code, kOpStore, ptr, r);
+                }
+                return r;
+            }
             auto it = locals.find(expr->kids[0]->name);
             if (it != locals.end()) {
                 b.emit2(b.code, kOpStore, it->second, r);
@@ -1047,8 +1170,26 @@ Emitter::emitExpr(const Expr *expr)
     }
     case kExprCast:
         return emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
-    case kExprIndex:
-        return emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
+    case kExprIndex: {
+        uint32_t elemTy = 0;
+        uint32_t ptr = emitIndexPtr(expr, elemTy);
+        if (ptr) {
+            uint32_t id = b.nextId();
+            b.emit3(b.code, kOpLoad, elemTy, id, ptr);
+            return note(id, elemTy);
+        }
+        uint32_t base = emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
+        if (isVec(base) && expr->kids.size() > 1 && expr->kids[1]->kind == kExprLiteralInt) {
+            return extractComp(base, static_cast<uint32_t>(expr->kids[1]->intValue));
+        }
+        if (isVec(base) && expr->kids.size() > 1) {
+            uint32_t idx = asInt(emitExpr(expr->kids[1].get()));
+            uint32_t id = b.nextId();
+            b.emit4(b.code, kOpVectorExtractDynamic, b.typeFloat(), id, base, idx);
+            return note(id, b.typeFloat());
+        }
+        return base;
+    }
     default:
         return b.constF32(0);
     }
@@ -1076,14 +1217,43 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
         b.emit(b.code, kOpKill, nullptr, 0);
         return true;
     case kStmtVar: {
+        const uint32_t storage =
+            stmt->varType.kind == kTypeArray ? kStoragePrivate : kStorageFunction;
         uint32_t ty = b.typeOf(stmt->varType);
-        uint32_t ptr = b.ptrType(ty, kStorageFunction);
+        uint32_t ptr = b.ptrType(ty, storage);
         uint32_t var = b.nextId();
-        b.emit3(b.code, kOpVariable, ptr, var, kStorageFunction);
+        if (storage == kStoragePrivate) {
+            b.emit3(b.types, kOpVariable, ptr, var, storage);
+        }
+        else {
+            b.emit3(b.code, kOpVariable, ptr, var, storage);
+        }
         locals[stmt->name] = var;
         localTypes[stmt->name] = ty;
+        rememberArray(stmt->name, stmt->varType, storage);
         if (stmt->expr) {
-            b.emit2(b.code, kOpStore, var, emitExpr(stmt->expr.get()));
+            if (stmt->varType.kind == kTypeArray && stmt->expr->kind == kExprConstruct) {
+                std::vector<uint32_t> comps;
+                for (size_t i = 0; i < stmt->expr->kids.size(); i++) {
+                    comps.push_back(emitExpr(stmt->expr->kids[i].get()));
+                }
+                int n = stmt->varType.arraySize > 0 ? stmt->varType.arraySize : static_cast<int>(comps.size());
+                while (static_cast<int>(comps.size()) < n) {
+                    comps.push_back(b.constF32(0));
+                }
+                uint32_t id = b.nextId();
+                std::vector<uint32_t> ops;
+                ops.push_back(ty);
+                ops.push_back(id);
+                for (int i = 0; i < n; i++) {
+                    ops.push_back(comps[static_cast<size_t>(i)]);
+                }
+                b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+                b.emit2(b.code, kOpStore, var, id);
+            }
+            else {
+                b.emit2(b.code, kOpStore, var, emitExpr(stmt->expr.get()));
+            }
         }
         return true;
     }
@@ -1097,10 +1267,10 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
         emitFor(stmt, returnType);
         return true;
     case kStmtWhile:
+        emitWhile(stmt, returnType, false);
+        return true;
     case kStmtDoWhile:
-        if (stmt->thenStmt) {
-            emitStmt(stmt->thenStmt.get(), returnType);
-        }
+        emitWhile(stmt, returnType, true);
         return true;
     default:
         return true;
@@ -1208,16 +1378,13 @@ emitFunctionSPIRV(
         if (e.locals.find(gv.name) != e.locals.end()) {
             continue;
         }
-        Type stored = gv.type;
-        if (stored.kind == kTypeArray) {
-            stored = Type::vectorType(kTypeFloat, 4);
-        }
-        uint32_t ty = e.b.typeOf(stored);
+        uint32_t ty = e.b.typeOf(gv.type);
         uint32_t ptr = e.b.ptrType(ty, kStoragePrivate);
         uint32_t var = e.b.nextId();
         e.b.emit3(e.b.types, kOpVariable, ptr, var, kStoragePrivate);
         e.locals[gv.name] = var;
         e.localTypes[gv.name] = ty;
+        e.rememberArray(gv.name, gv.type, kStoragePrivate);
     }
 
     uint32_t fnType = e.b.nextId();

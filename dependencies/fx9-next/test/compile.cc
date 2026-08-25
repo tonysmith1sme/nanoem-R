@@ -193,6 +193,41 @@ TEST_CASE("fx9next bakes alpha test into pixel shader")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next indexes arrays and runs while")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 {\n"
+        "  float w[3] = { 0.2, 0.3, 0.5 };\n"
+        "  float acc = 0;\n"
+        "  int i = 0;\n"
+        "  while (i < 3) { acc += w[i]; i++; }\n"
+        "  return float4(acc, w[1], 0, 1);\n"
+        "}\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "arr.fx", product));
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        INFO(*product.sink.translator.begin());
+    }
+    REQUIRE(product.numCompiledPasses == 1);
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    const char *ps = effect->techniques[0]->passes[0]->pixel_shader->glsl;
+    REQUIRE(ps != nullptr);
+    const std::string body(ps);
+    REQUIRE((body.find("[") != std::string::npos || body.find("0.3") != std::string::npos));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next emits if and for control flow")
 {
     const char *src =
