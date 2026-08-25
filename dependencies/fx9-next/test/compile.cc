@@ -391,7 +391,7 @@ TEST_CASE("fx9next compiles dummy pass")
 
 TEST_CASE("fx9next compiles offscreen effect")
 {
-    const std::string path = "/Users/seele/Documents/GitRepo/nanoem-R/emapp/test/fixtures/effects/offscreen.fx";
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../emapp/test/fixtures/effects/offscreen.fx";
     Compiler compiler;
     compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
     Compiler::EffectProduct product;
