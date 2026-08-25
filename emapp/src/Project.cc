@@ -6735,6 +6735,9 @@ Project::loadOffscreenRenderTargetEffectFromEffectSourceMap(const Effect *ownerE
                     loaded = loadOffscreenRenderTargetEffectFromByteArray(
                         targetEffect, archiver, targetEffectFileURI, condition, output, newConditions, progress, error);
                 }
+                else {
+                    error = proxy.error();
+                }
             }
         }
     }

@@ -229,6 +229,9 @@ struct EffectCompiler {
             }
             m_reason = reason;
         }
+        else if (!sink.builder.empty()) {
+            m_reason = sink.builder;
+        }
         else {
             m_reason = sink.info;
         }
