@@ -3285,13 +3285,7 @@ Effect::setAllAccessoryParameters(const Accessory *accessory, const Project *pro
             }
             else {
                 foundAccessory = project->findAccessoryByFilename(targetName);
-                if (!foundAccessory) {
-                    foundAccessory = project->findAccessoryByName(targetName);
-                }
                 foundModel = project->findModelByFilename(targetName);
-                if (!foundModel) {
-                    foundModel = project->findModelByName(targetName);
-                }
             }
             if (foundAccessory) {
                 setAccessoryParameter(parameterName, foundAccessory, target, pass);
@@ -3424,13 +3418,7 @@ Effect::setAllModelParameters(const Model *model, const Project *project, Pass *
             }
             else {
                 foundModel = project->findModelByFilename(targetName);
-                if (!foundModel) {
-                    foundModel = project->findModelByName(targetName);
-                }
                 foundAccessory = project->findAccessoryByFilename(targetName);
-                if (!foundAccessory) {
-                    foundAccessory = project->findAccessoryByName(targetName);
-                }
             }
             if (foundModel) {
                 setModelParameter(parameterName, foundModel, target, pass);
