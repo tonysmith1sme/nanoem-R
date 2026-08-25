@@ -19,6 +19,7 @@ enum {
     kOpUndef = 1,
     kOpSource = 3,
     kOpName = 5,
+    kOpMemberName = 6,
     kOpExtInstImport = 11,
     kOpExtInst = 12,
     kOpMemoryModel = 14,
@@ -136,6 +137,8 @@ enum {
     kStorageUniform = 2,
     kStoragePrivate = 6,
     kDecorationArrayStride = 6,
+    kDecorationBlock = 2,
+    kDecorationOffset = 35,
     kDecorationLocation = 30,
     kDecorationBinding = 33,
     kDecorationDescriptorSet = 34,
@@ -153,6 +156,7 @@ enum {
 
 struct Builder {
     std::vector<uint32_t> header;
+    std::vector<uint32_t> debug;
     std::vector<uint32_t> decorations;
     std::vector<uint32_t> types;
     std::vector<uint32_t> code;
@@ -272,6 +276,13 @@ struct Builder {
     {
         uint32_t ops[4] = { a, b, c, d };
         emit(dest, op, ops, 4);
+    }
+
+    void
+    emit5(std::vector<uint32_t> &dest, uint16_t op, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e)
+    {
+        uint32_t ops[5] = { a, b, c, d, e };
+        emit(dest, op, ops, 5);
     }
 
     uint32_t
@@ -446,6 +457,35 @@ struct Builder {
         }
         return target;
     }
+
+    void
+    name(uint32_t target, const char *text)
+    {
+        emitLiteralString(debug, kOpName, target, text);
+    }
+
+    void
+    memberName(uint32_t type, uint32_t index, const char *text)
+    {
+        std::vector<uint32_t> ops;
+        ops.push_back(type);
+        ops.push_back(index);
+        uint32_t packed = 0;
+        int shift = 0;
+        for (const char *p = text;; p++) {
+            packed |= static_cast<uint32_t>(static_cast<unsigned char>(*p)) << shift;
+            shift += 8;
+            if (shift == 32 || *p == 0) {
+                ops.push_back(packed);
+                if (*p == 0) {
+                    break;
+                }
+                packed = 0;
+                shift = 0;
+            }
+        }
+        emit(debug, kOpMemberName, ops.data(), static_cast<uint16_t>(ops.size()));
+    }
 };
 
 int
@@ -547,7 +587,10 @@ struct Emitter {
     std::unordered_map<std::string, uint32_t> arrayStorage;
     std::unordered_map<std::string, uint32_t> valueOverlay;
     std::unordered_map<std::string, uint32_t> samplers;
+    std::unordered_map<std::string, uint32_t> uniformRegisters;
+    std::unordered_map<std::string, Type> uniformTypes;
     std::unordered_map<uint32_t, uint32_t> valueTypes;
+    uint32_t uniformBuffer = 0;
     uint32_t currentFnType;
     uint32_t pendingReturn;
     std::string pendingStructReturn;
@@ -570,6 +613,7 @@ struct Emitter {
     uint32_t emitExpr(const Expr *expr);
     bool emitStmt(const Stmt *stmt, uint32_t returnType);
     uint32_t loadIdent(const std::string &name);
+    uint32_t loadUniform(const std::string &name);
     uint32_t extractComp(uint32_t vec, uint32_t index);
     uint32_t makeVec3(uint32_t x, uint32_t y, uint32_t z);
     uint32_t makeVec2(uint32_t x, uint32_t y);
@@ -1003,12 +1047,79 @@ Emitter::loadIdent(const std::string &name)
     }
     auto it = locals.find(name);
     if (it == locals.end()) {
-        return b.constF32(0);
+        return uniformRegisters.count(name) ? loadUniform(name) : b.constF32(0);
     }
     uint32_t resultType = localTypes[name];
     uint32_t id = b.nextId();
     b.emit3(b.code, kOpLoad, resultType, id, it->second);
     return note(id, resultType);
+}
+
+uint32_t
+Emitter::loadUniform(const std::string &name)
+{
+    const Type &type = uniformTypes[name];
+    const uint32_t vec4 = b.typeVec(4);
+    const uint32_t ptr = b.nextId();
+    b.emit5(b.code, kOpAccessChain, b.ptrType(vec4, kStorageUniform), ptr, uniformBuffer, b.constI32(0),
+        b.constI32(static_cast<int>(uniformRegisters[name])));
+    const uint32_t value = b.nextId();
+    b.emit3(b.code, kOpLoad, vec4, value, ptr);
+    note(value, vec4);
+    if (type.kind == kTypeMatrix) {
+        std::vector<uint32_t> columns;
+        for (int i = 0; i < type.columns; i++) {
+            const uint32_t columnPtr = b.nextId();
+            b.emit5(b.code, kOpAccessChain, b.ptrType(vec4, kStorageUniform), columnPtr, uniformBuffer, b.constI32(0),
+                b.constI32(static_cast<int>(uniformRegisters[name] + i)));
+            const uint32_t column = b.nextId();
+            b.emit3(b.code, kOpLoad, vec4, column, columnPtr);
+            note(column, vec4);
+            if (type.rows == 4) {
+                columns.push_back(column);
+            }
+            else {
+                std::vector<uint32_t> components;
+                for (int j = 0; j < type.rows; j++) {
+                    components.push_back(extractComp(column, static_cast<uint32_t>(j)));
+                }
+                const uint32_t columnType = b.typeVec(type.rows);
+                const uint32_t narrowed = b.nextId();
+                std::vector<uint32_t> ops;
+                ops.push_back(columnType);
+                ops.push_back(narrowed);
+                ops.insert(ops.end(), components.begin(), components.end());
+                b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+                columns.push_back(note(narrowed, columnType));
+            }
+        }
+        const uint32_t resultType = b.typeOf(type);
+        const uint32_t result = b.nextId();
+        std::vector<uint32_t> ops;
+        ops.push_back(resultType);
+        ops.push_back(result);
+        ops.insert(ops.end(), columns.begin(), columns.end());
+        b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+        return note(result, resultType);
+    }
+    if (type.kind == kTypeVector && type.rows < 4) {
+        std::vector<uint32_t> components;
+        for (int i = 0; i < type.rows; i++) {
+            components.push_back(extractComp(value, static_cast<uint32_t>(i)));
+        }
+        const uint32_t resultType = b.typeOf(type);
+        const uint32_t result = b.nextId();
+        std::vector<uint32_t> ops;
+        ops.push_back(resultType);
+        ops.push_back(result);
+        ops.insert(ops.end(), components.begin(), components.end());
+        b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+        return note(result, resultType);
+    }
+    if (type.kind == kTypeFloat || type.kind == kTypeInt || type.kind == kTypeUInt || type.kind == kTypeBool) {
+        return extractComp(value, 0);
+    }
+    return value;
 }
 
 uint32_t
@@ -1827,12 +1938,47 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
             break;
         }
     }
+    const uint32_t uniformCapacity = 128;
+    bool hasUniforms = false;
+    for (size_t i = 0; i < unit.variables.size(); i++) {
+        const Variable &gv = unit.variables[i];
+        if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
+            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid || gv.type.kind == kTypeArray ||
+            gv.type.kind == kTypeInt || gv.type.kind == kTypeUInt || gv.type.kind == kTypeBool) {
+            continue;
+        }
+        const EffectBindingIR *binding = findEffectBinding(e.effect, gv.name, kEffectRegisterFloat4);
+        if (!binding) {
+            continue;
+        }
+        e.uniformRegisters[gv.name] = static_cast<uint32_t>(binding->registerIndex);
+        e.uniformTypes[gv.name] = gv.type;
+        hasUniforms = true;
+    }
+    if (hasUniforms) {
+        const uint32_t vec4 = e.b.typeVec(4);
+        const uint32_t length = e.b.constU32(uniformCapacity);
+        const uint32_t array = e.b.nextId();
+        e.b.emit3(e.b.types, kOpTypeArray, array, vec4, length);
+        e.b.decorate(array, kDecorationArrayStride, 16, true);
+        const uint32_t block = e.b.nextId();
+        e.b.emit2(e.b.types, kOpTypeStruct, block, array);
+        e.b.decorate(block, kDecorationBlock, 0, false);
+        e.b.emit4(e.b.decorations, kOpMemberDecorate, block, 0, kDecorationOffset, 0);
+        e.b.memberName(block, 0, "data");
+        const uint32_t ptr = e.b.ptrType(block, kStorageUniform);
+        e.uniformBuffer = e.b.nextId();
+        e.b.emit3(e.b.types, kOpVariable, ptr, e.uniformBuffer, kStorageUniform);
+        e.b.decorate(e.uniformBuffer, kDecorationDescriptorSet, 0, true);
+        e.b.decorate(e.uniformBuffer, kDecorationBinding, 0, true);
+        e.b.name(e.uniformBuffer, stage == kStageVertex ? "vs_uniforms_vec4" : "ps_uniforms_vec4");
+    }
     e.b.typeFloat();
     e.b.typeVec(4);
     for (size_t i = 0; i < unit.variables.size(); i++) {
         const Variable &gv = unit.variables[i];
         if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
-            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid) {
+            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid || e.uniformRegisters.count(gv.name)) {
             continue;
         }
         if (e.locals.find(gv.name) != e.locals.end()) {
@@ -1919,6 +2065,7 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
     words.push_back(e.b.bound);
     words.push_back(0);
     words.insert(words.end(), e.b.header.begin(), e.b.header.end());
+    words.insert(words.end(), e.b.debug.begin(), e.b.debug.end());
     words.insert(words.end(), e.b.decorations.begin(), e.b.decorations.end());
     words.insert(words.end(), e.b.types.begin(), e.b.types.end());
     words.insert(words.end(), e.b.code.begin(), e.b.code.end());
@@ -1984,6 +2131,8 @@ validateSPIRV(const std::vector<uint32_t> &words, std::string &error)
             functionEnd = true;
             break;
         case kOpExtInstImport:
+        case kOpName:
+        case kOpMemberName:
         case kOpExecutionMode:
         case kOpTypeVoid:
         case kOpTypeBool:

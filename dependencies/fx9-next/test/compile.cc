@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -174,6 +175,7 @@ TEST_CASE("fx9next lowers D3D11 constant buffer fields")
     REQUIRE(pass->pixel_shader->uniforms[0]->index == 0);
     REQUIRE(pass->pixel_shader->uniforms[1]->index == 1);
     REQUIRE(pass->pixel_shader->msl != nullptr);
+    REQUIRE(std::strstr(pass->pixel_shader->msl, "ps_uniforms_vec4") != nullptr);
     REQUIRE(compileMetalSource(pass->pixel_shader->msl, "D3D11 constant buffer shader"));
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
