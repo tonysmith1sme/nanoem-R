@@ -8,6 +8,7 @@
 #ifndef FX9NEXT_SHADER_IR_H_
 #define FX9NEXT_SHADER_IR_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,68 @@ enum ShaderStage {
     kShaderStagePixel
 };
 
+enum ShaderExpressionKind {
+    kShaderExpressionLiteralFloat,
+    kShaderExpressionLiteralInt,
+    kShaderExpressionLiteralBool,
+    kShaderExpressionLiteralString,
+    kShaderExpressionIdentifier,
+    kShaderExpressionUnary,
+    kShaderExpressionBinary,
+    kShaderExpressionTernary,
+    kShaderExpressionCall,
+    kShaderExpressionMember,
+    kShaderExpressionIndex,
+    kShaderExpressionConstruct,
+    kShaderExpressionCast
+};
+
+enum ShaderStatementKind {
+    kShaderStatementBlock,
+    kShaderStatementExpression,
+    kShaderStatementReturn,
+    kShaderStatementIf,
+    kShaderStatementFor,
+    kShaderStatementWhile,
+    kShaderStatementDoWhile,
+    kShaderStatementDiscard,
+    kShaderStatementVariable,
+    kShaderStatementBreak,
+    kShaderStatementContinue
+};
+
+struct ShaderExpressionIR {
+    ShaderExpressionIR();
+    ShaderExpressionIR(const ShaderExpressionIR &other);
+    ShaderExpressionIR &operator=(const ShaderExpressionIR &other);
+
+    ShaderExpressionKind kind;
+    Type type;
+    std::string name;
+    std::string operation;
+    double floatValue;
+    int intValue;
+    bool boolValue;
+    std::vector<std::unique_ptr<ShaderExpressionIR> > children;
+};
+
+struct ShaderStatementIR {
+    ShaderStatementIR();
+    ShaderStatementIR(const ShaderStatementIR &other);
+    ShaderStatementIR &operator=(const ShaderStatementIR &other);
+
+    ShaderStatementKind kind;
+    Type variableType;
+    std::string name;
+    std::string semantic;
+    std::unique_ptr<ShaderExpressionIR> expression;
+    std::unique_ptr<ShaderExpressionIR> condition;
+    std::unique_ptr<ShaderExpressionIR> iteration;
+    std::unique_ptr<ShaderStatementIR> thenStatement;
+    std::unique_ptr<ShaderStatementIR> elseStatement;
+    std::vector<std::unique_ptr<ShaderStatementIR> > children;
+};
+
 struct ShaderParameterIR {
     std::string name;
     Type type;
@@ -29,9 +92,14 @@ struct ShaderParameterIR {
 };
 
 struct ShaderFunctionIR {
+    ShaderFunctionIR();
+    ShaderFunctionIR(const ShaderFunctionIR &other);
+    ShaderFunctionIR &operator=(const ShaderFunctionIR &other);
+
     std::string name;
     Type returnType;
     std::vector<ShaderParameterIR> parameters;
+    std::unique_ptr<ShaderStatementIR> body;
 };
 
 struct ShaderModuleIR {

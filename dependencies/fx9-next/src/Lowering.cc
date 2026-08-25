@@ -7,6 +7,7 @@
 #include "fx9next/Lowering.h"
 
 #include <sstream>
+#include <unordered_map>
 
 namespace fx9next {
 namespace {
@@ -44,8 +45,152 @@ findAnnotation(const std::vector<Annotation> &annotations, const char *name)
     return nullptr;
 }
 
+ShaderExpressionKind
+lowerExpressionKind(ExprKind kind)
+{
+    return static_cast<ShaderExpressionKind>(kind);
+}
+
+ShaderStatementKind
+lowerStatementKind(StmtKind kind)
+{
+    return static_cast<ShaderStatementKind>(kind);
+}
+
+typedef std::unordered_map<std::string, Type> TypeMap;
+
+Type
+arrayElementType(const Type &type)
+{
+    Type result = type;
+    if (type.kind == kTypeArray) {
+        result.kind = type.rows > 1 && type.columns > 1 ? kTypeMatrix : type.rows > 1 ? kTypeVector : type.scalar;
+        result.arraySize = 0;
+    }
+    return result;
+}
+
+Type
+memberType(const Type &base, const std::string &member)
+{
+    if (base.isVector() && !member.empty()) {
+        return member.size() == 1 ? Type::floatType() : Type::vectorType(base.scalar, static_cast<int>(member.size()));
+    }
+    if (base.isMatrix() && !member.empty() && member[0] == '_') {
+        return Type::floatType();
+    }
+    return Type::voidType();
+}
+
+Type
+binaryType(const std::string &operation, const Type &left, const Type &right)
+{
+    if (operation == "<" || operation == ">" || operation == "<=" || operation == ">=" || operation == "==" ||
+        operation == "!=" || operation == "&&" || operation == "||") {
+        return Type::boolType();
+    }
+    if (operation == "=" || operation == "+=" || operation == "-=" || operation == "*=" || operation == "/=" ||
+        operation == "%=") {
+        return left;
+    }
+    if (!left.isVoid()) {
+        return left;
+    }
+    return right;
+}
+
+std::unique_ptr<ShaderExpressionIR>
+lowerExpression(const Expr *expression, const TypeMap &symbols, const TypeMap &functions)
+{
+    if (!expression) {
+        return std::unique_ptr<ShaderExpressionIR>();
+    }
+    std::unique_ptr<ShaderExpressionIR> result(new ShaderExpressionIR());
+    result->kind = lowerExpressionKind(expression->kind);
+    result->type = expression->type;
+    result->name = expression->name;
+    result->operation = expression->op;
+    result->floatValue = expression->floatValue;
+    result->intValue = expression->intValue;
+    result->boolValue = expression->boolValue;
+    for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {
+        result->children.push_back(lowerExpression(it->get(), symbols, functions));
+    }
+    if (result->type.isVoid()) {
+        switch (expression->kind) {
+        case kExprIdent: {
+            TypeMap::const_iterator it = symbols.find(expression->name);
+            if (it != symbols.end()) {
+                result->type = it->second;
+            }
+            break;
+        }
+        case kExprUnary:
+            if (!result->children.empty()) {
+                result->type = expression->op == "!" ? Type::boolType() : result->children[0]->type;
+            }
+            break;
+        case kExprBinary:
+            if (result->children.size() == 2) {
+                result->type = binaryType(expression->op, result->children[0]->type, result->children[1]->type);
+            }
+            break;
+        case kExprTernary:
+            if (result->children.size() == 3) {
+                result->type = result->children[1]->type;
+            }
+            break;
+        case kExprCall: {
+            TypeMap::const_iterator it = functions.find(expression->name);
+            if (it != functions.end()) {
+                result->type = it->second;
+            }
+            break;
+        }
+        case kExprMember:
+            if (!result->children.empty()) {
+                result->type = memberType(result->children[0]->type, expression->name);
+            }
+            break;
+        case kExprIndex:
+            if (!result->children.empty()) {
+                result->type = arrayElementType(result->children[0]->type);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return result;
+}
+
+std::unique_ptr<ShaderStatementIR>
+lowerStatement(const Stmt *statement, TypeMap &symbols, const TypeMap &functions)
+{
+    if (!statement) {
+        return std::unique_ptr<ShaderStatementIR>();
+    }
+    std::unique_ptr<ShaderStatementIR> result(new ShaderStatementIR());
+    result->kind = lowerStatementKind(statement->kind);
+    result->variableType = statement->varType;
+    result->name = statement->name;
+    result->semantic = statement->semantic;
+    result->expression = lowerExpression(statement->expr.get(), symbols, functions);
+    result->condition = lowerExpression(statement->expr2.get(), symbols, functions);
+    result->iteration = lowerExpression(statement->expr3.get(), symbols, functions);
+    if (statement->kind == kStmtVar && !statement->name.empty()) {
+        symbols[statement->name] = statement->varType;
+    }
+    result->thenStatement = lowerStatement(statement->thenStmt.get(), symbols, functions);
+    result->elseStatement = lowerStatement(statement->elseStmt.get(), symbols, functions);
+    for (std::vector<std::unique_ptr<Stmt> >::const_iterator it = statement->kids.begin(); it != statement->kids.end(); ++it) {
+        result->children.push_back(lowerStatement(it->get(), symbols, functions));
+    }
+    return result;
+}
+
 ShaderModuleIR
-makeShader(const Function &function, ShaderStage stage)
+makeShader(const TranslationUnit &unit, const Function &function, ShaderStage stage)
 {
     ShaderModuleIR shader;
     shader.stage = stage;
@@ -85,6 +230,17 @@ makeShader(const Function &function, ShaderStage stage)
         parameter.output = it->isOut;
         declaration.parameters.push_back(parameter);
     }
+    TypeMap symbols, functions;
+    for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
+        symbols[it->name] = it->type;
+    }
+    for (std::vector<Function>::const_iterator it = unit.functions.begin(); it != unit.functions.end(); ++it) {
+        functions[it->name] = it->returnType;
+    }
+    for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
+        symbols[it->name] = it->type;
+    }
+    declaration.body = lowerStatement(function.body.get(), symbols, functions);
     shader.functions.push_back(declaration);
     return shader;
 }
@@ -211,7 +367,7 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
                         "vertex shader entry does not resolve: " + pass->vsEntry);
                     return false;
                 }
-                ShaderModuleIR shader = makeShader(*function, kShaderStageVertex);
+                ShaderModuleIR shader = makeShader(unit, *function, kShaderStageVertex);
                 loweredPass.shaders.push_back(shader);
                 shaders.push_back(shader);
             }
@@ -222,7 +378,7 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
                         "pixel shader entry does not resolve: " + pass->psEntry);
                     return false;
                 }
-                ShaderModuleIR shader = makeShader(*function, kShaderStagePixel);
+                ShaderModuleIR shader = makeShader(unit, *function, kShaderStagePixel);
                 loweredPass.shaders.push_back(shader);
                 shaders.push_back(shader);
             }

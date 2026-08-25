@@ -94,6 +94,40 @@ TEST_CASE("fx9next lowers parsed effect scripts and shader entries")
     REQUIRE(effect.techniques[0].passes.size() == 1);
     REQUIRE(effect.techniques[0].passes[0].script.size() == 2);
     REQUIRE(shaders.size() == 2);
+    REQUIRE(shaders[0].functions[0].body.get() != nullptr);
+    REQUIRE(shaders[0].functions[0].body->kind == kShaderStatementBlock);
+    REQUIRE(shaders[0].functions[0].body->children.size() == 1);
+    REQUIRE(shaders[0].functions[0].body->children[0]->kind == kShaderStatementReturn);
+    REQUIRE(shaders[0].functions[0].body->children[0]->expression->type.toString() == "float4");
+}
+
+TEST_CASE("fx9next resolves typed shader control flow into IR")
+{
+    const char *source =
+        "float4 ps_main(float4 color : COLOR0) : COLOR0 {\n"
+        "  float value = color.r;\n"
+        "  if (value > 0.5) { value = 1; }\n"
+        "  return float4(value, 0, 0, 1);\n"
+        "}\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "typed-control.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 1);
+    const ShaderStatementIR *const body = shaders[0].functions[0].body.get();
+    REQUIRE(body->children.size() == 3);
+    REQUIRE(body->children[0]->kind == kShaderStatementVariable);
+    REQUIRE(body->children[0]->expression->type.toString() == "float");
+    REQUIRE(body->children[1]->kind == kShaderStatementIf);
+    REQUIRE(body->children[1]->expression->type.toString() == "bool");
+    REQUIRE(body->children[2]->kind == kShaderStatementReturn);
+    REQUIRE(body->children[2]->expression->type.toString() == "float4");
 }
 
 TEST_CASE("fx9next rejects unknown effect script commands")
