@@ -246,6 +246,29 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
     ShaderModuleIR shader;
     shader.stage = stage;
     shader.entryPoint = function.name;
+    std::vector<Type> types;
+    for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
+        types.push_back(it->type);
+    }
+    types.push_back(function.returnType);
+    for (std::vector<Type>::const_iterator type = types.begin(); type != types.end(); ++type) {
+        if (type->kind != kTypeStruct || type->members.empty()) {
+            continue;
+        }
+        bool exists = false;
+        for (std::vector<ShaderStructIR>::const_iterator it = shader.structs.begin(); it != shader.structs.end(); ++it) {
+            exists = it->name == type->name;
+            if (exists) {
+                break;
+            }
+        }
+        if (!exists) {
+            ShaderStructIR structure;
+            structure.name = type->name;
+            structure.members = type->members;
+            shader.structs.push_back(structure);
+        }
+    }
     for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
         ShaderParameterIR parameter;
         parameter.name = it->name;

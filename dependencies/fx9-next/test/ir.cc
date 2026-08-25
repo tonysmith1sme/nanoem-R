@@ -40,6 +40,39 @@ TEST_CASE("fx9next shader IR has a canonical semantic dump")
     REQUIRE(module.canonicalDump() == "vertex vs_main\nin float4 position : POSITION\n");
 }
 
+TEST_CASE("fx9next shader IR preserves reachable struct members")
+{
+    TranslationUnit unit;
+    Parser parser;
+    std::string parseError;
+    DiagnosticSink diagnostics;
+    REQUIRE(parser.parse(
+        "struct VSOutput { float4 position : POSITION; float2 uv : TEXCOORD0; };\n"
+        "VSOutput vs_main(float4 position : POSITION) { VSOutput output = (VSOutput) 0; "
+        "output.position = position; return output; }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); } }\n",
+        "struct.fx", unit, parseError));
+    REQUIRE(parseError.empty());
+    const Function *function = nullptr;
+    for (std::vector<Function>::const_iterator it = unit.functions.begin(); it != unit.functions.end(); ++it) {
+        if (it->name == "vs_main") {
+            function = &*it;
+            break;
+        }
+    }
+    REQUIRE(function != nullptr);
+    (void) function;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    REQUIRE(Lowering().lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 1);
+    REQUIRE(shaders[0].structs.size() == 1);
+    REQUIRE(shaders[0].structs[0].name == "VSOutput");
+    REQUIRE(shaders[0].structs[0].members.size() == 2);
+    REQUIRE(shaders[0].canonicalDump().find("position") != std::string::npos);
+    REQUIRE(shaders[0].canonicalDump().find("TEXCOORD0") != std::string::npos);
+}
+
 TEST_CASE("fx9next effect IR preserves resource and pass order")
 {
     EffectModuleIR module;

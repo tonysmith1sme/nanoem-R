@@ -91,6 +91,11 @@ struct ShaderParameterIR {
     bool output;
 };
 
+struct ShaderStructIR {
+    std::string name;
+    std::vector<std::pair<std::string, Type> > members;
+};
+
 struct ShaderFunctionIR {
     ShaderFunctionIR();
     ShaderFunctionIR(const ShaderFunctionIR &other);
@@ -108,6 +113,7 @@ struct ShaderModuleIR {
     std::string entryPoint;
     std::vector<ShaderParameterIR> inputs;
     std::vector<ShaderParameterIR> outputs;
+    std::vector<ShaderStructIR> structs;
     std::vector<ShaderFunctionIR> functions;
 
     std::string canonicalDump() const;

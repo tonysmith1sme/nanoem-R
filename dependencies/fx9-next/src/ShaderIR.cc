@@ -215,6 +215,17 @@ ShaderModuleIR::canonicalDump() const
     for (std::vector<ShaderParameterIR>::const_iterator it = inputs.begin(); it != inputs.end(); ++it) {
         stream << "in " << it->type.toString() << " " << it->name << " : " << it->semantic << "\n";
     }
+    for (std::vector<ShaderStructIR>::const_iterator it = structs.begin(); it != structs.end(); ++it) {
+        stream << "struct " << it->name;
+        for (std::vector<std::pair<std::string, Type> >::const_iterator member = it->members.begin();
+             member != it->members.end(); ++member) {
+            stream << " " << member->second.toString() << " " << member->first;
+            if (!member->second.name.empty()) {
+                stream << " : " << member->second.name;
+            }
+        }
+        stream << "\n";
+    }
     for (std::vector<ShaderParameterIR>::const_iterator it = outputs.begin(); it != outputs.end(); ++it) {
         stream << "out " << it->type.toString() << " " << it->name << " : " << it->semantic << "\n";
     }

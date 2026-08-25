@@ -538,6 +538,8 @@ struct Emitter {
     Builder b;
     const TranslationUnit *unit;
     const EffectModuleIR *effect;
+    const ShaderModuleIR *shader;
+    std::unordered_map<std::string, Type> structTypes;
     SpirvShaderStage stage;
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
@@ -1656,12 +1658,22 @@ makeStatement(const ShaderStatementIR *source)
 } /* namespace anonymous */
 
 bool
-emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *effect, const Function &fn,
-    SpirvShaderStage stage, std::vector<uint32_t> &words, std::string &error)
+emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *effect, const ShaderModuleIR *shader,
+    const Function &fn, SpirvShaderStage stage, std::vector<uint32_t> &words, std::string &error)
 {
     Emitter e;
     e.unit = &unit;
     e.effect = effect;
+    e.shader = shader;
+    if (shader) {
+        for (std::vector<ShaderStructIR>::const_iterator it = shader->structs.begin(); it != shader->structs.end(); ++it) {
+            Type type;
+            type.kind = kTypeStruct;
+            type.name = it->name;
+            type.members = it->members;
+            e.structTypes[type.name] = type;
+        }
+    }
     e.stage = stage;
     e.b.emit1(e.b.header, kOpCapability, kCapShader);
     e.b.idGlsl = e.b.nextId();
@@ -1916,7 +1928,7 @@ emitFunctionSPIRV(
     const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage, std::vector<uint32_t> &words,
     std::string &error)
 {
-    return emitFunctionSPIRVWithEffect(unit, nullptr, fn, stage, words, error);
+    return emitFunctionSPIRVWithEffect(unit, nullptr, nullptr, fn, stage, words, error);
 }
 
 bool
@@ -1962,8 +1974,8 @@ emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const
         function.params.push_back(parameter);
     }
     function.body = makeStatement(source.body.get());
-    return emitFunctionSPIRVWithEffect(
-        unit, &effect, function, shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
+    return emitFunctionSPIRVWithEffect(unit, &effect, &shader, function,
+        shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
 }
 
 } /* namespace fx9next */
