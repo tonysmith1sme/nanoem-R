@@ -141,8 +141,6 @@ enum {
     kDecorationDescriptorSet = 34,
     kDecorationBuiltIn = 11,
     kBuiltInPosition = 0,
-    kBuiltInFragCoord = 15,
-    kBuiltInFrontFacing = 17,
     kFunctionControlNone = 0,
     kCapShader = 1,
     kExecVertex = 0,
@@ -1627,29 +1625,11 @@ emitFunctionSPIRV(
             for (size_t mi = 0; mi < st->members.size(); mi++) {
                 uint32_t ty = e.b.typeOf(st->members[mi].second);
                 const uint32_t storage = fn.params[i].isOut ? kStorageOutput : kStorageInput;
-                const std::string &sem = st->members[mi].second.name;
-                std::string semUpper;
-                for (size_t c = 0; c < sem.size(); c++) {
-                    semUpper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(sem[c]))));
-                }
-                if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VPOS" || semUpper == "SV_POSITION")) {
-                    ty = e.b.typeVec(4);
-                }
-                else if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VFACE" || semUpper == "SV_ISFRONTFACE")) {
-                    ty = e.b.typeBool();
-                }
                 uint32_t ptr = e.b.ptrType(ty, storage);
                 uint32_t var = e.b.nextId();
                 e.b.emit3(e.b.types, kOpVariable, ptr, var, storage);
-                if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VPOS" || semUpper == "SV_POSITION")) {
-                    e.b.decorate(var, kDecorationBuiltIn, kBuiltInFragCoord, true);
-                }
-                else if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VFACE" || semUpper == "SV_ISFRONTFACE")) {
-                    e.b.decorate(var, kDecorationBuiltIn, kBuiltInFrontFacing, true);
-                }
-                else {
-                    e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(sem)), true);
-                }
+                const std::string &sem = st->members[mi].second.name;
+                e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(sem)), true);
                 if (fn.params[i].isOut) {
                     extraOuts.push_back(var);
                 }
@@ -1662,11 +1642,6 @@ emitFunctionSPIRV(
             }
             continue;
         }
-        const std::string &sem = fn.params[i].semantic;
-        std::string semUpper;
-        for (size_t c = 0; c < sem.size(); c++) {
-            semUpper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(sem[c]))));
-        }
         uint32_t ty = e.b.typeOf(fn.params[i].type.kind == kTypeVector || fn.params[i].type.kind == kTypeFloat ||
                 fn.params[i].type.kind == kTypeInt
             ? fn.params[i].type
@@ -1675,25 +1650,11 @@ emitFunctionSPIRV(
             fn.params[i].type.kind != kTypeInt) {
             ty = e.b.typeVec(4);
         }
-        if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VPOS" || semUpper == "SV_POSITION")) {
-            ty = e.b.typeVec(4);
-        }
-        else if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VFACE" || semUpper == "SV_ISFRONTFACE")) {
-            ty = e.b.typeBool();
-        }
         const uint32_t storage = fn.params[i].isOut ? kStorageOutput : kStorageInput;
         uint32_t ptr = e.b.ptrType(ty, storage);
         uint32_t var = e.b.nextId();
         e.b.emit3(e.b.types, kOpVariable, ptr, var, storage);
-        if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VPOS" || semUpper == "SV_POSITION")) {
-            e.b.decorate(var, kDecorationBuiltIn, kBuiltInFragCoord, true);
-        }
-        else if (stage == kStageFragment && !fn.params[i].isOut && (semUpper == "VFACE" || semUpper == "SV_ISFRONTFACE")) {
-            e.b.decorate(var, kDecorationBuiltIn, kBuiltInFrontFacing, true);
-        }
-        else {
-            e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(fn.params[i].semantic)), true);
-        }
+        e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(fn.params[i].semantic)), true);
         if (fn.params[i].isOut) {
             extraOuts.push_back(var);
         }

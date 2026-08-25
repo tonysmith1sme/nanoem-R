@@ -551,13 +551,7 @@ fillShaderInterface(Arena &arena, const TranslationUnit &unit, const Function &f
         fx9__effect__uniform__init(u);
         u->type = FX9__EFFECT__UNIFORM__TYPE__UT_FLOAT;
         u->index = reg;
-        uint32_t count = uniforms[i]->type.kind == kTypeMatrix ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
-        if (uniforms[i]->type.kind == kTypeArray) {
-            uint32_t arrayElements = uniforms[i]->type.arraySize > 0 ? static_cast<uint32_t>(uniforms[i]->type.arraySize) : 1;
-            uint32_t rowCount = (uniforms[i]->type.rows > 1 && uniforms[i]->type.columns > 1) ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
-            count = arrayElements * rowCount;
-        }
-        u->num_elements = count;
+        u->num_elements = uniforms[i]->type.kind == kTypeMatrix ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
         u->constant_index = reg;
         u->name = arena.copy(uniforms[i]->name);
         Fx9__Effect__Symbol *sym = shader->symbols[i] = arena.alloc<Fx9__Effect__Symbol>();
@@ -565,8 +559,8 @@ fillShaderInterface(Arena &arena, const TranslationUnit &unit, const Function &f
         sym->name = arena.copy(uniforms[i]->name);
         sym->register_set = FX9__EFFECT__SYMBOL__REGISTER_SET__RS_FLOAT4;
         sym->register_index = reg;
-        sym->register_count = count;
-        reg += count;
+        sym->register_count = u->num_elements;
+        reg += u->num_elements;
     }
 }
 
