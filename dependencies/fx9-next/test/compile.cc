@@ -10,6 +10,10 @@
 #include "fx9next/Compiler.h"
 #include "fx9next/Parser.h"
 
+#include <cstdio>
+#include <string>
+#include <vector>
+
 using namespace fx9next;
 
 TEST_CASE("fx9next parses a pass-through effect")
@@ -57,6 +61,62 @@ TEST_CASE("fx9next compiles pass-through effect to protobuf")
     REQUIRE(product.numPasses == 1);
     REQUIRE(product.numCompiledPasses == 1);
     REQUIRE_FALSE(product.message.empty());
+}
+
+TEST_CASE("fx9next compiles fx9 corpus effects")
+{
+    static const char *kFiles[] = { "01_tex2D_basic.fx", "02_tex2Dlod_bias_proj.fx", "03_texM3x3.fx",
+        "04_token_pasting.fx", "05_many_samplers.fx", "06_alpha_test_states.fx", "07_stencil_states.fx",
+        "08_two_sided_stencil.fx", "09_script_commands.fx", "10_dummy_pass.fx", "11_shift_jis.fx",
+        "12_string_annotation.fx", "14_matrix_semantics.fx", "15_vpos_vface.fx", "16_matrix_swizzle.fx",
+        "17_modulo_fmod.fx", "18_ternary_bool.fx", "19_struct_io.fx", "20_matrix_cast.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 19)));
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/corpus/" + name;
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    const bool ok = compiler.compile(path.c_str(), product);
+    INFO(path);
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        for (auto it = product.sink.translator.begin(); it != product.sink.translator.end(); ++it) {
+            INFO(*it);
+        }
+    }
+    REQUIRE(ok);
+    REQUIRE(product.numCompiledPasses == product.numPasses);
+    REQUIRE_FALSE(product.message.empty());
+}
+
+TEST_CASE("fx9next compiles MME filter packs")
+{
+    static const char *kFiles[] = { "Diffusion7/Diffusion.fx", "AnimeScreenTex_v1.0/A-screen.fx",
+        "LightBloom/LightBloom with DirtMap.fx", "msUnsharp/msUnsharp.fx", "ikBokeh_v020a_SJ/ikBokeh.fx",
+        "ikDiffusion/ikDiffusion/Diffusion1/ikDiffusion1.fx", "ikDiffusion/ikDiffusion/Diffusion2/ikDiffusion2.fx",
+        "PostAdultShaderS2_v013/PostAdultShader.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 8)));
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../../MME/" + name;
+    FILE *fp = std::fopen(path.c_str(), "rb");
+    if (!fp) {
+        WARN("missing " + path);
+        return;
+    }
+    std::fclose(fp);
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
+    compiler.setDefineMacro("NANOEM", "1");
+    Compiler::EffectProduct product;
+    const bool ok = compiler.compile(path.c_str(), product);
+    INFO(path);
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        for (auto it = product.sink.translator.begin(); it != product.sink.translator.end(); ++it) {
+            INFO(*it);
+        }
+    }
+    REQUIRE(ok);
 }
 
 TEST_CASE("fx9next compiles dummy pass")

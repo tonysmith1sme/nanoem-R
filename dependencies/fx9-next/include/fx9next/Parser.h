@@ -9,6 +9,7 @@
 #define FX9NEXT_PARSER_H_
 
 #include <string>
+#include <unordered_map>
 
 #include "fx9next/AST.h"
 #include "fx9next/Lexer.h"
@@ -38,13 +39,18 @@ private:
     bool parseAnnotations(std::vector<Annotation> &annotations);
     bool parseSemantic(std::string &semantic);
     bool parseRegister(std::string &reg);
+    bool parseVarTail(Type type, const std::string &firstName, std::unique_ptr<Stmt> &stmt);
     void skipAttributes();
     void errorAt(const std::string &message);
     int binaryPrec(const std::string &op) const;
+    bool isTypeName(const std::string &name) const;
+    bool isQualifier(const std::string &name) const;
+    bool looksLikeDeclaration() const;
 
     Lexer m_lexer;
     TranslationUnit *m_unit;
     std::string m_error;
+    std::unordered_map<std::string, Type> m_userTypes;
 };
 
 } /* namespace fx9next */

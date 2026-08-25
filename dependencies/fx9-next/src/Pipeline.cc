@@ -114,6 +114,12 @@ Pipeline::compile(const std::string &source, const char *filename, EffectProduct
             " compiled=" + std::to_string(effectProduct.numCompiledPasses) +
             " functions=" + std::to_string(unit.functions.size()) +
             " techniques=" + std::to_string(unit.techniques.size());
+        if (!effectProduct.sink.builder.empty()) {
+            effectProduct.sink.info += " builder=" + effectProduct.sink.builder;
+        }
+        if (!effectProduct.sink.translator.empty()) {
+            effectProduct.sink.info += " xlate=" + *effectProduct.sink.translator.begin();
+        }
     }
     return ok;
 }

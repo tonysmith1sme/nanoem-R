@@ -184,7 +184,33 @@ Preprocessor::processInternal(
         if (!line.empty() && line[line.size() - 1] == '\r') {
             line.resize(line.size() - 1);
         }
+        while (!line.empty() && line[line.size() - 1] == '\\') {
+            line.resize(line.size() - 1);
+            std::string more;
+            if (!std::getline(in, more)) {
+                break;
+            }
+            if (!more.empty() && more[more.size() - 1] == '\r') {
+                more.resize(more.size() - 1);
+            }
+            line += more;
+        }
         std::string stripped = trim(line);
+        size_t comment = std::string::npos;
+        bool inStr = false;
+        for (size_t ci = 0; ci + 1 < stripped.size(); ci++) {
+            if (stripped[ci] == '"') {
+                inStr = !inStr;
+            }
+            if (!inStr && stripped[ci] == '/' && stripped[ci + 1] == '/') {
+                comment = ci;
+                break;
+            }
+        }
+        if (comment != std::string::npos) {
+            stripped = trim(stripped.substr(0, comment));
+            line = line.substr(0, line.find("//"));
+        }
         if (!stripped.empty() && stripped[0] == '#') {
             if (!handleDirective(stripped, filename, depth, emitting, ifStack, output, error)) {
                 return false;

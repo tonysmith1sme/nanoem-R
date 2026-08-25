@@ -42,7 +42,7 @@ Parser::parseType(Type &type)
 {
     while (m_lexer.accept("const") || m_lexer.accept("static") || m_lexer.accept("uniform") || m_lexer.accept("shared") ||
         m_lexer.accept("row_major") || m_lexer.accept("column_major") || m_lexer.accept("in") || m_lexer.accept("out") ||
-        m_lexer.accept("inout")) {
+        m_lexer.accept("inout") || m_lexer.accept("inline") || m_lexer.accept("precise") || m_lexer.accept("volatile")) {
     }
     Token token = m_lexer.peek();
     if (token.kind != kTokKeyword && token.kind != kTokIdent) {
@@ -52,19 +52,58 @@ Parser::parseType(Type &type)
         if (token.text == "struct") {
             return false;
         }
-        type.kind = kTypeStruct;
-        type.name = token.text;
+        auto it = m_userTypes.find(token.text);
+        if (it != m_userTypes.end()) {
+            type = it->second;
+        }
+        else {
+            type.kind = kTypeStruct;
+            type.name = token.text;
+        }
     }
     m_lexer.next();
     return true;
 }
 
 bool
-Parser::parseSemantic(std::string &semantic)
+Parser::isTypeName(const std::string &name) const
 {
-    if (!m_lexer.accept(":")) {
+    Type dummy;
+    if (Type::parseBuiltin(name, dummy)) {
         return true;
     }
+    return m_userTypes.find(name) != m_userTypes.end();
+}
+
+bool
+Parser::isQualifier(const std::string &name) const
+{
+    return name == "const" || name == "static" || name == "uniform" || name == "shared" || name == "inline" ||
+        name == "precise" || name == "volatile" || name == "in" || name == "out" || name == "inout" ||
+        name == "row_major" || name == "column_major";
+}
+
+bool
+Parser::looksLikeDeclaration() const
+{
+    size_t i = 0;
+    while (isQualifier(m_lexer.peek(i).text)) {
+        i++;
+    }
+    return isTypeName(m_lexer.peek(i).text) &&
+        (m_lexer.peek(i + 1).kind == kTokIdent || m_lexer.peek(i + 1).kind == kTokKeyword);
+}
+
+bool
+Parser::parseSemantic(std::string &semantic)
+{
+    if (m_lexer.peek().text != ":") {
+        return true;
+    }
+    if (m_lexer.peek(1).text == "register") {
+        return true;
+    }
+    m_lexer.next();
     Token token = m_lexer.next();
     if (token.kind != kTokIdent && token.kind != kTokKeyword) {
         errorAt("expected semantic");
@@ -85,6 +124,9 @@ Parser::parseSemantic(std::string &semantic)
 bool
 Parser::parseRegister(std::string &reg)
 {
+    if (m_lexer.peek().text == ":" && m_lexer.peek(1).text == "register") {
+        m_lexer.next();
+    }
     if (!m_lexer.accept("register")) {
         return true;
     }
@@ -127,6 +169,9 @@ Parser::parseAnnotations(std::vector<Annotation> &annotations)
             m_lexer.next();
             ann.kind = Annotation::kAnnString;
             ann.sval = value.text;
+            while (m_lexer.peek().kind == kTokString) {
+                ann.sval += m_lexer.next().text;
+            }
         }
         else if (value.text == "true" || value.text == "false") {
             m_lexer.next();
@@ -217,13 +262,43 @@ Parser::parsePrimary()
         expr->name = token.text;
         return expr;
     }
+    if (m_lexer.accept("{")) {
+        std::unique_ptr<Expr> expr = Expr::make(kExprConstruct);
+        expr->type = Type::vectorType(kTypeFloat, 4);
+        if (!m_lexer.accept("}")) {
+            do {
+                if (m_lexer.peek().text == "}") {
+                    break;
+                }
+                expr->kids.push_back(parseAssign());
+            } while (m_lexer.accept(","));
+            if (!m_lexer.accept("}")) {
+                errorAt("expected }");
+            }
+        }
+        return expr;
+    }
     if (m_lexer.accept("(")) {
         Type castType;
         Token next = m_lexer.peek();
-        if ((next.kind == kTokKeyword || next.kind == kTokIdent) && Type::parseBuiltin(next.text, castType) &&
-            m_lexer.peek(1).text == ")") {
+        if ((next.kind == kTokKeyword || next.kind == kTokIdent) && isTypeName(next.text) &&
+            (m_lexer.peek(1).text == ")" || m_lexer.peek(1).text == "[")) {
+            if (!Type::parseBuiltin(next.text, castType)) {
+                auto it = m_userTypes.find(next.text);
+                if (it != m_userTypes.end()) {
+                    castType = it->second;
+                }
+            }
             m_lexer.next();
-            m_lexer.next();
+            if (m_lexer.accept("[")) {
+                m_lexer.next();
+                if (!m_lexer.accept("]")) {
+                    errorAt("expected ]");
+                }
+            }
+            if (!m_lexer.accept(")")) {
+                errorAt("expected )");
+            }
             std::unique_ptr<Expr> expr = Expr::make(kExprCast);
             expr->type = castType;
             expr->kids.push_back(parseUnary());
@@ -532,20 +607,40 @@ Parser::parseStmt()
         return stmt;
     }
     Type type;
-    Token maybeType = m_lexer.peek();
-    if ((maybeType.kind == kTokKeyword || maybeType.kind == kTokIdent) && Type::parseBuiltin(maybeType.text, type) &&
-        (m_lexer.peek(1).kind == kTokIdent)) {
-        m_lexer.next();
+    if (looksLikeDeclaration()) {
+        parseType(type);
         stmt->kind = kStmtVar;
         stmt->varType = type;
         stmt->name = m_lexer.next().text;
         if (m_lexer.accept("[")) {
-            Token n = m_lexer.next();
-            stmt->varType = Type::arrayType(type, static_cast<int>(n.number));
-            m_lexer.accept("]");
+            int size = 0;
+            if (!m_lexer.accept("]")) {
+                Token n = m_lexer.next();
+                size = static_cast<int>(n.number);
+                if (!m_lexer.accept("]")) {
+                    errorAt("expected ]");
+                }
+            }
+            stmt->varType = Type::arrayType(type, size);
         }
         if (m_lexer.accept("=")) {
             stmt->expr = parseExpr();
+        }
+        if (m_lexer.accept(",")) {
+            std::unique_ptr<Stmt> block(new Stmt());
+            block->kind = kStmtBlock;
+            block->kids.push_back(std::move(stmt));
+            do {
+                std::unique_ptr<Stmt> extra(new Stmt());
+                extra->kind = kStmtVar;
+                extra->varType = type;
+                extra->name = m_lexer.next().text;
+                if (m_lexer.accept("=")) {
+                    extra->expr = parseExpr();
+                }
+                block->kids.push_back(std::move(extra));
+            } while (m_lexer.accept(","));
+            stmt = std::move(block);
         }
         if (!m_lexer.accept(";")) {
             errorAt("expected ;");
@@ -581,6 +676,9 @@ Parser::parseStruct()
         Token field = m_lexer.next();
         std::string semantic;
         parseSemantic(semantic);
+        if (!semantic.empty()) {
+            fieldType.name = semantic;
+        }
         st.members.push_back(std::make_pair(field.text, fieldType));
         if (!m_lexer.accept(";")) {
             errorAt("expected ;");
@@ -588,7 +686,13 @@ Parser::parseStruct()
         }
     }
     m_lexer.accept(";");
-    (void) st;
+    m_userTypes[st.name] = st;
+    if (m_unit) {
+        Variable marker;
+        marker.name = st.name;
+        marker.type = st;
+        m_unit->variables.push_back(std::move(marker));
+    }
     return true;
 }
 
@@ -612,6 +716,9 @@ Parser::parseFunctionOrVar(const Type &type, const std::string &name)
                 }
                 parseSemantic(param.semantic);
                 parseRegister(param.registerName);
+                if (m_lexer.accept("=")) {
+                    parseExpr();
+                }
                 fn.params.push_back(param);
             } while (m_lexer.accept(","));
             if (!m_lexer.accept(")")) {
@@ -636,12 +743,16 @@ Parser::parseFunctionOrVar(const Type &type, const std::string &name)
     var.name = name;
     var.type = type;
     if (m_lexer.accept("[")) {
-        Token n = m_lexer.next();
-        var.type = Type::arrayType(type, static_cast<int>(n.number));
+        int size = 0;
         if (!m_lexer.accept("]")) {
-            errorAt("expected ]");
-            return false;
+            Token n = m_lexer.next();
+            size = static_cast<int>(n.number);
+            if (!m_lexer.accept("]")) {
+                errorAt("expected ]");
+                return false;
+            }
         }
+        var.type = Type::arrayType(type, size);
     }
     parseSemantic(var.semantic);
     parseRegister(var.registerName);
@@ -666,7 +777,22 @@ Parser::parseFunctionOrVar(const Type &type, const std::string &name)
                     var.textureName = item.value;
                 }
                 else {
-                    item.value = m_lexer.next().text;
+                    Token value = m_lexer.next();
+                    item.value = value.text;
+                    if (m_lexer.accept("(")) {
+                        int depth = 1;
+                        while (depth > 0 && m_lexer.peek().kind != kTokEof) {
+                            if (m_lexer.accept("(")) {
+                                depth++;
+                            }
+                            else if (m_lexer.accept(")")) {
+                                depth--;
+                            }
+                            else {
+                                m_lexer.next();
+                            }
+                        }
+                    }
                 }
                 var.samplerStates.push_back(item);
                 m_lexer.accept(";");
@@ -710,20 +836,38 @@ Parser::parsePass(Technique &technique)
             errorAt("nested pass");
             return false;
         }
+        std::string stateName = name.text;
+        if (m_lexer.accept("[")) {
+            Token index = m_lexer.next();
+            stateName += index.text;
+            if (!m_lexer.accept("]")) {
+                errorAt("expected ]");
+                return false;
+            }
+        }
         if (!m_lexer.accept("=")) {
             errorAt("expected = in pass");
             return false;
         }
         PassState state;
-        state.name = name.text;
+        state.name = stateName;
         if (m_lexer.accept("compile")) {
             Token profile = m_lexer.next();
             state.compileProfile = profile.text;
             Token entry = m_lexer.next();
             state.compileEntry = entry.text;
             if (m_lexer.accept("(")) {
-                while (!m_lexer.accept(")") && m_lexer.peek().kind != kTokEof) {
-                    m_lexer.next();
+                int depth = 1;
+                while (depth > 0 && m_lexer.peek().kind != kTokEof) {
+                    if (m_lexer.accept("(")) {
+                        depth++;
+                    }
+                    else if (m_lexer.accept(")")) {
+                        depth--;
+                    }
+                    else {
+                        m_lexer.next();
+                    }
                 }
             }
             if (state.name == "VertexShader" || state.name == "vertexshader") {
@@ -737,8 +881,17 @@ Parser::parsePass(Technique &technique)
             Token value = m_lexer.next();
             state.value = value.text;
             if (m_lexer.accept("(")) {
-                while (!m_lexer.accept(")") && m_lexer.peek().kind != kTokEof) {
-                    m_lexer.next();
+                int depth = 1;
+                while (depth > 0 && m_lexer.peek().kind != kTokEof) {
+                    if (m_lexer.accept("(")) {
+                        depth++;
+                    }
+                    else if (m_lexer.accept(")")) {
+                        depth--;
+                    }
+                    else {
+                        m_lexer.next();
+                    }
                 }
             }
         }
@@ -787,6 +940,10 @@ Parser::parseDecl(TranslationUnit &unit)
     if (token.kind == kTokEof) {
         return false;
     }
+    if (token.text == ";") {
+        m_lexer.next();
+        return true;
+    }
     if (token.text == "technique") {
         return parseTechnique(unit);
     }
@@ -819,6 +976,7 @@ Parser::parse(const std::string &source, const std::string &filename, Translatio
 {
     m_unit = &unit;
     m_error.clear();
+    m_userTypes.clear();
     m_lexer.setSource(source, filename);
     while (m_lexer.peek().kind != kTokEof) {
         if (!parseDecl(unit)) {

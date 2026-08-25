@@ -29,6 +29,15 @@ TEST_CASE("fx9next preprocessor token paste")
     REQUIRE(out.find("foobar") != std::string::npos);
 }
 
+TEST_CASE("fx9next preprocessor line continuation")
+{
+    Preprocessor pp;
+    std::string out, err;
+    REQUIRE(pp.process("#define ADD(a,b) a + \\\n b\nint x = ADD(1,2);\n", "t.fx", out, err));
+    REQUIRE(out.find("1 +") != std::string::npos);
+    REQUIRE(out.find("2") != std::string::npos);
+}
+
 TEST_CASE("fx9next preprocessor include from map")
 {
     Preprocessor pp;

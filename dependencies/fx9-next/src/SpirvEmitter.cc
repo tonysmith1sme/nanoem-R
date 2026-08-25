@@ -420,8 +420,23 @@ struct Emitter {
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
     std::unordered_map<std::string, uint32_t> samplers;
+    std::unordered_map<uint32_t, uint32_t> valueTypes;
     uint32_t currentFnType;
     uint32_t pendingReturn;
+
+    uint32_t
+    note(uint32_t id, uint32_t ty)
+    {
+        valueTypes[id] = ty;
+        return id;
+    }
+
+    bool
+    isVec(uint32_t id) const
+    {
+        auto it = valueTypes.find(id);
+        return it != valueTypes.end() && it->second != b.idFloat && it->second != b.idInt && it->second != b.idBool;
+    }
 
     uint32_t emitExpr(const Expr *expr);
     bool emitStmt(const Stmt *stmt, uint32_t returnType);
@@ -438,7 +453,7 @@ Emitter::loadIdent(const std::string &name)
     uint32_t resultType = localTypes[name];
     uint32_t id = b.nextId();
     b.emit3(b.code, kOpLoad, resultType, id, it->second);
-    return id;
+    return note(id, resultType);
 }
 
 uint32_t
@@ -449,9 +464,9 @@ Emitter::emitExpr(const Expr *expr)
     }
     switch (expr->kind) {
     case kExprLiteralFloat:
-        return b.constF32(static_cast<float>(expr->floatValue));
+        return note(b.constF32(static_cast<float>(expr->floatValue)), b.typeFloat());
     case kExprLiteralInt:
-        return b.constI32(expr->intValue);
+        return note(b.constI32(expr->intValue), b.typeInt());
     case kExprLiteralBool:
         if (expr->boolValue) {
             if (!b.idTrue) {
@@ -487,15 +502,18 @@ Emitter::emitExpr(const Expr *expr)
             ops.push_back(comps[static_cast<size_t>(i)]);
         }
         b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
-        return id;
+        return note(id, b.typeVec(want));
     }
     case kExprMember: {
         uint32_t base = emitExpr(expr->kids[0].get());
         const std::string &sw = expr->name;
+        if (!isVec(base)) {
+            return base;
+        }
         if (sw.size() == 1) {
             uint32_t id = b.nextId();
             b.emit4(b.code, kOpCompositeExtract, b.typeFloat(), id, base, static_cast<uint32_t>(swizzleIndex(sw[0])));
-            return id;
+            return note(id, b.typeFloat());
         }
         uint32_t id = b.nextId();
         std::vector<uint32_t> ops;
@@ -507,7 +525,7 @@ Emitter::emitExpr(const Expr *expr)
             ops.push_back(static_cast<uint32_t>(swizzleIndex(sw[i])));
         }
         b.emit(b.code, kOpVectorShuffle, ops.data(), static_cast<uint16_t>(ops.size()));
-        return id;
+        return note(id, b.typeVec(static_cast<int>(sw.size())));
     }
     case kExprUnary: {
         uint32_t x = emitExpr(expr->kids[0].get());
@@ -536,6 +554,18 @@ Emitter::emitExpr(const Expr *expr)
             op = kOpFSub;
         }
         else if (expr->op == "*") {
+            if (isVec(l) && !isVec(r)) {
+                uint32_t idv = b.nextId();
+                uint32_t ty = valueTypes[l];
+                b.emit4(b.code, kOpVectorTimesScalar, ty, idv, l, r);
+                return note(idv, ty);
+            }
+            if (!isVec(l) && isVec(r)) {
+                uint32_t idv = b.nextId();
+                uint32_t ty = valueTypes[r];
+                b.emit4(b.code, kOpVectorTimesScalar, ty, idv, r, l);
+                return note(idv, ty);
+            }
             op = kOpFMul;
         }
         else if (expr->op == "/") {
@@ -606,7 +636,7 @@ Emitter::emitExpr(const Expr *expr)
             uint32_t coord = uv;
             uint32_t id = b.nextId();
             b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, sampled, coord);
-            return id;
+            return note(id, b.typeVec(4));
         }
         if (name == "saturate") {
             return emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
@@ -811,6 +841,28 @@ emitFunctionSPIRV(
         if (samplerIndex > 32) {
             break;
         }
+    }
+    e.b.typeFloat();
+    e.b.typeVec(4);
+    for (size_t i = 0; i < unit.variables.size(); i++) {
+        const Variable &gv = unit.variables[i];
+        if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
+            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid) {
+            continue;
+        }
+        if (e.locals.find(gv.name) != e.locals.end()) {
+            continue;
+        }
+        Type stored = gv.type;
+        if (stored.kind == kTypeArray) {
+            stored = Type::vectorType(kTypeFloat, 4);
+        }
+        uint32_t ty = e.b.typeOf(stored);
+        uint32_t ptr = e.b.ptrType(ty, kStoragePrivate);
+        uint32_t var = e.b.nextId();
+        e.b.emit3(e.b.types, kOpVariable, ptr, var, kStoragePrivate);
+        e.locals[gv.name] = var;
+        e.localTypes[gv.name] = ty;
     }
 
     uint32_t fnType = e.b.nextId();

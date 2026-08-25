@@ -28,7 +28,8 @@ isIdentCont(unsigned char c)
 
 const char *kKeywords[] = { "technique", "pass", "struct", "return", "if", "else", "for", "while", "do", "discard",
     "break", "continue", "true", "false", "compile", "sampler_state", "SamplerState", "register", "typedef",
-    "const", "static", "uniform", "shared", "row_major", "column_major", "in", "out", "inout", "void", "string",
+    "const", "static", "uniform", "shared", "row_major", "column_major", "in", "out", "inout", "inline", "precise",
+    "volatile", "void", "string",
     "texture", "texture2D", "texture3D", "textureCUBE", "Texture2D", "Texture3D", "TextureCube", "sampler",
     "sampler1D", "sampler2D", "sampler3D", "samplerCUBE", "samplerCube", "samplerVOLUME", nullptr };
 
