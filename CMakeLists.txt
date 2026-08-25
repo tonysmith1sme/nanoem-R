@@ -49,6 +49,8 @@ option(NANOEM_ENABLE_UPDATE_CREDITS "Enable updating credits per cmake execution
 option(NANOEM_ENABLE_PLUGIN_WASM "Enable bundling release build of plugin_wasm" OFF)
 option(NANOEM_ENABLE_PROTOC "Enable building protocol buffer source code generation with protoc-c" OFF)
 option(NANOEM_MINIMAL "Builds nanoem library only." OFF)
+set(NANOEM_EFFECT_COMPILER "fx9" CACHE STRING "MME effect compiler implementation (fx9 or fx9-next)")
+set_property(CACHE NANOEM_EFFECT_COMPILER PROPERTY STRINGS "fx9;fx9-next")
 option(SOKOL_ENABLE_DEBUG "Enable building sokol with debug validation layer." OFF)
 
 mark_as_advanced(NANOEM_ENABLE_SHADER_OPTIMIZED NANOEM_ENABLE_SDEF NANOEM_ENABLE_SOFTBODY SOKOL_ENABLE_UPDATE_CREDITS NANOEM_ENABLE_OPTICK NANOEM_ENABLE_PROTOC)
@@ -460,6 +462,21 @@ if(NOT NANOEM_MINIMAL)
       target_link_libraries(fx9_test fx9)
       set_property(TARGET fx9_test PROPERTY FOLDER test)
       catch_discover_tests(fx9_test)
+    endif()
+    if(TARGET fx9next)
+      add_executable(fx9next_test ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/main.cc
+                                  ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/preprocessor.cc
+                                  ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/compile.cc)
+      set_property(TARGET fx9next_test PROPERTY CXX_STANDARD 11)
+      set_property(TARGET fx9next_test APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/include
+        ${PROJECT_SOURCE_DIR}/dependencies/protobuf-c
+        ${PROJECT_SOURCE_DIR}/dependencies/catch2/single_include)
+      set_property(TARGET fx9next_test APPEND PROPERTY COMPILE_DEFINITIONS
+        FX9NEXT_TEST_EFFECT_FIXTURES_PATH="${PROJECT_SOURCE_DIR}/dependencies/fx9/test/effects")
+      target_link_libraries(fx9next_test fx9next)
+      set_property(TARGET fx9next_test PROPERTY FOLDER test)
+      catch_discover_tests(fx9next_test)
     endif()
   endif()
 endif()

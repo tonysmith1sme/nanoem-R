@@ -6,12 +6,20 @@
 
 #define NOMINMAX
 #include "emapp/sdk/Effect.h"
+#ifdef NANOEM_USE_FX9_NEXT
+#include "fx9next/Compiler.h"
+#else
 #include "fx9/Compiler.h"
+#endif
 
 namespace {
 
+#ifdef NANOEM_USE_FX9_NEXT
+using fx9next::Compiler;
+#else
 using namespace fx9;
 using namespace glslang;
+#endif
 using namespace nanoem::application::plugin;
 
 struct EffectCompiler {
@@ -27,7 +35,11 @@ struct EffectCompiler {
     }
 
     EffectCompiler()
+#ifdef NANOEM_USE_FX9_NEXT
+        : m_compiler(new Compiler())
+#else
         : m_compiler(new Compiler(ECoreProfile, EShMsgDefault))
+#endif
     {
         m_compiler->setOptimizeEnabled(false);
         m_compiler->setValidationEnabled(false);
