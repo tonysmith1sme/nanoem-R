@@ -193,6 +193,47 @@ TEST_CASE("fx9next bakes alpha test into pixel shader")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next inlines user functions")
+{
+    const char *src =
+        "float4 tint(float4 c) { return c * 0.5; }\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return tint(float4(1, 1, 1, 1)); }\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "fn.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    const char *ps = effect->techniques[0]->passes[0]->pixel_shader->glsl;
+    REQUIRE(ps != nullptr);
+    const std::string body(ps);
+    REQUIRE(body.find("0.5") != std::string::npos);
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
+TEST_CASE("fx9next lowers texM3x3 family")
+{
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/corpus/03_texM3x3.fx";
+    REQUIRE(compiler.compile(path.c_str(), product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    const char *ps = effect->techniques[0]->passes[0]->pixel_shader->glsl;
+    REQUIRE(ps != nullptr);
+    const std::string body(ps);
+    REQUIRE((body.find("texture") != std::string::npos || body.find("texture2D") != std::string::npos));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next packs semantic parameters")
 {
     Compiler compiler;

@@ -98,6 +98,21 @@ enum {
 };
 
 enum {
+    kGlslFloor = 8,
+    kGlslFAbs = 4,
+    kGlslSin = 13,
+    kGlslCos = 14,
+    kGlslPow = 26,
+    kGlslExp = 27,
+    kGlslSqrt = 31,
+    kGlslFClamp = 43,
+    kGlslFMix = 46,
+    kGlslLength = 66,
+    kGlslNormalize = 69,
+    kGlslReflect = 71
+};
+
+enum {
     kAddrLogical = 0,
     kMemGLSL450 = 1,
     kStorageFunction = 7,
@@ -138,6 +153,7 @@ struct Builder {
     uint32_t idVoidFn;
     uint32_t idTrue;
     uint32_t idFalse;
+    uint32_t idGlsl;
     std::unordered_map<std::string, uint32_t> names;
     std::string error;
 
@@ -154,7 +170,46 @@ struct Builder {
         , idVoidFn(0)
         , idTrue(0)
         , idFalse(0)
+        , idGlsl(0)
     {
+    }
+
+    void
+    emitLiteralString(std::vector<uint32_t> &dest, uint16_t op, uint32_t result, const char *text)
+    {
+        std::vector<uint32_t> ops;
+        ops.push_back(result);
+        uint32_t packed = 0;
+        int shift = 0;
+        for (const char *p = text;; p++) {
+            packed |= static_cast<uint32_t>(static_cast<unsigned char>(*p)) << shift;
+            shift += 8;
+            if (shift == 32 || *p == 0) {
+                ops.push_back(packed);
+                if (*p == 0) {
+                    break;
+                }
+                packed = 0;
+                shift = 0;
+            }
+        }
+        emit(dest, op, ops.data(), static_cast<uint16_t>(ops.size()));
+    }
+
+    uint32_t
+    extInst(uint32_t ty, uint32_t inst, const uint32_t *args, uint16_t n)
+    {
+        uint32_t id = nextId();
+        std::vector<uint32_t> ops;
+        ops.push_back(ty);
+        ops.push_back(id);
+        ops.push_back(idGlsl);
+        ops.push_back(inst);
+        for (uint16_t i = 0; i < n; i++) {
+            ops.push_back(args[i]);
+        }
+        emit(code, kOpExtInst, ops.data(), static_cast<uint16_t>(ops.size()));
+        return id;
     }
 
     uint32_t
@@ -419,6 +474,7 @@ struct Emitter {
     ShaderStage stage;
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
+    std::unordered_map<std::string, uint32_t> valueOverlay;
     std::unordered_map<std::string, uint32_t> samplers;
     std::unordered_map<uint32_t, uint32_t> valueTypes;
     uint32_t currentFnType;
@@ -441,11 +497,99 @@ struct Emitter {
     uint32_t emitExpr(const Expr *expr);
     bool emitStmt(const Stmt *stmt, uint32_t returnType);
     uint32_t loadIdent(const std::string &name);
+    uint32_t extractComp(uint32_t vec, uint32_t index);
+    uint32_t makeVec3(uint32_t x, uint32_t y, uint32_t z);
+    uint32_t makeVec2(uint32_t x, uint32_t y);
+    uint32_t sample2D(const std::string &sampName, uint32_t uv);
+    uint32_t callUser(const std::string &name, const Expr *expr);
 };
+
+uint32_t
+Emitter::extractComp(uint32_t vec, uint32_t index)
+{
+    if (!isVec(vec)) {
+        return vec;
+    }
+    uint32_t id = b.nextId();
+    b.emit4(b.code, kOpCompositeExtract, b.typeFloat(), id, vec, index);
+    return note(id, b.typeFloat());
+}
+
+uint32_t
+Emitter::makeVec3(uint32_t x, uint32_t y, uint32_t z)
+{
+    uint32_t id = b.nextId();
+    uint32_t ops[5] = { b.typeVec(3), id, x, y, z };
+    b.emit(b.code, kOpCompositeConstruct, ops, 5);
+    return note(id, b.typeVec(3));
+}
+
+uint32_t
+Emitter::makeVec2(uint32_t x, uint32_t y)
+{
+    uint32_t id = b.nextId();
+    uint32_t ops[4] = { b.typeVec(2), id, x, y };
+    b.emit(b.code, kOpCompositeConstruct, ops, 4);
+    return note(id, b.typeVec(2));
+}
+
+uint32_t
+Emitter::sample2D(const std::string &sampName, uint32_t uv)
+{
+    auto sit = samplers.find(sampName);
+    if (sit == samplers.end()) {
+        return note(b.constVec4(0, 0, 0, 1), b.typeVec(4));
+    }
+    uint32_t loaded = b.nextId();
+    uint32_t sampledType = b.nextId();
+    uint32_t imageType = b.nextId();
+    uint32_t floatTy = b.typeFloat();
+    uint32_t imageOps[8] = { imageType, floatTy, kDim2D, 0, 0, 0, 1, 0 };
+    b.emit(b.types, kOpTypeImage, imageOps, 8);
+    b.emit2(b.types, kOpTypeSampledImage, sampledType, imageType);
+    b.emit3(b.code, kOpLoad, sampledType, loaded, sit->second);
+    uint32_t coord = uv;
+    if (isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
+        coord = makeVec2(extractComp(uv, 0), extractComp(uv, 1));
+    }
+    else if (isVec(uv) && valueTypes[uv] == b.typeVec(3)) {
+        coord = makeVec2(extractComp(uv, 0), extractComp(uv, 1));
+    }
+    uint32_t id = b.nextId();
+    b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, loaded, coord);
+    return note(id, b.typeVec(4));
+}
+
+uint32_t
+Emitter::callUser(const std::string &name, const Expr *expr)
+{
+    const Function *callee = findFunction(*unit, name);
+    if (!callee || !callee->body || name == "main") {
+        return 0;
+    }
+    std::unordered_map<std::string, uint32_t> savedOverlay = valueOverlay;
+    size_t argIndex = 1;
+    for (size_t i = 0; i < callee->params.size(); i++) {
+        uint32_t arg = argIndex < expr->kids.size() ? emitExpr(expr->kids[argIndex].get()) : b.constF32(0);
+        argIndex++;
+        valueOverlay[callee->params[i].name] = arg;
+    }
+    uint32_t savedRet = pendingReturn;
+    pendingReturn = 0;
+    emitStmt(callee->body.get(), 0);
+    uint32_t result = pendingReturn ? pendingReturn : b.constF32(0);
+    pendingReturn = savedRet;
+    valueOverlay = savedOverlay;
+    return result;
+}
 
 uint32_t
 Emitter::loadIdent(const std::string &name)
 {
+    auto overlay = valueOverlay.find(name);
+    if (overlay != valueOverlay.end()) {
+        return overlay->second;
+    }
     auto it = locals.find(name);
     if (it == locals.end()) {
         return b.constF32(0);
@@ -611,48 +755,110 @@ Emitter::emitExpr(const Expr *expr)
     case kExprCall: {
         const std::string &name = expr->name;
         if (name == "tex2D" || name == "tex2Dlod" || name == "tex2Dproj" || name == "tex2Dbias" || name == "texCUBE" ||
-            name == "tex3D" || name.compare(0, 7, "texM3x3") == 0) {
-            uint32_t uv = expr->kids.size() > 2 ? emitExpr(expr->kids[2].get()) : b.constVec4(0, 0, 0, 0);
+            name == "tex3D") {
             std::string sampName;
             if (expr->kids.size() > 1 && expr->kids[1]->kind == kExprIdent) {
                 sampName = expr->kids[1]->name;
             }
-            auto sit = samplers.find(sampName);
-            uint32_t sampled = 0;
-            if (sit != samplers.end()) {
-                uint32_t loaded = b.nextId();
-                uint32_t sampledType = b.nextId();
-                uint32_t imageType = b.nextId();
-                uint32_t floatTy = b.typeFloat();
-                uint32_t imageOps[8] = { imageType, floatTy, kDim2D, 0, 0, 0, 1, 0 };
-                b.emit(b.types, kOpTypeImage, imageOps, 8);
-                b.emit2(b.types, kOpTypeSampledImage, sampledType, imageType);
-                b.emit3(b.code, kOpLoad, sampledType, loaded, sit->second);
-                sampled = loaded;
-            }
-            else {
-                return b.constVec4(0, 0, 0, 1);
-            }
-            uint32_t coord = uv;
-            uint32_t id = b.nextId();
-            b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, sampled, coord);
-            return note(id, b.typeVec(4));
+            uint32_t uv = expr->kids.size() > 2 ? emitExpr(expr->kids[2].get()) : b.constVec4(0, 0, 0, 0);
+            return sample2D(sampName, uv);
         }
-        if (name == "saturate") {
-            return emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
-        }
-        if (name == "lerp" || name == "mix") {
-            if (expr->kids.size() >= 4) {
-                return emitExpr(expr->kids[1].get());
+        if (name.compare(0, 7, "texM3x3") == 0) {
+            std::string sampName;
+            if (expr->kids.size() > 1 && expr->kids[1]->kind == kExprIdent) {
+                sampName = expr->kids[1]->name;
             }
+            uint32_t t0 = expr->kids.size() > 2 ? emitExpr(expr->kids[2].get()) : b.constF32(0);
+            uint32_t t1 = expr->kids.size() > 3 ? emitExpr(expr->kids[3].get()) : b.constF32(0);
+            uint32_t t2 = expr->kids.size() > 4 ? emitExpr(expr->kids[4].get()) : b.constF32(0);
+            uint32_t dir = makeVec3(extractComp(t0, 2), extractComp(t1, 2), extractComp(t2, 2));
+            if (name == "texM3x3vspec" && b.idGlsl) {
+                uint32_t nrm = b.extInst(b.typeVec(3), kGlslNormalize, &dir, 1);
+                note(nrm, b.typeVec(3));
+                uint32_t view = expr->kids.size() > 5 ? emitExpr(expr->kids[5].get()) : makeVec3(b.constF32(0), b.constF32(0), b.constF32(1));
+                uint32_t neg = b.nextId();
+                b.emit3(b.code, kOpFNegate, b.typeVec(3), neg, view);
+                note(neg, b.typeVec(3));
+                uint32_t refs[2] = { neg, nrm };
+                uint32_t r = b.extInst(b.typeVec(3), kGlslReflect, refs, 2);
+                note(r, b.typeVec(3));
+                dir = r;
+            }
+            uint32_t uv = makeVec2(extractComp(dir, 0), extractComp(dir, 1));
+            uint32_t half = b.constF32(0.5f);
+            uint32_t scaled = b.nextId();
+            b.emit4(b.code, kOpVectorTimesScalar, b.typeVec(2), scaled, uv, half);
+            note(scaled, b.typeVec(2));
+            uint32_t half2 = makeVec2(half, half);
+            uint32_t biased = b.nextId();
+            b.emit4(b.code, kOpFAdd, b.typeVec(2), biased, scaled, half2);
+            note(biased, b.typeVec(2));
+            return sample2D(sampName, biased);
+        }
+        if (name == "saturate" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t zero = b.constF32(0);
+            uint32_t one = b.constF32(1);
+            uint32_t args[3] = { x, zero, one };
+            uint32_t id = b.extInst(ty, kGlslFClamp, args, 3);
+            return note(id, ty);
+        }
+        if ((name == "lerp" || name == "mix") && expr->kids.size() >= 4 && b.idGlsl) {
+            uint32_t a = emitExpr(expr->kids[1].get());
+            uint32_t c = emitExpr(expr->kids[2].get());
+            uint32_t t = emitExpr(expr->kids[3].get());
+            uint32_t ty = valueTypes.count(a) ? valueTypes[a] : b.typeFloat();
+            uint32_t args[3] = { a, c, t };
+            uint32_t id = b.extInst(ty, kGlslFMix, args, 3);
+            return note(id, ty);
+        }
+        if (name == "normalize" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeVec(3);
+            uint32_t id = b.extInst(ty, kGlslNormalize, &x, 1);
+            return note(id, ty);
+        }
+        if (name == "pow" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t y = emitExpr(expr->kids.size() > 2 ? expr->kids[2].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t args[2] = { x, y };
+            uint32_t id = b.extInst(ty, kGlslPow, args, 2);
+            return note(id, ty);
+        }
+        if (name == "exp" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, kGlslExp, &x, 1);
+            return note(id, ty);
+        }
+        if ((name == "sin" || name == "cos") && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, name == "sin" ? kGlslSin : kGlslCos, &x, 1);
+            return note(id, ty);
+        }
+        if (name == "floor" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, kGlslFloor, &x, 1);
+            return note(id, ty);
+        }
+        if (name == "abs" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, kGlslFAbs, &x, 1);
+            return note(id, ty);
         }
         if (name == "mul") {
             if (expr->kids.size() >= 3) {
                 uint32_t l = emitExpr(expr->kids[1].get());
                 uint32_t r = emitExpr(expr->kids[2].get());
+                uint32_t ty = valueTypes.count(l) ? valueTypes[l] : b.typeFloat();
                 uint32_t id = b.nextId();
-                b.emit4(b.code, kOpFMul, b.typeFloat(), id, l, r);
-                return id;
+                b.emit4(b.code, kOpFMul, ty, id, l, r);
+                return note(id, ty);
             }
         }
         if (name == "dot") {
@@ -660,7 +866,11 @@ Emitter::emitExpr(const Expr *expr)
             uint32_t r = emitExpr(expr->kids.size() > 2 ? expr->kids[2].get() : nullptr);
             uint32_t id = b.nextId();
             b.emit4(b.code, kOpDot, b.typeFloat(), id, l, r);
-            return id;
+            return note(id, b.typeFloat());
+        }
+        uint32_t user = callUser(name, expr);
+        if (user) {
+            return user;
         }
         if (name == "float4" || name == "float3" || name == "float2") {
             std::unique_ptr<Expr> tmp = Expr::make(kExprConstruct);
@@ -771,6 +981,8 @@ emitFunctionSPIRV(
     e.unit = &unit;
     e.stage = stage;
     e.b.emit1(e.b.header, kOpCapability, kCapShader);
+    e.b.idGlsl = e.b.nextId();
+    e.b.emitLiteralString(e.b.header, kOpExtInstImport, e.b.idGlsl, "GLSL.std.450");
     e.b.emit2(e.b.header, kOpMemoryModel, kAddrLogical, kMemGLSL450);
 
     uint32_t retType = e.b.typeOf(fn.returnType.kind == kTypeVoid ? Type::vectorType(kTypeFloat, 4) : fn.returnType);
@@ -785,6 +997,7 @@ emitFunctionSPIRV(
     }
 
     std::vector<uint32_t> inVars;
+    std::vector<uint32_t> extraOuts;
     std::vector<uint32_t> inTypes;
     for (size_t i = 0; i < fn.params.size(); i++) {
         uint32_t ty = e.b.typeOf(fn.params[i].type.kind == kTypeVector || fn.params[i].type.kind == kTypeFloat ||
@@ -795,11 +1008,17 @@ emitFunctionSPIRV(
             fn.params[i].type.kind != kTypeInt) {
             ty = e.b.typeVec(4);
         }
-        uint32_t ptr = e.b.ptrType(ty, kStorageInput);
+        const uint32_t storage = fn.params[i].isOut ? kStorageOutput : kStorageInput;
+        uint32_t ptr = e.b.ptrType(ty, storage);
         uint32_t var = e.b.nextId();
-        e.b.emit3(e.b.types, kOpVariable, ptr, var, kStorageInput);
+        e.b.emit3(e.b.types, kOpVariable, ptr, var, storage);
         e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(fn.params[i].semantic)), true);
-        inVars.push_back(var);
+        if (fn.params[i].isOut) {
+            extraOuts.push_back(var);
+        }
+        else {
+            inVars.push_back(var);
+        }
         inTypes.push_back(ty);
         e.locals[fn.params[i].name] = var;
         e.localTypes[fn.params[i].name] = ty;
@@ -895,6 +1114,9 @@ emitFunctionSPIRV(
     }
     for (size_t i = 0; i < inVars.size(); i++) {
         ep.push_back(inVars[i]);
+    }
+    for (size_t i = 0; i < extraOuts.size(); i++) {
+        ep.push_back(extraOuts[i]);
     }
     ep.push_back(outVar);
     e.b.emit(e.b.header, kOpEntryPoint, ep.data(), static_cast<uint16_t>(ep.size()));

@@ -706,7 +706,11 @@ Parser::parseFunctionOrVar(const Type &type, const std::string &name)
         if (!m_lexer.accept(")")) {
             do {
                 Parameter param;
+                param.isOut = false;
                 skipAttributes();
+                if (m_lexer.peek().text == "out" || m_lexer.peek().text == "inout") {
+                    param.isOut = true;
+                }
                 if (!parseType(param.type)) {
                     errorAt("expected parameter type");
                     return false;

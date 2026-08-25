@@ -78,6 +78,7 @@ struct Parameter {
     std::string name;
     std::string semantic;
     std::string registerName;
+    bool isOut;
 };
 
 struct Annotation {
