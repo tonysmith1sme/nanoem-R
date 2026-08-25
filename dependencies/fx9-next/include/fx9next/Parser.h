@@ -25,6 +25,7 @@ private:
     bool parseTechnique(TranslationUnit &unit);
     bool parsePass(Technique &technique);
     bool parseStruct();
+    bool parseCBuffer(TranslationUnit &unit);
     bool parseFunctionOrVar(const Type &type, const std::string &name);
     std::unique_ptr<Stmt> parseStmt();
     std::unique_ptr<Stmt> parseBlock();

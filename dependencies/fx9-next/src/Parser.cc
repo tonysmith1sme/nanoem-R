@@ -701,6 +701,57 @@ Parser::parseStruct()
 }
 
 bool
+Parser::parseCBuffer(TranslationUnit &unit)
+{
+    m_lexer.next();
+    if (m_lexer.peek().kind != kTokIdent && m_lexer.peek().kind != kTokKeyword) {
+        errorAt("expected constant buffer name");
+        return false;
+    }
+    m_lexer.next();
+    std::string registerName;
+    parseSemantic(registerName);
+    parseRegister(registerName);
+    if (!m_lexer.accept("{")) {
+        errorAt("expected { in constant buffer");
+        return false;
+    }
+    while (!m_lexer.accept("}") && m_lexer.peek().kind != kTokEof) {
+        Type type;
+        if (!parseType(type)) {
+            errorAt("expected constant buffer field type");
+            return false;
+        }
+        if (m_lexer.peek().kind != kTokIdent && m_lexer.peek().kind != kTokKeyword) {
+            errorAt("expected constant buffer field name");
+            return false;
+        }
+        Variable variable;
+        variable.name = m_lexer.next().text;
+        variable.type = type;
+        if (m_lexer.accept("[")) {
+            Token size = m_lexer.next();
+            variable.type = Type::arrayType(type, static_cast<int>(size.number));
+            if (!m_lexer.accept("]")) {
+                errorAt("expected ] in constant buffer field");
+                return false;
+            }
+        }
+        parseSemantic(variable.semantic);
+        if (!m_lexer.accept(";")) {
+            errorAt("expected ; after constant buffer field");
+            return false;
+        }
+        unit.variables.push_back(std::move(variable));
+    }
+    if (!m_lexer.accept(";")) {
+        errorAt("expected ; after constant buffer");
+        return false;
+    }
+    return true;
+}
+
+bool
 Parser::parseFunctionOrVar(const Type &type, const std::string &name)
 {
     if (m_lexer.accept("(")) {
@@ -957,6 +1008,9 @@ Parser::parseDecl(TranslationUnit &unit)
     }
     if (token.text == "struct") {
         return parseStruct();
+    }
+    if (token.text == "cbuffer") {
+        return parseCBuffer(unit);
     }
     if (token.text == "typedef") {
         m_lexer.next();

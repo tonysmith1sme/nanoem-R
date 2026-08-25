@@ -130,6 +130,54 @@ TEST_CASE("fx9next exposes vertex sampler metadata")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
+{
+    const char *src =
+        "Texture2D diffuseTexture : register(t3);\n"
+        "SamplerState diffuseSampler : register(s2);\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "technique t { pass p { VertexShader = compile vs_4_0 vs_main(); "
+        "PixelShader = compile ps_4_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "d3d11-declarations.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
+    REQUIRE(pass->pixel_shader->n_samplers == 1);
+    REQUIRE(pass->pixel_shader->samplers[0]->index == 2);
+    REQUIRE(pass->pixel_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(pass->pixel_shader->msl, "D3D11 sampler shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
+TEST_CASE("fx9next lowers D3D11 constant buffer fields")
+{
+    const char *src =
+        "cbuffer ConstantBufferData : register(b0) { float4 tint; float exposure; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return tint * exposure; }\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); "
+        "PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "d3d11-cbuffer.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
+    REQUIRE(pass->pixel_shader->n_uniforms == 2);
+    REQUIRE(pass->pixel_shader->uniforms[0]->index == 0);
+    REQUIRE(pass->pixel_shader->uniforms[1]->index == 1);
+    REQUIRE(pass->pixel_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(pass->pixel_shader->msl, "D3D11 constant buffer shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles pass-through effect to protobuf")
 {
     const char *src =

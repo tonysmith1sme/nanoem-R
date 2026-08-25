@@ -142,7 +142,7 @@ Type::parseBuiltin(const std::string &name, Type &out)
         out = stringType();
         return true;
     }
-    if (name == "sampler" || name == "sampler2D") {
+    if (name == "sampler" || name == "sampler2D" || name == "SamplerState") {
         out = samplerType(kSampler2D);
         return true;
     }
