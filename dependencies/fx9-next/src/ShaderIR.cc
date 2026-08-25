@@ -226,6 +226,16 @@ ShaderModuleIR::canonicalDump() const
         }
         stream << "\n";
     }
+    for (std::vector<ShaderGlobalIR>::const_iterator it = globals.begin(); it != globals.end(); ++it) {
+        stream << "global " << it->type.toString() << " " << it->name;
+        if (!it->registerName.empty()) {
+            stream << " : " << it->registerName;
+        }
+        if (!it->textureName.empty()) {
+            stream << " -> " << it->textureName;
+        }
+        stream << "\n";
+    }
     for (std::vector<ShaderParameterIR>::const_iterator it = outputs.begin(); it != outputs.end(); ++it) {
         stream << "out " << it->type.toString() << " " << it->name << " : " << it->semantic << "\n";
     }

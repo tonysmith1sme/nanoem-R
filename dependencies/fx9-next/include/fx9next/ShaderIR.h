@@ -96,6 +96,14 @@ struct ShaderStructIR {
     std::vector<std::pair<std::string, Type> > members;
 };
 
+struct ShaderGlobalIR {
+    std::string name;
+    Type type;
+    std::string semantic;
+    std::string registerName;
+    std::string textureName;
+};
+
 struct ShaderFunctionIR {
     ShaderFunctionIR();
     ShaderFunctionIR(const ShaderFunctionIR &other);
@@ -114,6 +122,7 @@ struct ShaderModuleIR {
     std::vector<ShaderParameterIR> inputs;
     std::vector<ShaderParameterIR> outputs;
     std::vector<ShaderStructIR> structs;
+    std::vector<ShaderGlobalIR> globals;
     std::vector<ShaderFunctionIR> functions;
 
     std::string canonicalDump() const;

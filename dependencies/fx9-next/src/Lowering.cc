@@ -286,6 +286,15 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
     ShaderModuleIR shader;
     shader.stage = stage;
     shader.entryPoint = function.name;
+    for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
+        ShaderGlobalIR global;
+        global.name = it->name;
+        global.type = it->type;
+        global.semantic = it->semantic;
+        global.registerName = it->registerName;
+        global.textureName = it->textureName;
+        shader.globals.push_back(global);
+    }
     std::vector<Type> types;
     for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
         types.push_back(it->type);

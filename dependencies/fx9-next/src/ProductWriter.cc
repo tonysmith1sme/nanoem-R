@@ -695,11 +695,11 @@ writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, co
             std::vector<uint32_t> vsWords, psWords;
             std::string err;
             try {
-                if (!emitShaderSPIRV(unit, effect, *vsIR, vsWords, err)) {
+                if (!emitShaderSPIRV(effect, *vsIR, vsWords, err)) {
                     product.sink.builder = err.empty() ? "vertex emit failed" : err;
                     continue;
                 }
-                if (!emitShaderSPIRV(unit, effect, *psIR, psWords, err)) {
+                if (!emitShaderSPIRV(effect, *psIR, psWords, err)) {
                     product.sink.builder = err.empty() ? "fragment emit failed" : err;
                     continue;
                 }

@@ -22,8 +22,8 @@ enum SpirvShaderStage { kStageVertex, kStageFragment };
 
 bool emitFunctionSPIRV(const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage,
     std::vector<uint32_t> &words, std::string &error);
-bool emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &shader,
-    std::vector<uint32_t> &words, std::string &error);
+bool emitShaderSPIRV(const EffectModuleIR &effect, const ShaderModuleIR &shader, std::vector<uint32_t> &words,
+    std::string &error);
 bool validateSPIRV(const std::vector<uint32_t> &words, std::string &error);
 
 } /* namespace fx9next */

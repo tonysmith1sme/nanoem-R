@@ -2079,15 +2079,15 @@ validateSPIRV(const std::vector<uint32_t> &words, std::string &error)
 }
 
 bool
-emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &shader,
-    std::vector<uint32_t> &words, std::string &error)
+emitShaderSPIRV(const EffectModuleIR &effect, const ShaderModuleIR &shader, std::vector<uint32_t> &words,
+    std::string &error)
 {
     if (shader.functions.empty()) {
         error = "shader IR has no entry function";
         return false;
     }
     TranslationUnit semanticUnit;
-    for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
+    for (std::vector<ShaderGlobalIR>::const_iterator it = shader.globals.begin(); it != shader.globals.end(); ++it) {
         Variable variable;
         variable.name = it->name;
         variable.type = it->type;

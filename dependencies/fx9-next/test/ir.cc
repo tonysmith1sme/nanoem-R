@@ -234,7 +234,7 @@ TEST_CASE("fx9next emits lowered shader IR deterministically")
     REQUIRE(shaders.size() == 2);
     std::vector<uint32_t> legacy, lowered;
     REQUIRE(emitFunctionSPIRV(unit, unit.functions[0], kStageVertex, legacy, error));
-    REQUIRE(emitShaderSPIRV(unit, effect, shaders[0], lowered, error));
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], lowered, error));
     REQUIRE(lowered == legacy);
 }
 
@@ -257,7 +257,34 @@ TEST_CASE("fx9next emits semantic user functions without parser AST bodies")
     REQUIRE(shaders[0].functions.size() == 2);
     unit.functions.clear();
     std::vector<uint32_t> words;
-    REQUIRE(emitShaderSPIRV(unit, effect, shaders[0], words, error));
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(validateSPIRV(words, error));
+}
+
+TEST_CASE("fx9next emits semantic globals without parser AST declarations")
+{
+    const char *source =
+        "texture2D diffuseTexture : register(t3);\n"
+        "sampler2D diffuseSampler : register(s2) = sampler_state { Texture = <diffuseTexture>; };\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main; } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "semantic-globals.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 1);
+    REQUIRE(shaders[0].globals.size() == 2);
+    REQUIRE(shaders[0].canonicalDump().find("global sampler diffuseSampler : s2 -> diffuseTexture") !=
+        std::string::npos);
+    unit.variables.clear();
+    unit.functions.clear();
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
     REQUIRE(validateSPIRV(words, error));
 }
 
