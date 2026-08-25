@@ -671,6 +671,7 @@ writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, co
             fx9__effect__shader__init(passMsg->pixel_shader);
             passMsg->pixel_shader->type = FX9__EFFECT__SHADER__TYPE__ST_PIXEL;
             passMsg->pixel_shader->uniform_block_name = arena.copy("ps_uniforms_vec4");
+            fillSamplers(arena, unit, effect, passMsg->vertex_shader);
             fillSamplers(arena, unit, effect, passMsg->pixel_shader);
 
             if (pass.vsEntry.empty() && pass.psEntry.empty()) {

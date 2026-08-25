@@ -106,6 +106,30 @@ TEST_CASE("fx9next preserves sampler texture relationship")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next exposes vertex sampler metadata")
+{
+    const char *src =
+        "texture2D diffuseTexture : DIFFUSE;\n"
+        "sampler2D diffuseSampler = sampler_state { Texture = <diffuseTexture>; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position + tex2D(diffuseSampler, float2(0, 0)); }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
+        "PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "vertex-sampler.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
+    REQUIRE(pass->vertex_shader->n_samplers == 1);
+    REQUIRE(std::string(pass->vertex_shader->samplers[0]->texture_name) == "diffuseTexture");
+    REQUIRE(pass->vertex_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(pass->vertex_shader->msl, "vertex texture shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles pass-through effect to protobuf")
 {
     const char *src =
