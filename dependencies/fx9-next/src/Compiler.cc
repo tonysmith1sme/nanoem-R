@@ -53,6 +53,12 @@ Compiler::addIncludeSource(const std::string &filePath, const std::string &sourc
 }
 
 void
+Compiler::clearIncludeSources()
+{
+    m_pipeline->clearIncludeSources();
+}
+
+void
 Compiler::setDefineMacro(const std::string &key, const std::string &value)
 {
     m_pipeline->setDefineMacro(key, value);

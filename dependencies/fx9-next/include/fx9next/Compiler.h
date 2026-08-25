@@ -39,6 +39,7 @@ public:
     bool compile(const char *path, EffectProduct &effectProduct);
     bool compile(const std::string &source, const char *filename, EffectProduct &effectProduct);
     void addIncludeSource(const std::string &filePath, const std::string &sourceData);
+    void clearIncludeSources();
     void setDefineMacro(const std::string &key, const std::string &value);
     bool containsDefineMacro(const std::string &key) const;
     void removeDefineMacro(const std::string &key);

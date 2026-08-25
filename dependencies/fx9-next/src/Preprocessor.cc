@@ -49,6 +49,28 @@ dirName(const std::string &path)
 }
 
 std::string
+normalizePathSeparators(const std::string &path)
+{
+    std::string s = path;
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '\\') {
+            s[i] = '/';
+        }
+    }
+    return s;
+}
+
+std::string
+baseName(const std::string &path)
+{
+    size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos) {
+        return path;
+    }
+    return path.substr(slash + 1);
+}
+
+std::string
 joinPath(const std::string &dir, const std::string &name)
 {
     if (dir.empty()) {
@@ -146,7 +168,23 @@ Preprocessor::macros() const
 void
 Preprocessor::addIncludeSource(const std::string &filePath, const std::string &sourceData)
 {
-    m_includes[filePath] = sourceData;
+    std::string norm = normalizePathSeparators(filePath);
+    m_includes[norm] = sourceData;
+    if (norm != filePath) {
+        m_includes[filePath] = sourceData;
+    }
+}
+
+void
+Preprocessor::clearIncludeSources()
+{
+    m_includes.clear();
+}
+
+void
+Preprocessor::clearIncludedPaths()
+{
+    m_includedPaths.clear();
 }
 
 const Preprocessor::IncludeMap &
@@ -318,7 +356,7 @@ Preprocessor::handleDirective(const std::string &line, const std::string &filena
         if (!loadInclude(header, filename, quoted, path, contents, error)) {
             return false;
         }
-        m_includedPaths.push_back(path);
+        m_includedPaths.push_back(normalizePathSeparators(header));
         std::string included;
         if (!processInternal(contents, path, depth + 1, included, error)) {
             return false;
@@ -784,15 +822,41 @@ bool
 Preprocessor::loadInclude(const std::string &header, const std::string &fromFile, bool quoted,
     std::string &resolvedPath, std::string &contents, std::string &error) const
 {
+    const std::string normHeader = normalizePathSeparators(header);
     std::vector<std::string> candidates;
-    if (quoted) {
-        candidates.push_back(joinPath(dirName(fromFile), header));
+    if (quoted && !fromFile.empty()) {
+        candidates.push_back(joinPath(dirName(fromFile), normHeader));
     }
+    candidates.push_back(normHeader);
     candidates.push_back(header);
+    for (size_t c = 0; c < candidates.size(); c++) {
+        const std::string &target = candidates[c];
+        for (auto it = m_includes.begin(); it != m_includes.end(); ++it) {
+            std::string incKey = normalizePathSeparators(it->first);
+            if (incKey == target || it->first == target) {
+                resolvedPath = it->first;
+                contents = it->second;
+                return true;
+            }
+        }
+    }
+    for (size_t c = 0; c < candidates.size(); c++) {
+        const std::string &target = candidates[c];
+        for (auto it = m_includes.begin(); it != m_includes.end(); ++it) {
+            std::string incKey = normalizePathSeparators(it->first);
+            if (incKey.size() >= target.size() &&
+                incKey.compare(incKey.size() - target.size(), target.size(), target) == 0 &&
+                (incKey.size() == target.size() || incKey[incKey.size() - target.size() - 1] == '/')) {
+                resolvedPath = it->first;
+                contents = it->second;
+                return true;
+            }
+        }
+    }
+    std::string baseHeader = baseName(normHeader);
     for (auto it = m_includes.begin(); it != m_includes.end(); ++it) {
-        if (it->first == header ||
-            (it->first.size() >= header.size() &&
-                it->first.compare(it->first.size() - header.size(), header.size(), header) == 0)) {
+        std::string incKey = normalizePathSeparators(it->first);
+        if (baseName(incKey) == baseHeader) {
             resolvedPath = it->first;
             contents = it->second;
             return true;

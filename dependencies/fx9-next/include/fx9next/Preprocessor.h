@@ -25,6 +25,8 @@ public:
     const MacroMap &macros() const;
 
     void addIncludeSource(const std::string &filePath, const std::string &sourceData);
+    void clearIncludeSources();
+    void clearIncludedPaths();
     const IncludeMap &includeSources() const;
     const std::vector<std::string> &includedPaths() const;
 
