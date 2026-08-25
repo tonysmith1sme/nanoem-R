@@ -174,6 +174,25 @@ TEST_CASE("fx9next compiles corpus to hlsl and msl")
     REQUIRE_FALSE(product.message.empty());
 }
 
+TEST_CASE("fx9next bakes alpha test into pixel shader")
+{
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/corpus/06_alpha_test_states.fx";
+    REQUIRE(compiler.compile(path.c_str(), product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    REQUIRE(effect->n_techniques > 0);
+    REQUIRE(effect->techniques[0]->n_passes > 0);
+    const char *ps = effect->techniques[0]->passes[0]->pixel_shader->glsl;
+    REQUIRE(ps != nullptr);
+    const std::string body(ps);
+    REQUIRE(body.find("discard") != std::string::npos);
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next packs semantic parameters")
 {
     Compiler compiler;

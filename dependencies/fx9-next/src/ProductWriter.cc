@@ -12,9 +12,12 @@
 
 #include "effect.pb-c.h"
 
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <string>
 #include <vector>
 
 namespace fx9next {
@@ -288,6 +291,279 @@ fillParameters(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Effect *m
     }
 }
 
+std::string
+upperCopy(const std::string &s)
+{
+    std::string o(s);
+    for (size_t i = 0; i < o.size(); i++) {
+        o[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(o[i])));
+    }
+    return o;
+}
+
+bool
+passStateEnabled(const Pass &pass, const char *name)
+{
+    const std::string key = upperCopy(name);
+    for (size_t i = 0; i < pass.states.size(); i++) {
+        if (upperCopy(pass.states[i].name) == key) {
+            const std::string v = upperCopy(pass.states[i].value);
+            return v == "TRUE" || v == "1" || v == "ENABLE";
+        }
+    }
+    return false;
+}
+
+uint32_t
+passStateU32(const Pass &pass, const char *name, uint32_t fallback)
+{
+    const std::string key = upperCopy(name);
+    for (size_t i = 0; i < pass.states.size(); i++) {
+        if (upperCopy(pass.states[i].name) == key) {
+            uint32_t value = 0;
+            if (lookupRenderStateValue(pass.states[i].name, pass.states[i].value, value)) {
+                return value;
+            }
+        }
+    }
+    return fallback;
+}
+
+std::string
+alphaTestCondition(const Pass &pass)
+{
+    const uint32_t ref = passStateU32(pass, "ALPHAREF", 0);
+    const float reference = static_cast<float>(ref) / 255.0f;
+    const uint32_t func = passStateU32(pass, "ALPHAFUNC", 8);
+    char buf[64];
+    switch (func) {
+    case 1:
+        return "false";
+    case 2:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a < %.8ff)", reference);
+        return buf;
+    case 3:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a == %.8ff)", reference);
+        return buf;
+    case 4:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a <= %.8ff)", reference);
+        return buf;
+    case 5:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a > %.8ff)", reference);
+        return buf;
+    case 6:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a != %.8ff)", reference);
+        return buf;
+    case 7:
+        std::snprintf(buf, sizeof(buf), "(nanoem_output_color.a >= %.8ff)", reference);
+        return buf;
+    default:
+        return "true";
+    }
+}
+
+bool
+replaceOutputAssignment(std::string &source, const char *needle, const std::string &lhsType, bool alphaTest,
+    bool srgbWrite, const std::string &condition)
+{
+    const size_t at = source.find(needle);
+    if (at == std::string::npos) {
+        return false;
+    }
+    const size_t expr = at + std::strlen(needle);
+    const size_t semi = source.find(';', expr);
+    if (semi == std::string::npos) {
+        return false;
+    }
+    const std::string original = source.substr(expr, semi - expr);
+    std::string replacement;
+    replacement += lhsType;
+    replacement += " nanoem_output_color = ";
+    replacement += original;
+    replacement += ";\n";
+    if (alphaTest) {
+        replacement += "    if (!(";
+        replacement += condition;
+        replacement += ")) { discard; }\n";
+    }
+    if (srgbWrite) {
+        replacement += "    /* 0.0031308 */\n";
+        replacement += "    ";
+        replacement += lhsType == "float4" ? "float3" : "vec3";
+        replacement += " nanoem_output_linear = ";
+        replacement += lhsType == "float4" ? "saturate(nanoem_output_color.rgb)" : "clamp(nanoem_output_color.rgb, 0.0, 1.0)";
+        replacement += ";\n    nanoem_output_color.rgb = ";
+        replacement += lhsType == "float4" ? "float3" : "vec3";
+        replacement += "(\n";
+        replacement += "        nanoem_output_linear.x <= 0.0031308 ? nanoem_output_linear.x * 12.92 : "
+                       "1.055 * pow(nanoem_output_linear.x, 1.0 / 2.4) - 0.055,\n";
+        replacement += "        nanoem_output_linear.y <= 0.0031308 ? nanoem_output_linear.y * 12.92 : "
+                       "1.055 * pow(nanoem_output_linear.y, 1.0 / 2.4) - 0.055,\n";
+        replacement += "        nanoem_output_linear.z <= 0.0031308 ? nanoem_output_linear.z * 12.92 : "
+                       "1.055 * pow(nanoem_output_linear.z, 1.0 / 2.4) - 0.055);\n";
+    }
+    replacement += "    ";
+    replacement += needle;
+    replacement += "nanoem_output_color";
+    source.replace(at, semi - at, replacement);
+    return true;
+}
+
+std::string
+findFragOutputName(const std::string &src)
+{
+    static const char *kKeys[] = { "layout(location = 0) out vec4 ", "layout(location=0) out vec4 ", "out vec4 ",
+        "layout(location = 0) out float4 ", nullptr };
+    for (const char **k = kKeys; *k; ++k) {
+        const size_t at = src.find(*k);
+        if (at == std::string::npos) {
+            continue;
+        }
+        size_t i = at + std::strlen(*k);
+        while (i < src.size() && std::isspace(static_cast<unsigned char>(src[i]))) {
+            i++;
+        }
+        size_t start = i;
+        while (i < src.size() && (std::isalnum(static_cast<unsigned char>(src[i])) || src[i] == '_')) {
+            i++;
+        }
+        if (i > start) {
+            return src.substr(start, i - start);
+        }
+    }
+    return std::string();
+}
+
+void
+bakePixelOutput(LanguageType language, const Pass &pass, std::string &psSrc)
+{
+    const bool alphaTest = passStateEnabled(pass, "ALPHATESTENABLE");
+    const bool srgbWrite = passStateEnabled(pass, "SRGBWRITEENABLE");
+    if (!alphaTest && !srgbWrite) {
+        return;
+    }
+    const std::string condition = alphaTestCondition(pass);
+    const bool hlsl = language == kLanguageTypeHLSL || language == kLanguageTypeMSL;
+    const char *type = hlsl ? "float4" : "vec4";
+    static const char *kNeedles[] = { "_RESERVED_IDENTIFIER_FIXUP_gl_FragData[0] = ", "gl_FragData[0] = ",
+        "gl_FragColor = ", "FragColor = ", "_entryPointOutput = ", nullptr };
+    for (const char **n = kNeedles; *n; ++n) {
+        if (replaceOutputAssignment(psSrc, *n, type, alphaTest, srgbWrite, condition)) {
+            return;
+        }
+    }
+    const std::string outName = findFragOutputName(psSrc);
+    if (!outName.empty()) {
+        const std::string needle = outName + " = ";
+        replaceOutputAssignment(psSrc, needle.c_str(), type, alphaTest, srgbWrite, condition);
+    }
+}
+
+Fx9__Effect__Attribute__Usage
+usageFromSemantic(const std::string &semantic)
+{
+    const std::string u = upperCopy(semantic);
+    if (u.compare(0, 8, "POSITION") == 0 || u == "SV_POSITION") {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_POSITION;
+    }
+    if (u.compare(0, 6, "NORMAL") == 0) {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_NORMAL;
+    }
+    if (u.compare(0, 8, "TEXCOORD") == 0) {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_TEXCOORD;
+    }
+    if (u.compare(0, 5, "COLOR") == 0) {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_COLOR;
+    }
+    if (u.compare(0, 7, "TANGENT") == 0) {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_TANGENT;
+    }
+    if (u.compare(0, 8, "BINORMAL") == 0) {
+        return FX9__EFFECT__ATTRIBUTE__USAGE__AU_BINORMAL;
+    }
+    return FX9__EFFECT__ATTRIBUTE__USAGE__AU_TEXCOORD;
+}
+
+uint32_t
+semanticIndex(const std::string &semantic)
+{
+    const std::string u = upperCopy(semantic);
+    size_t i = u.size();
+    while (i > 0 && std::isdigit(static_cast<unsigned char>(u[i - 1]))) {
+        i--;
+    }
+    if (i == u.size()) {
+        return 0;
+    }
+    return static_cast<uint32_t>(std::atoi(u.c_str() + i));
+}
+
+void
+fillShaderInterface(Arena &arena, const TranslationUnit &unit, const Function &fn, Fx9__Effect__Shader *shader)
+{
+    shader->n_inputs = fn.params.size();
+    shader->inputs = arena.allocArray<Fx9__Effect__Attribute>(fn.params.size());
+    shader->n_semantics = fn.params.size();
+    shader->semantics = arena.allocArray<Fx9__Effect__Semantic>(fn.params.size());
+    for (size_t i = 0; i < fn.params.size(); i++) {
+        Fx9__Effect__Attribute *attr = shader->inputs[i] = arena.alloc<Fx9__Effect__Attribute>();
+        fx9__effect__attribute__init(attr);
+        attr->name = arena.copy(fn.params[i].name);
+        attr->usage = usageFromSemantic(fn.params[i].semantic);
+        attr->index = semanticIndex(fn.params[i].semantic);
+        Fx9__Effect__Semantic *sem = shader->semantics[i] = arena.alloc<Fx9__Effect__Semantic>();
+        fx9__effect__semantic__init(sem);
+        sem->index = attr->index;
+        sem->input_name = arena.copy(fn.params[i].semantic.empty() ? fn.params[i].name : fn.params[i].semantic);
+        sem->parameter_name = arena.copy(fn.params[i].name);
+        if (attr->usage == FX9__EFFECT__ATTRIBUTE__USAGE__AU_POSITION) {
+            sem->output_name = arena.copy("SV_POSITION");
+        }
+        else if (attr->usage == FX9__EFFECT__ATTRIBUTE__USAGE__AU_NORMAL) {
+            sem->output_name = arena.copy("NORMAL");
+        }
+        else if (attr->usage == FX9__EFFECT__ATTRIBUTE__USAGE__AU_TEXCOORD) {
+            sem->output_name = arena.copy("TEXCOORD");
+        }
+        else if (attr->usage == FX9__EFFECT__ATTRIBUTE__USAGE__AU_COLOR) {
+            sem->output_name = arena.copy("COLOR");
+        }
+        else {
+            sem->output_name = arena.copy(sem->input_name);
+        }
+    }
+    std::vector<const Variable *> uniforms;
+    for (size_t i = 0; i < unit.variables.size(); i++) {
+        const Variable &var = unit.variables[i];
+        if (isStructMarker(var) || var.type.isSampler() || var.type.kind == kTypeTexture ||
+            var.type.kind == kTypeString) {
+            continue;
+        }
+        uniforms.push_back(&var);
+    }
+    shader->n_uniforms = uniforms.size();
+    shader->uniforms = arena.allocArray<Fx9__Effect__Uniform>(uniforms.size());
+    shader->n_symbols = uniforms.size();
+    shader->symbols = arena.allocArray<Fx9__Effect__Symbol>(uniforms.size());
+    uint32_t reg = 0;
+    for (size_t i = 0; i < uniforms.size(); i++) {
+        Fx9__Effect__Uniform *u = shader->uniforms[i] = arena.alloc<Fx9__Effect__Uniform>();
+        fx9__effect__uniform__init(u);
+        u->type = FX9__EFFECT__UNIFORM__TYPE__UT_FLOAT;
+        u->index = reg;
+        u->num_elements = uniforms[i]->type.kind == kTypeMatrix ? static_cast<uint32_t>(uniforms[i]->type.rows) : 1;
+        u->constant_index = reg;
+        u->name = arena.copy(uniforms[i]->name);
+        Fx9__Effect__Symbol *sym = shader->symbols[i] = arena.alloc<Fx9__Effect__Symbol>();
+        fx9__effect__symbol__init(sym);
+        sym->name = arena.copy(uniforms[i]->name);
+        sym->register_set = FX9__EFFECT__SYMBOL__REGISTER_SET__RS_FLOAT4;
+        sym->register_index = reg;
+        sym->register_count = u->num_elements;
+        reg += u->num_elements;
+    }
+}
+
 void
 fillIncludes(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Effect *message)
 {
@@ -421,6 +697,9 @@ writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std
                         " pspirv=" + std::to_string(psWords.size()));
                     continue;
                 }
+                bakePixelOutput(language, pass, psSrc);
+                fillShaderInterface(arena, unit, *vs, passMsg->vertex_shader);
+                fillShaderInterface(arena, unit, *ps, passMsg->pixel_shader);
                 fillShaderBody(arena, passMsg->vertex_shader, language, vsSrc, vsOut);
                 fillShaderBody(arena, passMsg->pixel_shader, language, psSrc, psOut);
                 product.numCompiledPasses++;
