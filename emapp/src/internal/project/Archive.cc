@@ -773,18 +773,17 @@ Archive::saveAllDrawableIncludeSources(IDrawable *drawable, Native &native, Erro
         for (Project::IncludeEffectSourceMap::const_iterator it = includeSourceMap->begin(),
                                                              end = includeSourceMap->end();
              it != end; ++it) {
-            const char *includePath = it->first.c_str(),
-                       *trimmedIncludePath = PrivateArchiveUtils::trimMovingDirectoryPath(includePath);
+            const char *includePath = it->first.c_str();
             String archiveIncludePath(URI::stringByDeletingLastPathComponent(fragment));
             archiveIncludePath.append("/");
-            archiveIncludePath.append(trimmedIncludePath);
+            archiveIncludePath.append(includePath);
             Archiver::Entry entry;
             ByteArray bytes;
             if (!m_archiver->findEntry(archiveIncludePath, entry, error)) {
                 FileReaderScope scope(m_project->translator());
                 String fileIncludePath(fileURI.absolutePathByDeletingLastPathComponent());
                 fileIncludePath.append("/");
-                fileIncludePath.append(trimmedIncludePath);
+                fileIncludePath.append(includePath);
                 if (scope.open(URI::createFromFilePath(fileIncludePath), error)) {
                     FileUtils::read(scope, bytes, error);
                 }
