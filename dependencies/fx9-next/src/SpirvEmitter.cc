@@ -57,6 +57,7 @@ enum {
     kOpVectorShuffle = 79,
     kOpCompositeConstruct = 80,
     kOpCompositeExtract = 81,
+    kOpCompositeInsert = 82,
     kOpImageSampleImplicitLod = 87,
     kOpImageSampleExplicitLod = 88,
     kOpConvertFToS = 110,
@@ -74,6 +75,7 @@ enum {
     kOpSMod = 139,
     kOpFMod = 141,
     kOpVectorTimesScalar = 142,
+    kOpVectorTimesMatrix = 144,
     kOpMatrixTimesVector = 145,
     kOpMatrixTimesMatrix = 146,
     kOpDot = 148,
@@ -104,6 +106,7 @@ enum {
 };
 
 enum {
+    kGlslFract = 10,
     kGlslFloor = 8,
     kGlslFAbs = 4,
     kGlslSin = 13,
@@ -111,9 +114,14 @@ enum {
     kGlslPow = 26,
     kGlslExp = 27,
     kGlslSqrt = 31,
+    kGlslInverseSqrt = 32,
+    kGlslFMin = 37,
+    kGlslFMax = 40,
     kGlslFClamp = 43,
     kGlslFMix = 46,
+    kGlslStep = 48,
     kGlslLength = 66,
+    kGlslCross = 68,
     kGlslNormalize = 69,
     kGlslReflect = 71
 };
@@ -555,7 +563,45 @@ struct Emitter {
     void emitFor(const Stmt *stmt, uint32_t returnType);
     void emitWhile(const Stmt *stmt, uint32_t returnType, bool doWhile);
     void rememberArray(const std::string &name, const Type &type, uint32_t storage);
+    bool isMat(uint32_t id) const;
+    uint32_t extractMatrix(uint32_t mat, const std::string &sw);
+    uint32_t insertMatrix(uint32_t mat, const std::string &sw, uint32_t value);
+    uint32_t splatMatrix(uint32_t scalar, uint32_t matTy, int dim);
 };
+
+struct MatComp {
+    uint32_t row;
+    uint32_t col;
+};
+
+bool
+parseMatSwizzle(const std::string &s, std::vector<MatComp> &out)
+{
+    size_t i = 0;
+    while (i < s.size()) {
+        if (s[i] == '_' && i + 3 < s.size() && (s[i + 1] == 'm' || s[i + 1] == 'M') &&
+            std::isdigit(static_cast<unsigned char>(s[i + 2])) &&
+            std::isdigit(static_cast<unsigned char>(s[i + 3]))) {
+            MatComp c;
+            c.row = static_cast<uint32_t>(s[i + 2] - '0');
+            c.col = static_cast<uint32_t>(s[i + 3] - '0');
+            out.push_back(c);
+            i += 4;
+            continue;
+        }
+        if (s[i] == '_' && i + 2 < s.size() && std::isdigit(static_cast<unsigned char>(s[i + 1])) &&
+            std::isdigit(static_cast<unsigned char>(s[i + 2]))) {
+            MatComp c;
+            c.row = static_cast<uint32_t>(s[i + 1] - '1');
+            c.col = static_cast<uint32_t>(s[i + 2] - '1');
+            out.push_back(c);
+            i += 3;
+            continue;
+        }
+        return false;
+    }
+    return !out.empty();
+}
 
 uint32_t
 Emitter::extractComp(uint32_t vec, uint32_t index)
@@ -684,6 +730,85 @@ Emitter::emitIndexPtr(const Expr *expr, uint32_t &elemTy)
     uint32_t ptr = b.nextId();
     b.emit4(b.code, kOpAccessChain, ptrTy, ptr, lit->second, idx);
     return ptr;
+}
+
+bool
+Emitter::isMat(uint32_t id) const
+{
+    auto it = valueTypes.find(id);
+    return it != valueTypes.end() && (it->second == b.idMat3 || it->second == b.idMat4);
+}
+
+uint32_t
+Emitter::extractMatrix(uint32_t mat, const std::string &sw)
+{
+    std::vector<MatComp> comps;
+    if (!parseMatSwizzle(sw, comps)) {
+        return mat;
+    }
+    std::vector<uint32_t> scalars;
+    for (size_t i = 0; i < comps.size(); i++) {
+        uint32_t id = b.nextId();
+        uint32_t ops[5] = { b.typeFloat(), id, mat, comps[i].col, comps[i].row };
+        b.emit(b.code, kOpCompositeExtract, ops, 5);
+        scalars.push_back(note(id, b.typeFloat()));
+    }
+    if (scalars.size() == 1) {
+        return scalars[0];
+    }
+    uint32_t id = b.nextId();
+    std::vector<uint32_t> ops;
+    ops.push_back(b.typeVec(static_cast<int>(scalars.size())));
+    ops.push_back(id);
+    ops.insert(ops.end(), scalars.begin(), scalars.end());
+    b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+    return note(id, b.typeVec(static_cast<int>(scalars.size())));
+}
+
+uint32_t
+Emitter::insertMatrix(uint32_t mat, const std::string &sw, uint32_t value)
+{
+    std::vector<MatComp> comps;
+    if (!parseMatSwizzle(sw, comps)) {
+        return value;
+    }
+    uint32_t matTy = valueTypes.count(mat) ? valueTypes[mat] : b.idMat4;
+    uint32_t current = mat;
+    for (size_t i = 0; i < comps.size(); i++) {
+        uint32_t scalar = comps.size() == 1 ? value : extractComp(value, static_cast<uint32_t>(i));
+        uint32_t id = b.nextId();
+        uint32_t ops[6] = { matTy, id, scalar, current, comps[i].col, comps[i].row };
+        b.emit(b.code, kOpCompositeInsert, ops, 6);
+        current = note(id, matTy);
+    }
+    return current;
+}
+
+uint32_t
+Emitter::splatMatrix(uint32_t scalar, uint32_t matTy, int dim)
+{
+    std::vector<uint32_t> cols;
+    for (int c = 0; c < dim; c++) {
+        std::vector<uint32_t> el;
+        for (int r = 0; r < dim; r++) {
+            el.push_back(scalar);
+        }
+        uint32_t col = b.nextId();
+        std::vector<uint32_t> ops;
+        ops.push_back(b.typeVec(dim));
+        ops.push_back(col);
+        ops.insert(ops.end(), el.begin(), el.end());
+        b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+        note(col, b.typeVec(dim));
+        cols.push_back(col);
+    }
+    uint32_t id = b.nextId();
+    std::vector<uint32_t> ops;
+    ops.push_back(matTy);
+    ops.push_back(id);
+    ops.insert(ops.end(), cols.begin(), cols.end());
+    b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+    return note(id, matTy);
 }
 
 uint32_t
@@ -869,6 +994,9 @@ Emitter::emitExpr(const Expr *expr)
     case kExprMember: {
         uint32_t base = emitExpr(expr->kids[0].get());
         const std::string &sw = expr->name;
+        if (isMat(base) || (!sw.empty() && sw[0] == '_')) {
+            return extractMatrix(base, sw);
+        }
         if (!isVec(base)) {
             return base;
         }
@@ -989,8 +1117,23 @@ Emitter::emitExpr(const Expr *expr)
                 }
                 return r;
             }
+            if (expr->kids[0]->kind == kExprMember && !expr->kids[0]->kids.empty() &&
+                expr->kids[0]->kids[0]->kind == kExprIdent) {
+                const std::string &mname = expr->kids[0]->kids[0]->name;
+                auto it = locals.find(mname);
+                if (it != locals.end()) {
+                    uint32_t loaded = loadIdent(mname);
+                    uint32_t inserted = insertMatrix(loaded, expr->kids[0]->name, r);
+                    b.emit2(b.code, kOpStore, it->second, inserted);
+                }
+                return r;
+            }
             auto it = locals.find(expr->kids[0]->name);
             if (it != locals.end()) {
+                uint32_t destTy = localTypes.count(expr->kids[0]->name) ? localTypes[expr->kids[0]->name] : 0;
+                if ((destTy == b.idMat3 || destTy == b.idMat4) && !isMat(r)) {
+                    r = splatMatrix(r, destTy, destTy == b.idMat3 ? 3 : 4);
+                }
                 b.emit2(b.code, kOpStore, it->second, r);
             }
             return r;
@@ -1097,6 +1240,55 @@ Emitter::emitExpr(const Expr *expr)
             uint32_t id = b.extInst(ty, kGlslFAbs, &x, 1);
             return note(id, ty);
         }
+        if ((name == "max" || name == "min") && expr->kids.size() >= 3 && b.idGlsl) {
+            uint32_t a = emitExpr(expr->kids[1].get());
+            uint32_t c = emitExpr(expr->kids[2].get());
+            uint32_t ty = valueTypes.count(a) ? valueTypes[a] : b.typeFloat();
+            uint32_t args[2] = { a, c };
+            uint32_t id = b.extInst(ty, name == "max" ? kGlslFMax : kGlslFMin, args, 2);
+            return note(id, ty);
+        }
+        if (name == "clamp" && expr->kids.size() >= 4 && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids[1].get());
+            uint32_t lo = emitExpr(expr->kids[2].get());
+            uint32_t hi = emitExpr(expr->kids[3].get());
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t args[3] = { x, lo, hi };
+            uint32_t id = b.extInst(ty, kGlslFClamp, args, 3);
+            return note(id, ty);
+        }
+        if (name == "step" && expr->kids.size() >= 3 && b.idGlsl) {
+            uint32_t edge = emitExpr(expr->kids[1].get());
+            uint32_t x = emitExpr(expr->kids[2].get());
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t args[2] = { edge, x };
+            uint32_t id = b.extInst(ty, kGlslStep, args, 2);
+            return note(id, ty);
+        }
+        if ((name == "sqrt" || name == "rsqrt") && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, name == "sqrt" ? kGlslSqrt : kGlslInverseSqrt, &x, 1);
+            return note(id, ty);
+        }
+        if ((name == "frac" || name == "fract") && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t id = b.extInst(ty, kGlslFract, &x, 1);
+            return note(id, ty);
+        }
+        if (name == "length" && b.idGlsl) {
+            uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+            uint32_t id = b.extInst(b.typeFloat(), kGlslLength, &x, 1);
+            return note(id, b.typeFloat());
+        }
+        if (name == "cross" && expr->kids.size() >= 3 && b.idGlsl) {
+            uint32_t a = emitExpr(expr->kids[1].get());
+            uint32_t c = emitExpr(expr->kids[2].get());
+            uint32_t args[2] = { a, c };
+            uint32_t id = b.extInst(b.typeVec(3), kGlslCross, args, 2);
+            return note(id, b.typeVec(3));
+        }
         if (name == "mul") {
             if (expr->kids.size() >= 3) {
                 uint32_t l = emitExpr(expr->kids[1].get());
@@ -1108,9 +1300,16 @@ Emitter::emitExpr(const Expr *expr)
                     b.emit4(b.code, kOpMatrixTimesMatrix, b.idMat4, id, l, r);
                     return note(id, b.idMat4);
                 }
-                if (lty && (lty == b.idMat4 || lty == b.idMat3) && rty && rty != b.idFloat) {
+                if (lty && (lty == b.idMat4 || lty == b.idMat3) && rty && rty != b.idFloat &&
+                    rty != b.idMat3 && rty != b.idMat4) {
                     uint32_t oty = (rty == b.typeVec(4) || lty == b.idMat4) ? b.typeVec(4) : b.typeVec(3);
                     b.emit4(b.code, kOpMatrixTimesVector, oty, id, l, r);
+                    return note(id, oty);
+                }
+                if (rty && (rty == b.idMat4 || rty == b.idMat3) && lty && lty != b.idFloat &&
+                    lty != b.idMat3 && lty != b.idMat4) {
+                    uint32_t oty = (lty == b.typeVec(4) || rty == b.idMat4) ? b.typeVec(4) : b.typeVec(3);
+                    b.emit4(b.code, kOpVectorTimesMatrix, oty, id, l, r);
                     return note(id, oty);
                 }
                 uint32_t ty = lty ? lty : b.typeFloat();
@@ -1232,7 +1431,14 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
         localTypes[stmt->name] = ty;
         rememberArray(stmt->name, stmt->varType, storage);
         if (stmt->expr) {
-            if (stmt->varType.kind == kTypeArray && stmt->expr->kind == kExprConstruct) {
+            if ((ty == b.idMat3 || ty == b.idMat4) && stmt->expr->kind != kExprConstruct) {
+                uint32_t scalar = emitExpr(stmt->expr.get());
+                if (!isMat(scalar)) {
+                    scalar = splatMatrix(scalar, ty, ty == b.idMat3 ? 3 : 4);
+                }
+                b.emit2(b.code, kOpStore, var, scalar);
+            }
+            else if (stmt->varType.kind == kTypeArray && stmt->expr->kind == kExprConstruct) {
                 std::vector<uint32_t> comps;
                 for (size_t i = 0; i < stmt->expr->kids.size(); i++) {
                     comps.push_back(emitExpr(stmt->expr->kids[i].get()));
