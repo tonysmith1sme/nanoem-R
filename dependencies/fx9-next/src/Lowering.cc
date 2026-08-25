@@ -317,19 +317,6 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
         output.output = true;
         shader.outputs.push_back(output);
     }
-    ShaderFunctionIR declaration;
-    declaration.name = function.name;
-    declaration.returnType = function.returnType;
-    declaration.returnSemantic = function.returnSemantic;
-    for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
-        ShaderParameterIR parameter;
-        parameter.name = it->name;
-        parameter.type = it->type;
-        parameter.semantic = it->semantic;
-        parameter.input = !it->isOut;
-        parameter.output = it->isOut;
-        declaration.parameters.push_back(parameter);
-    }
     TypeMap symbols, functions;
     for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
         symbols[it->name] = it->type;
@@ -337,11 +324,32 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
     for (std::vector<Function>::const_iterator it = unit.functions.begin(); it != unit.functions.end(); ++it) {
         functions[it->name] = it->returnType;
     }
-    for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
-        symbols[it->name] = it->type;
+    const Function *entry = &function;
+    for (size_t i = 0; i < unit.functions.size(); i++) {
+        const Function &source = unit.functions[i];
+        ShaderFunctionIR declaration;
+        declaration.name = source.name;
+        declaration.returnType = source.returnType;
+        declaration.returnSemantic = source.returnSemantic;
+        TypeMap functionSymbols = symbols;
+        for (std::vector<Parameter>::const_iterator it = source.params.begin(); it != source.params.end(); ++it) {
+            ShaderParameterIR parameter;
+            parameter.name = it->name;
+            parameter.type = it->type;
+            parameter.semantic = it->semantic;
+            parameter.input = !it->isOut;
+            parameter.output = it->isOut;
+            declaration.parameters.push_back(parameter);
+            functionSymbols[it->name] = it->type;
+        }
+        declaration.body = lowerStatement(source.body.get(), functionSymbols, functions);
+        if (source.name == entry->name) {
+            shader.functions.insert(shader.functions.begin(), declaration);
+        }
+        else {
+            shader.functions.push_back(declaration);
+        }
     }
-    declaration.body = lowerStatement(function.body.get(), symbols, functions);
-    shader.functions.push_back(declaration);
     return shader;
 }
 

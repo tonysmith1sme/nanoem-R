@@ -238,6 +238,29 @@ TEST_CASE("fx9next emits lowered shader IR deterministically")
     REQUIRE(lowered == legacy);
 }
 
+TEST_CASE("fx9next emits semantic user functions without parser AST bodies")
+{
+    const char *source =
+        "float4 tint(float4 color) { return color * 0.5; }\n"
+        "float4 ps_main(float4 color : COLOR0) : COLOR0 { return tint(color); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main; } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "semantic-call.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 1);
+    REQUIRE(shaders[0].functions.size() == 2);
+    unit.functions.clear();
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(unit, effect, shaders[0], words, error));
+    REQUIRE(validateSPIRV(words, error));
+}
+
 TEST_CASE("fx9next rejects unknown effect script commands")
 {
     TranslationUnit unit;

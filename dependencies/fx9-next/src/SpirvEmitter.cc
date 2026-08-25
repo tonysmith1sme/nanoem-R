@@ -1655,6 +1655,25 @@ makeStatement(const ShaderStatementIR *source)
     return result;
 }
 
+Function
+makeFunction(const ShaderFunctionIR &source)
+{
+    Function result;
+    result.name = source.name;
+    result.returnType = source.returnType;
+    result.returnSemantic = source.returnSemantic;
+    for (std::vector<ShaderParameterIR>::const_iterator it = source.parameters.begin(); it != source.parameters.end(); ++it) {
+        Parameter parameter;
+        parameter.name = it->name;
+        parameter.type = it->type;
+        parameter.semantic = it->semantic;
+        parameter.isOut = it->output;
+        result.params.push_back(parameter);
+    }
+    result.body = makeStatement(source.body.get());
+    return result;
+}
+
 } /* namespace anonymous */
 
 bool
@@ -2067,21 +2086,20 @@ emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const
         error = "shader IR has no entry function";
         return false;
     }
-    const ShaderFunctionIR &source = shader.functions[0];
-    Function function;
-    function.name = source.name;
-    function.returnType = source.returnType;
-    function.returnSemantic = source.returnSemantic;
-    for (std::vector<ShaderParameterIR>::const_iterator it = source.parameters.begin(); it != source.parameters.end(); ++it) {
-        Parameter parameter;
-        parameter.name = it->name;
-        parameter.type = it->type;
-        parameter.semantic = it->semantic;
-        parameter.isOut = it->output;
-        function.params.push_back(parameter);
+    TranslationUnit semanticUnit;
+    for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
+        Variable variable;
+        variable.name = it->name;
+        variable.type = it->type;
+        variable.semantic = it->semantic;
+        variable.registerName = it->registerName;
+        variable.textureName = it->textureName;
+        semanticUnit.variables.push_back(std::move(variable));
     }
-    function.body = makeStatement(source.body.get());
-    return emitFunctionSPIRVWithEffect(unit, &effect, &shader, function,
+    for (std::vector<ShaderFunctionIR>::const_iterator it = shader.functions.begin(); it != shader.functions.end(); ++it) {
+        semanticUnit.functions.push_back(makeFunction(*it));
+    }
+    return emitFunctionSPIRVWithEffect(semanticUnit, &effect, &shader, semanticUnit.functions[0],
         shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
 }
 
