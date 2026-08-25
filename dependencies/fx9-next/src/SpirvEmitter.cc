@@ -1236,7 +1236,7 @@ Emitter::emitExpr(const Expr *expr)
     case kExprCall: {
         const std::string &name = expr->name;
         if (name == "tex2D" || name == "tex2Dlod" || name == "tex2Dproj" || name == "tex2Dbias" || name == "texCUBE" ||
-            name == "tex3D") {
+            name == "tex3D" || name == "Sample") {
             std::string sampName;
             if (expr->kids.size() > 1 && expr->kids[1]->kind == kExprIdent) {
                 sampName = expr->kids[1]->name;

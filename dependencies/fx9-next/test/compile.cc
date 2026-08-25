@@ -90,7 +90,7 @@ TEST_CASE("fx9next preserves sampler texture relationship")
         "texture2D diffuseTexture : DIFFUSE;\n"
         "sampler2D diffuseSampler = sampler_state { Texture = <diffuseTexture>; };\n"
         "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return diffuseTexture.Sample(diffuseSampler, uv); }\n"
         "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
         "PixelShader = compile ps_3_0 ps_main(); } }\n";
     Compiler compiler;
