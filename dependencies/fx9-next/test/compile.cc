@@ -371,6 +371,8 @@ TEST_CASE("fx9next flattens struct entry IO")
     REQUIRE(effect != nullptr);
     const char *vs = effect->techniques[0]->passes[0]->vertex_shader->glsl;
     REQUIRE(vs != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->vertex_shader->n_inputs == 1);
+    REQUIRE(std::string(effect->techniques[0]->passes[0]->vertex_shader->inputs[0]->name) == "input");
     const std::string body(vs);
     REQUIRE(body.find("gl_Position") != std::string::npos);
     fx9__effect__effect__free_unpacked(effect, nullptr);

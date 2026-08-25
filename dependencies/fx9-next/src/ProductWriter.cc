@@ -60,17 +60,6 @@ struct Arena {
     }
 };
 
-const Function *
-findFn(const TranslationUnit &unit, const std::string &name)
-{
-    for (size_t i = 0; i < unit.functions.size(); i++) {
-        if (unit.functions[i].name == name) {
-            return &unit.functions[i];
-        }
-    }
-    return nullptr;
-}
-
 const ShaderModuleIR *
 findShader(const std::vector<ShaderModuleIR> &shaders, const std::string &entryPoint, ShaderStage stage)
 {
@@ -524,24 +513,24 @@ semanticIndex(const std::string &semantic)
 }
 
 void
-fillShaderInterface(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &effect, const Function &fn,
+fillShaderInterface(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &module,
     Fx9__Effect__Shader *shader)
 {
-    shader->n_inputs = fn.params.size();
-    shader->inputs = arena.allocArray<Fx9__Effect__Attribute>(fn.params.size());
-    shader->n_semantics = fn.params.size();
-    shader->semantics = arena.allocArray<Fx9__Effect__Semantic>(fn.params.size());
-    for (size_t i = 0; i < fn.params.size(); i++) {
+    shader->n_inputs = module.inputs.size();
+    shader->inputs = arena.allocArray<Fx9__Effect__Attribute>(module.inputs.size());
+    shader->n_semantics = module.inputs.size();
+    shader->semantics = arena.allocArray<Fx9__Effect__Semantic>(module.inputs.size());
+    for (size_t i = 0; i < module.inputs.size(); i++) {
         Fx9__Effect__Attribute *attr = shader->inputs[i] = arena.alloc<Fx9__Effect__Attribute>();
         fx9__effect__attribute__init(attr);
-        attr->name = arena.copy(fn.params[i].name);
-        attr->usage = usageFromSemantic(fn.params[i].semantic);
-        attr->index = semanticIndex(fn.params[i].semantic);
+        attr->name = arena.copy(module.inputs[i].name);
+        attr->usage = usageFromSemantic(module.inputs[i].semantic);
+        attr->index = semanticIndex(module.inputs[i].semantic);
         Fx9__Effect__Semantic *sem = shader->semantics[i] = arena.alloc<Fx9__Effect__Semantic>();
         fx9__effect__semantic__init(sem);
         sem->index = attr->index;
-        sem->input_name = arena.copy(fn.params[i].semantic.empty() ? fn.params[i].name : fn.params[i].semantic);
-        sem->parameter_name = arena.copy(fn.params[i].name);
+        sem->input_name = arena.copy(module.inputs[i].semantic.empty() ? module.inputs[i].name : module.inputs[i].semantic);
+        sem->parameter_name = arena.copy(module.inputs[i].name);
         if (attr->usage == FX9__EFFECT__ATTRIBUTE__USAGE__AU_POSITION) {
             sem->output_name = arena.copy("SV_POSITION");
         }
@@ -689,11 +678,9 @@ writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, co
                 product.numValidatedPasses++;
                 continue;
             }
-            const Function *vs = findFn(unit, pass.vsEntry);
-            const Function *ps = findFn(unit, pass.psEntry);
             const ShaderModuleIR *vsIR = findShader(shaders, pass.vsEntry, kShaderStageVertex);
             const ShaderModuleIR *psIR = findShader(shaders, pass.psEntry, kShaderStagePixel);
-            if (!vs || !ps || !vsIR || !psIR) {
+            if (!vsIR || !psIR) {
                 std::string names;
                 for (size_t fi = 0; fi < unit.functions.size(); fi++) {
                     if (!names.empty()) {
@@ -733,8 +720,8 @@ writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, co
                     continue;
                 }
                 bakePixelOutput(language, pass, psSrc);
-                fillShaderInterface(arena, unit, effect, *vs, passMsg->vertex_shader);
-                fillShaderInterface(arena, unit, effect, *ps, passMsg->pixel_shader);
+                fillShaderInterface(arena, unit, effect, *vsIR, passMsg->vertex_shader);
+                fillShaderInterface(arena, unit, effect, *psIR, passMsg->pixel_shader);
                 fillShaderBody(arena, passMsg->vertex_shader, language, vsSrc, vsOut);
                 fillShaderBody(arena, passMsg->pixel_shader, language, psSrc, psOut);
                 product.numCompiledPasses++;
