@@ -606,8 +606,8 @@ fillIncludes(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Effect *mes
 
 bool
 writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, const std::vector<ShaderModuleIR> &shaders,
-    LanguageType language,
-    const std::string &metalEntry, const std::string &metalUbo, int version, bool /*validate*/, EffectProduct &product)
+    LanguageType language, const std::string &metalEntry, const std::string &metalUbo, int version, bool validate,
+    EffectProduct &product)
 {
     Arena arena;
     Fx9__Effect__Effect message = FX9__EFFECT__EFFECT__INIT;
@@ -712,6 +712,10 @@ writeEffectProduct(const TranslationUnit &unit, const EffectModuleIR &effect, co
                 }
                 if (!emitShaderSPIRV(unit, effect, *psIR, psWords, err)) {
                     product.sink.builder = err.empty() ? "fragment emit failed" : err;
+                    continue;
+                }
+                if (validate && (!validateSPIRV(vsWords, err) || !validateSPIRV(psWords, err))) {
+                    product.sink.validator = err.empty() ? "SPIR-V validation failed" : err;
                     continue;
                 }
                 std::string vsSrc, psSrc;

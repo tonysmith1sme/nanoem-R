@@ -198,3 +198,11 @@ TEST_CASE("fx9next rejects overlapping DX9 register bindings")
     REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
     REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1004");
 }
+
+TEST_CASE("fx9next validates SPIR-V instruction boundaries")
+{
+    std::string error;
+    REQUIRE(validateSPIRV(std::vector<uint32_t>{ 0x07230203, 0x00010000, 0, 1, 0 }, error));
+    REQUIRE_FALSE(validateSPIRV(std::vector<uint32_t>{ 0x07230203, 0x00010000, 0, 1, 0, 0 }, error));
+    REQUIRE(error.find("invalid SPIR-V instruction") != std::string::npos);
+}

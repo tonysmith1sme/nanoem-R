@@ -174,6 +174,52 @@ TEST_CASE("fx9next compiles corpus to hlsl and msl")
     REQUIRE_FALSE(product.message.empty());
 }
 
+TEST_CASE("fx9next validates a pass-through product")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeSPIRV);
+    compiler.setValidationEnabled(true);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "validated.fx", product));
+    REQUIRE(product.numValidatedPasses == product.numPasses);
+    REQUIRE(product.sink.validator.empty());
+}
+
+TEST_CASE("fx9next compiles ray-mmd to MSL")
+{
+    static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 2)));
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../../MME/" + name;
+    FILE *fp = std::fopen(path.c_str(), "rb");
+    if (!fp) {
+        WARN("missing " + path);
+        return;
+    }
+    std::fclose(fp);
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    compiler.setDefineMacro("NANOEM", "1");
+    compiler.setDefineMacro("FOG_ENABLE", "0");
+    Compiler::EffectProduct product;
+    const bool ok = compiler.compile(path.c_str(), product);
+    INFO(path);
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        INFO(*product.sink.translator.begin());
+    }
+    CHECK(ok);
+    CHECK(product.numPasses > 0);
+    CHECK(product.numCompiledPasses == product.numPasses);
+}
+
 TEST_CASE("fx9next bakes alpha test into pixel shader")
 {
     Compiler compiler;

@@ -1920,6 +1920,27 @@ emitFunctionSPIRV(
 }
 
 bool
+validateSPIRV(const std::vector<uint32_t> &words, std::string &error)
+{
+    if (words.size() < 5 || words[0] != 0x07230203) {
+        error = "invalid SPIR-V header";
+        return false;
+    }
+    size_t cursor = 5;
+    while (cursor < words.size()) {
+        const uint32_t wordCount = words[cursor] >> 16;
+        const uint32_t opcode = words[cursor] & 0xFFFFu;
+        if (wordCount == 0 || cursor + wordCount > words.size()) {
+            error = "invalid SPIR-V instruction at word " + std::to_string(cursor) + " op=" +
+                std::to_string(opcode);
+            return false;
+        }
+        cursor += wordCount;
+    }
+    return cursor == words.size();
+}
+
+bool
 emitShaderSPIRV(const TranslationUnit &unit, const EffectModuleIR &effect, const ShaderModuleIR &shader,
     std::vector<uint32_t> &words, std::string &error)
 {
