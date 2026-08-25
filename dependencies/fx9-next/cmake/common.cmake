@@ -72,13 +72,16 @@ endif()
 set(FX9NEXT_SOURCES
   ${FX9NEXT_PATH}/src/AST.cc
   ${FX9NEXT_PATH}/src/Compiler.cc
+  ${FX9NEXT_PATH}/src/Diagnostics.cc
   ${FX9NEXT_PATH}/src/Encoding.cc
+  ${FX9NEXT_PATH}/src/EffectIR.cc
   ${FX9NEXT_PATH}/src/Lexer.cc
   ${FX9NEXT_PATH}/src/Parser.cc
   ${FX9NEXT_PATH}/src/Pipeline.cc
   ${FX9NEXT_PATH}/src/Preprocessor.cc
   ${FX9NEXT_PATH}/src/ProductWriter.cc
   ${FX9NEXT_PATH}/src/RenderState.cc
+  ${FX9NEXT_PATH}/src/ShaderIR.cc
   ${FX9NEXT_PATH}/src/SpirvEmitter.cc
   ${FX9NEXT_PATH}/src/Translator.cc
   ${FX9NEXT_PATH}/src/Type.cc)

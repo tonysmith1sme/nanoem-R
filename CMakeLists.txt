@@ -466,7 +466,8 @@ if(NOT NANOEM_MINIMAL)
     if(TARGET fx9next)
       add_executable(fx9next_test ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/main.cc
                                   ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/preprocessor.cc
-                                  ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/compile.cc)
+                                  ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/compile.cc
+                                  ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/test/ir.cc)
       set_property(TARGET fx9next_test PROPERTY CXX_STANDARD 11)
       set_property(TARGET fx9next_test APPEND PROPERTY INCLUDE_DIRECTORIES
         ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/include
