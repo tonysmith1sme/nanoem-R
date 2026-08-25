@@ -193,6 +193,32 @@ TEST_CASE("fx9next bakes alpha test into pixel shader")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next emits if and for control flow")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float4 color : COLOR0) : COLOR0 {\n"
+        "  float4 c = color;\n"
+        "  if (c.r > 0.5) { c.r = 1; } else { c.r = 0; }\n"
+        "  for (int i = 0; i < 3; i++) { c.g += 0.1; }\n"
+        "  return c;\n"
+        "}\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "cf.fx", product));
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        INFO(*product.sink.translator.begin());
+    }
+    REQUIRE(product.numCompiledPasses == 1);
+}
+
 TEST_CASE("fx9next inlines user functions")
 {
     const char *src =

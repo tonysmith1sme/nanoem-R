@@ -352,7 +352,11 @@ Parser::parsePostfix()
             expr = std::move(index);
             continue;
         }
-        if (m_lexer.accept("++") || m_lexer.accept("--")) {
+        if (m_lexer.peek().text == "++" || m_lexer.peek().text == "--") {
+            std::unique_ptr<Expr> inc = Expr::make(kExprUnary);
+            inc->op = m_lexer.next().text;
+            inc->kids.push_back(std::move(expr));
+            expr = std::move(inc);
             continue;
         }
         break;

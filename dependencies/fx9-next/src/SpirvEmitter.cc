@@ -76,9 +76,14 @@ enum {
     kOpMatrixTimesVector = 145,
     kOpMatrixTimesMatrix = 146,
     kOpDot = 148,
+    kOpSelect = 169,
     kOpLogicalNot = 168,
     kOpIEqual = 170,
     kOpINotEqual = 171,
+    kOpSGreaterThan = 173,
+    kOpSGreaterThanEqual = 175,
+    kOpSLessThan = 177,
+    kOpSLessThanEqual = 179,
     kOpFOrdEqual = 180,
     kOpFOrdNotEqual = 182,
     kOpFOrdLessThan = 184,
@@ -154,6 +159,8 @@ struct Builder {
     uint32_t idTrue;
     uint32_t idFalse;
     uint32_t idGlsl;
+    uint32_t idMat3;
+    uint32_t idMat4;
     std::unordered_map<std::string, uint32_t> names;
     std::string error;
 
@@ -171,6 +178,8 @@ struct Builder {
         , idTrue(0)
         , idFalse(0)
         , idGlsl(0)
+        , idMat3(0)
+        , idMat4(0)
     {
     }
 
@@ -329,10 +338,16 @@ struct Builder {
             return typeVec(t.rows);
         }
         if (t.kind == kTypeMatrix) {
-            uint32_t col = typeVec(t.rows);
-            uint32_t id = nextId();
-            emit3(types, kOpTypeMatrix, id, col, static_cast<uint32_t>(t.columns));
-            return id;
+            uint32_t *slot = (t.rows == 3 && t.columns == 3) ? &idMat3 : &idMat4;
+            if (t.rows == 4 && t.columns == 4) {
+                slot = &idMat4;
+            }
+            if (!*slot) {
+                uint32_t col = typeVec(t.rows <= 0 ? 4 : t.rows);
+                *slot = nextId();
+                emit3(types, kOpTypeMatrix, *slot, col, static_cast<uint32_t>(t.columns <= 0 ? 4 : t.columns));
+            }
+            return *slot;
         }
         return typeFloat();
     }
@@ -502,6 +517,9 @@ struct Emitter {
     uint32_t makeVec2(uint32_t x, uint32_t y);
     uint32_t sample2D(const std::string &sampName, uint32_t uv);
     uint32_t callUser(const std::string &name, const Expr *expr);
+    uint32_t asBool(uint32_t id);
+    void emitIf(const Stmt *stmt, uint32_t returnType);
+    void emitFor(const Stmt *stmt, uint32_t returnType);
 };
 
 uint32_t
@@ -581,6 +599,91 @@ Emitter::callUser(const std::string &name, const Expr *expr)
     pendingReturn = savedRet;
     valueOverlay = savedOverlay;
     return result;
+}
+
+uint32_t
+Emitter::asBool(uint32_t id)
+{
+    if (valueTypes.count(id) && valueTypes[id] == b.typeBool()) {
+        return id;
+    }
+    uint32_t cond = b.nextId();
+    if (valueTypes.count(id) && valueTypes[id] == b.typeInt()) {
+        b.emit4(b.code, kOpINotEqual, b.typeBool(), cond, id, b.constI32(0));
+    }
+    else {
+        b.emit4(b.code, kOpFOrdNotEqual, b.typeBool(), cond, id, b.constF32(0));
+    }
+    return note(cond, b.typeBool());
+}
+
+void
+Emitter::emitIf(const Stmt *stmt, uint32_t returnType)
+{
+    uint32_t cond = asBool(emitExpr(stmt->expr.get()));
+    uint32_t thenL = b.nextId();
+    uint32_t mergeL = b.nextId();
+    uint32_t elseL = stmt->elseStmt ? b.nextId() : mergeL;
+    b.emit2(b.code, kOpSelectionMerge, mergeL, 0);
+    b.emit3(b.code, kOpBranchConditional, cond, thenL, elseL);
+    b.emit1(b.code, kOpLabel, thenL);
+    if (stmt->thenStmt) {
+        emitStmt(stmt->thenStmt.get(), returnType);
+    }
+    b.emit1(b.code, kOpBranch, mergeL);
+    if (stmt->elseStmt) {
+        b.emit1(b.code, kOpLabel, elseL);
+        emitStmt(stmt->elseStmt.get(), returnType);
+        b.emit1(b.code, kOpBranch, mergeL);
+    }
+    b.emit1(b.code, kOpLabel, mergeL);
+}
+
+void
+Emitter::emitFor(const Stmt *stmt, uint32_t returnType)
+{
+    if (!stmt->name.empty()) {
+        uint32_t ty = b.typeOf(stmt->varType.kind == kTypeVoid ? Type::floatType() : stmt->varType);
+        uint32_t ptr = b.ptrType(ty, kStoragePrivate);
+        uint32_t var = b.nextId();
+        b.emit3(b.types, kOpVariable, ptr, var, kStoragePrivate);
+        locals[stmt->name] = var;
+        localTypes[stmt->name] = ty;
+        if (stmt->expr) {
+            b.emit2(b.code, kOpStore, var, emitExpr(stmt->expr.get()));
+        }
+    }
+    else if (stmt->expr) {
+        emitExpr(stmt->expr.get());
+    }
+    uint32_t header = b.nextId();
+    uint32_t condL = b.nextId();
+    uint32_t body = b.nextId();
+    uint32_t cont = b.nextId();
+    uint32_t merge = b.nextId();
+    b.emit1(b.code, kOpBranch, header);
+    b.emit1(b.code, kOpLabel, header);
+    b.emit3(b.code, kOpLoopMerge, merge, cont, 0);
+    b.emit1(b.code, kOpBranch, condL);
+    b.emit1(b.code, kOpLabel, condL);
+    if (stmt->expr2) {
+        uint32_t cond = asBool(emitExpr(stmt->expr2.get()));
+        b.emit3(b.code, kOpBranchConditional, cond, body, merge);
+    }
+    else {
+        b.emit1(b.code, kOpBranch, body);
+    }
+    b.emit1(b.code, kOpLabel, body);
+    if (stmt->thenStmt) {
+        emitStmt(stmt->thenStmt.get(), returnType);
+    }
+    b.emit1(b.code, kOpBranch, cont);
+    b.emit1(b.code, kOpLabel, cont);
+    if (stmt->expr3) {
+        emitExpr(stmt->expr3.get());
+    }
+    b.emit1(b.code, kOpBranch, header);
+    b.emit1(b.code, kOpLabel, merge);
 }
 
 uint32_t
@@ -673,17 +776,33 @@ Emitter::emitExpr(const Expr *expr)
     }
     case kExprUnary: {
         uint32_t x = emitExpr(expr->kids[0].get());
+        if (expr->op == "++" || expr->op == "--") {
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            uint32_t one = (ty == b.typeInt()) ? b.constI32(1) : b.constF32(1);
+            uint32_t id = b.nextId();
+            b.emit4(b.code, (ty == b.typeInt()) ? (expr->op == "++" ? kOpIAdd : kOpISub)
+                                                : (expr->op == "++" ? kOpFAdd : kOpFSub),
+                ty, id, x, one);
+            note(id, ty);
+            if (!expr->kids.empty() && expr->kids[0]->kind == kExprIdent) {
+                auto it = locals.find(expr->kids[0]->name);
+                if (it != locals.end()) {
+                    b.emit2(b.code, kOpStore, it->second, id);
+                }
+            }
+            return id;
+        }
         uint32_t id = b.nextId();
         if (expr->op == "-") {
-            b.emit3(b.code, kOpFNegate, b.typeFloat(), id, x);
+            uint32_t ty = valueTypes.count(x) ? valueTypes[x] : b.typeFloat();
+            b.emit3(b.code, kOpFNegate, ty, id, x);
+            return note(id, ty);
         }
-        else if (expr->op == "!") {
-            b.emit3(b.code, kOpLogicalNot, b.typeBool(), id, x);
+        if (expr->op == "!") {
+            b.emit3(b.code, kOpLogicalNot, b.typeBool(), id, asBool(x));
+            return note(id, b.typeBool());
         }
-        else {
-            return x;
-        }
-        return id;
+        return x;
     }
     case kExprBinary: {
         uint32_t l = emitExpr(expr->kids[0].get());
@@ -691,11 +810,15 @@ Emitter::emitExpr(const Expr *expr)
         uint32_t id = b.nextId();
         uint16_t op = kOpFAdd;
         uint32_t ty = b.typeFloat();
+        const bool ints = valueTypes.count(l) && valueTypes[l] == b.typeInt() && valueTypes.count(r) &&
+            valueTypes[r] == b.typeInt();
         if (expr->op == "+") {
-            op = kOpFAdd;
+            op = ints ? kOpIAdd : kOpFAdd;
+            ty = ints ? b.typeInt() : b.typeFloat();
         }
         else if (expr->op == "-") {
-            op = kOpFSub;
+            op = ints ? kOpISub : kOpFSub;
+            ty = ints ? b.typeInt() : b.typeFloat();
         }
         else if (expr->op == "*") {
             if (isVec(l) && !isVec(r)) {
@@ -719,23 +842,23 @@ Emitter::emitExpr(const Expr *expr)
             op = kOpFMod;
         }
         else if (expr->op == "<") {
-            op = kOpFOrdLessThan;
+            op = ints ? kOpSLessThan : kOpFOrdLessThan;
             ty = b.typeBool();
         }
         else if (expr->op == ">") {
-            op = kOpFOrdGreaterThan;
+            op = ints ? kOpSGreaterThan : kOpFOrdGreaterThan;
             ty = b.typeBool();
         }
         else if (expr->op == "<=") {
-            op = kOpFOrdLessThanEqual;
+            op = ints ? kOpSLessThanEqual : kOpFOrdLessThanEqual;
             ty = b.typeBool();
         }
         else if (expr->op == ">=") {
-            op = kOpFOrdGreaterThanEqual;
+            op = ints ? kOpSGreaterThanEqual : kOpFOrdGreaterThanEqual;
             ty = b.typeBool();
         }
         else if (expr->op == "==") {
-            op = kOpFOrdEqual;
+            op = ints ? kOpIEqual : kOpFOrdEqual;
             ty = b.typeBool();
         }
         else if (expr->op == "!=") {
@@ -855,8 +978,19 @@ Emitter::emitExpr(const Expr *expr)
             if (expr->kids.size() >= 3) {
                 uint32_t l = emitExpr(expr->kids[1].get());
                 uint32_t r = emitExpr(expr->kids[2].get());
-                uint32_t ty = valueTypes.count(l) ? valueTypes[l] : b.typeFloat();
+                uint32_t lty = valueTypes.count(l) ? valueTypes[l] : 0;
+                uint32_t rty = valueTypes.count(r) ? valueTypes[r] : 0;
                 uint32_t id = b.nextId();
+                if (lty && lty == b.idMat4 && rty == b.idMat4) {
+                    b.emit4(b.code, kOpMatrixTimesMatrix, b.idMat4, id, l, r);
+                    return note(id, b.idMat4);
+                }
+                if (lty && (lty == b.idMat4 || lty == b.idMat3) && rty && rty != b.idFloat) {
+                    uint32_t oty = (rty == b.typeVec(4) || lty == b.idMat4) ? b.typeVec(4) : b.typeVec(3);
+                    b.emit4(b.code, kOpMatrixTimesVector, oty, id, l, r);
+                    return note(id, oty);
+                }
+                uint32_t ty = lty ? lty : b.typeFloat();
                 b.emit4(b.code, kOpFMul, ty, id, l, r);
                 return note(id, ty);
             }
@@ -902,7 +1036,14 @@ Emitter::emitExpr(const Expr *expr)
         return b.constF32(0);
     }
     case kExprTernary: {
-        return emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+        uint32_t cond = asBool(emitExpr(expr->kids[0].get()));
+        uint32_t t = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
+        uint32_t f = emitExpr(expr->kids.size() > 2 ? expr->kids[2].get() : nullptr);
+        uint32_t ty = valueTypes.count(t) ? valueTypes[t] : b.typeFloat();
+        uint32_t id = b.nextId();
+        uint32_t ops[5] = { ty, id, cond, t, f };
+        b.emit(b.code, kOpSelect, ops, 5);
+        return note(id, ty);
     }
     case kExprCast:
         return emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
@@ -949,17 +1090,12 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
     case kStmtExpr:
         emitExpr(stmt->expr.get());
         return true;
-    case kStmtIf: {
-        emitExpr(stmt->expr.get());
-        if (stmt->thenStmt) {
-            emitStmt(stmt->thenStmt.get(), returnType);
-        }
-        if (stmt->elseStmt) {
-            emitStmt(stmt->elseStmt.get(), returnType);
-        }
+    case kStmtIf:
+        emitIf(stmt, returnType);
         return true;
-    }
     case kStmtFor:
+        emitFor(stmt, returnType);
+        return true;
     case kStmtWhile:
     case kStmtDoWhile:
         if (stmt->thenStmt) {
