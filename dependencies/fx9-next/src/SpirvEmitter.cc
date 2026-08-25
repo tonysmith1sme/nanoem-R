@@ -533,6 +533,8 @@ struct Emitter {
     std::unordered_map<uint32_t, uint32_t> valueTypes;
     uint32_t currentFnType;
     uint32_t pendingReturn;
+    std::string pendingStructReturn;
+    std::unordered_map<std::string, uint32_t> structOutVars;
 
     uint32_t
     note(uint32_t id, uint32_t ty)
@@ -563,6 +565,8 @@ struct Emitter {
     void emitFor(const Stmt *stmt, uint32_t returnType);
     void emitWhile(const Stmt *stmt, uint32_t returnType, bool doWhile);
     void rememberArray(const std::string &name, const Type &type, uint32_t storage);
+    void allocStructLocals(const std::string &name, const Type &st);
+    const Type *resolveStruct(const Type &type) const;
     bool isMat(uint32_t id) const;
     uint32_t extractMatrix(uint32_t mat, const std::string &sw);
     uint32_t insertMatrix(uint32_t mat, const std::string &sw, uint32_t value);
@@ -691,6 +695,53 @@ Emitter::asInt(uint32_t id)
     uint32_t conv = b.nextId();
     b.emit3(b.code, kOpConvertFToS, b.typeInt(), conv, id);
     return note(conv, b.typeInt());
+}
+
+const Type *
+Emitter::resolveStruct(const Type &type) const
+{
+    if (type.kind == kTypeStruct && !type.members.empty()) {
+        return &type;
+    }
+    if (!unit) {
+        return nullptr;
+    }
+    const std::string &key = type.name;
+    for (size_t i = 0; i < unit->variables.size(); i++) {
+        const Type &st = unit->variables[i].type;
+        if (st.kind == kTypeStruct && !st.members.empty() &&
+            (st.name == key || unit->variables[i].name == key)) {
+            return &st;
+        }
+    }
+    return type.kind == kTypeStruct ? &type : nullptr;
+}
+
+void
+Emitter::allocStructLocals(const std::string &name, const Type &st)
+{
+    for (size_t i = 0; i < st.members.size(); i++) {
+        const std::string field = name + "." + st.members[i].first;
+        uint32_t ty = b.typeOf(st.members[i].second);
+        uint32_t ptr = b.ptrType(ty, kStoragePrivate);
+        uint32_t var = b.nextId();
+        b.emit3(b.types, kOpVariable, ptr, var, kStoragePrivate);
+        locals[field] = var;
+        localTypes[field] = ty;
+        uint32_t zero = (ty == b.typeInt()) ? b.constI32(0) : b.constF32(0);
+        if (ty == b.typeVec(2) || ty == b.typeVec(3) || ty == b.typeVec(4)) {
+            int n = ty == b.typeVec(2) ? 2 : ty == b.typeVec(3) ? 3 : 4;
+            std::vector<uint32_t> comps(static_cast<size_t>(n), b.constF32(0));
+            uint32_t id = b.nextId();
+            std::vector<uint32_t> ops;
+            ops.push_back(ty);
+            ops.push_back(id);
+            ops.insert(ops.end(), comps.begin(), comps.end());
+            b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+            zero = note(id, ty);
+        }
+        b.emit2(b.code, kOpStore, var, zero);
+    }
 }
 
 void
@@ -992,6 +1043,12 @@ Emitter::emitExpr(const Expr *expr)
         return note(id, b.typeVec(want));
     }
     case kExprMember: {
+        if (!expr->kids.empty() && expr->kids[0]->kind == kExprIdent) {
+            const std::string field = expr->kids[0]->name + "." + expr->name;
+            if (valueOverlay.count(field) || locals.count(field)) {
+                return loadIdent(field);
+            }
+        }
         uint32_t base = emitExpr(expr->kids[0].get());
         const std::string &sw = expr->name;
         if (isMat(base) || (!sw.empty() && sw[0] == '_')) {
@@ -1055,6 +1112,18 @@ Emitter::emitExpr(const Expr *expr)
         uint32_t ty = b.typeFloat();
         const bool ints = valueTypes.count(l) && valueTypes[l] == b.typeInt() && valueTypes.count(r) &&
             valueTypes[r] == b.typeInt();
+        if (!ints && valueTypes.count(l) && valueTypes[l] == b.typeInt() &&
+            !(valueTypes.count(r) && valueTypes[r] == b.typeInt())) {
+            uint32_t conv = b.nextId();
+            b.emit3(b.code, kOpConvertSToF, b.typeFloat(), conv, l);
+            l = note(conv, b.typeFloat());
+        }
+        if (!ints && valueTypes.count(r) && valueTypes[r] == b.typeInt() &&
+            !(valueTypes.count(l) && valueTypes[l] == b.typeInt())) {
+            uint32_t conv = b.nextId();
+            b.emit3(b.code, kOpConvertSToF, b.typeFloat(), conv, r);
+            r = note(conv, b.typeFloat());
+        }
         if (expr->op == "+") {
             op = ints ? kOpIAdd : kOpFAdd;
             ty = ints ? b.typeInt() : b.typeFloat();
@@ -1119,6 +1188,12 @@ Emitter::emitExpr(const Expr *expr)
             }
             if (expr->kids[0]->kind == kExprMember && !expr->kids[0]->kids.empty() &&
                 expr->kids[0]->kids[0]->kind == kExprIdent) {
+                const std::string field = expr->kids[0]->kids[0]->name + "." + expr->kids[0]->name;
+                auto fit = locals.find(field);
+                if (fit != locals.end()) {
+                    b.emit2(b.code, kOpStore, fit->second, r);
+                    return r;
+                }
                 const std::string &mname = expr->kids[0]->kids[0]->name;
                 auto it = locals.find(mname);
                 if (it != locals.end()) {
@@ -1367,8 +1442,25 @@ Emitter::emitExpr(const Expr *expr)
         b.emit(b.code, kOpSelect, ops, 5);
         return note(id, ty);
     }
-    case kExprCast:
-        return emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
+    case kExprCast: {
+        uint32_t x = emitExpr(expr->kids.empty() ? nullptr : expr->kids[0].get());
+        if (expr->type.kind == kTypeStruct) {
+            return x;
+        }
+        uint32_t srcTy = valueTypes.count(x) ? valueTypes[x] : 0;
+        if ((expr->type.kind == kTypeFloat || expr->type.kind == kTypeVector) && srcTy == b.typeInt()) {
+            uint32_t dst = expr->type.kind == kTypeVector ? b.typeVec(expr->type.rows) : b.typeFloat();
+            uint32_t id = b.nextId();
+            b.emit3(b.code, kOpConvertSToF, dst, id, x);
+            return note(id, dst);
+        }
+        if (expr->type.kind == kTypeInt && srcTy == b.typeFloat()) {
+            uint32_t id = b.nextId();
+            b.emit3(b.code, kOpConvertFToS, b.typeInt(), id, x);
+            return note(id, b.typeInt());
+        }
+        return x;
+    }
     case kExprIndex: {
         uint32_t elemTy = 0;
         uint32_t ptr = emitIndexPtr(expr, elemTy);
@@ -1409,7 +1501,18 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
         }
         return true;
     case kStmtReturn: {
-        pendingReturn = emitExpr(stmt->expr.get());
+        if (stmt->expr && stmt->expr->kind == kExprIdent) {
+            const std::string prefix = stmt->expr->name + ".";
+            for (auto it = locals.begin(); it != locals.end(); ++it) {
+                if (it->first.compare(0, prefix.size(), prefix) == 0) {
+                    pendingStructReturn = stmt->expr->name;
+                    break;
+                }
+            }
+        }
+        if (pendingStructReturn.empty()) {
+            pendingReturn = emitExpr(stmt->expr.get());
+        }
         return true;
     }
     case kStmtDiscard:
@@ -1430,6 +1533,11 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
         locals[stmt->name] = var;
         localTypes[stmt->name] = ty;
         rememberArray(stmt->name, stmt->varType, storage);
+        const Type *st = resolveStruct(stmt->varType);
+        if (st && !st->members.empty()) {
+            allocStructLocals(stmt->name, *st);
+            return true;
+        }
         if (stmt->expr) {
             if ((ty == b.idMat3 || ty == b.idMat4) && stmt->expr->kind != kExprConstruct) {
                 uint32_t scalar = emitExpr(stmt->expr.get());
@@ -1512,6 +1620,28 @@ emitFunctionSPIRV(
     std::vector<uint32_t> extraOuts;
     std::vector<uint32_t> inTypes;
     for (size_t i = 0; i < fn.params.size(); i++) {
+        const Type *st = e.resolveStruct(fn.params[i].type);
+        if (st && !st->members.empty()) {
+            for (size_t mi = 0; mi < st->members.size(); mi++) {
+                uint32_t ty = e.b.typeOf(st->members[mi].second);
+                const uint32_t storage = fn.params[i].isOut ? kStorageOutput : kStorageInput;
+                uint32_t ptr = e.b.ptrType(ty, storage);
+                uint32_t var = e.b.nextId();
+                e.b.emit3(e.b.types, kOpVariable, ptr, var, storage);
+                const std::string &sem = st->members[mi].second.name;
+                e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(sem)), true);
+                if (fn.params[i].isOut) {
+                    extraOuts.push_back(var);
+                }
+                else {
+                    inVars.push_back(var);
+                }
+                const std::string field = fn.params[i].name + "." + st->members[mi].first;
+                e.locals[field] = var;
+                e.localTypes[field] = ty;
+            }
+            continue;
+        }
         uint32_t ty = e.b.typeOf(fn.params[i].type.kind == kTypeVector || fn.params[i].type.kind == kTypeFloat ||
                 fn.params[i].type.kind == kTypeInt
             ? fn.params[i].type
@@ -1537,14 +1667,40 @@ emitFunctionSPIRV(
     }
 
     uint32_t outTy = retType;
-    uint32_t outPtr = e.b.ptrType(outTy, kStorageOutput);
-    uint32_t outVar = e.b.nextId();
-    e.b.emit3(e.b.types, kOpVariable, outPtr, outVar, kStorageOutput);
-    if (stage == kStageVertex && isPositionSemantic(fn.returnSemantic)) {
-        e.b.decorate(outVar, kDecorationBuiltIn, kBuiltInPosition, true);
+    uint32_t outVar = 0;
+    const Type *retStruct = e.resolveStruct(fn.returnType);
+    if (retStruct && !retStruct->members.empty()) {
+        for (size_t mi = 0; mi < retStruct->members.size(); mi++) {
+            uint32_t ty = e.b.typeOf(retStruct->members[mi].second);
+            uint32_t ptr = e.b.ptrType(ty, kStorageOutput);
+            uint32_t var = e.b.nextId();
+            e.b.emit3(e.b.types, kOpVariable, ptr, var, kStorageOutput);
+            const std::string &sem = retStruct->members[mi].second.name;
+            if (stage == kStageVertex && isPositionSemantic(sem)) {
+                e.b.decorate(var, kDecorationBuiltIn, kBuiltInPosition, true);
+                outVar = var;
+                outTy = ty;
+            }
+            else {
+                e.b.decorate(var, kDecorationLocation, static_cast<uint32_t>(semanticLocation(sem)), true);
+                extraOuts.push_back(var);
+            }
+            e.structOutVars[retStruct->members[mi].first] = var;
+        }
+        if (!outVar) {
+            outVar = extraOuts.empty() ? 0 : extraOuts[0];
+        }
     }
-    else {
-        e.b.decorate(outVar, kDecorationLocation, 0, true);
+    if (!outVar) {
+        uint32_t outPtr = e.b.ptrType(outTy, kStorageOutput);
+        outVar = e.b.nextId();
+        e.b.emit3(e.b.types, kOpVariable, outPtr, outVar, kStorageOutput);
+        if (stage == kStageVertex && isPositionSemantic(fn.returnSemantic)) {
+            e.b.decorate(outVar, kDecorationBuiltIn, kBuiltInPosition, true);
+        }
+        else {
+            e.b.decorate(outVar, kDecorationLocation, 0, true);
+        }
     }
 
     int samplerIndex = 0;
@@ -1643,8 +1799,18 @@ emitFunctionSPIRV(
         return false;
     }
 
-    uint32_t retValue = e.pendingReturn ? e.pendingReturn : e.b.constVec4(0, 0, 0, 1);
-    e.b.emit2(e.b.code, kOpStore, outVar, retValue);
+    if (!e.pendingStructReturn.empty()) {
+        for (auto it = e.structOutVars.begin(); it != e.structOutVars.end(); ++it) {
+            const std::string field = e.pendingStructReturn + "." + it->first;
+            if (e.locals.count(field)) {
+                e.b.emit2(e.b.code, kOpStore, it->second, e.loadIdent(field));
+            }
+        }
+    }
+    else {
+        uint32_t retValue = e.pendingReturn ? e.pendingReturn : e.b.constVec4(0, 0, 0, 1);
+        e.b.emit2(e.b.code, kOpStore, outVar, retValue);
+    }
     e.b.emit(e.b.code, kOpReturn, nullptr, 0);
     e.b.emit(e.b.code, kOpFunctionEnd, nullptr, 0);
 

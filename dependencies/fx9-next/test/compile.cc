@@ -193,6 +193,29 @@ TEST_CASE("fx9next bakes alpha test into pixel shader")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next flattens struct entry IO")
+{
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/corpus/19_struct_io.fx";
+    REQUIRE(compiler.compile(path.c_str(), product));
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        INFO(*product.sink.translator.begin());
+    }
+    REQUIRE(product.numCompiledPasses == 1);
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    const char *vs = effect->techniques[0]->passes[0]->vertex_shader->glsl;
+    REQUIRE(vs != nullptr);
+    const std::string body(vs);
+    REQUIRE(body.find("gl_Position") != std::string::npos);
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next matrix swizzle and mul")
 {
     Compiler compiler;
