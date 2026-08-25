@@ -241,6 +241,45 @@ lowerStatement(const Stmt *statement, TypeMap &symbols, const TypeMap &functions
     return result;
 }
 
+const Type *
+resolveStruct(const TranslationUnit &unit, const Type &type)
+{
+    if (type.kind != kTypeStruct) {
+        return nullptr;
+    }
+    if (!type.members.empty()) {
+        return &type;
+    }
+    for (std::vector<Variable>::const_iterator it = unit.variables.begin(); it != unit.variables.end(); ++it) {
+        if (it->type.kind == kTypeStruct && it->type.name == type.name && !it->type.members.empty()) {
+            return &it->type;
+        }
+    }
+    return nullptr;
+}
+
+void
+collectStructs(const TranslationUnit &unit, const Type &type, std::vector<ShaderStructIR> &structs)
+{
+    const Type *structure = resolveStruct(unit, type);
+    if (!structure) {
+        return;
+    }
+    for (std::vector<ShaderStructIR>::const_iterator it = structs.begin(); it != structs.end(); ++it) {
+        if (it->name == structure->name) {
+            return;
+        }
+    }
+    ShaderStructIR lowered;
+    lowered.name = structure->name;
+    lowered.members = structure->members;
+    structs.push_back(lowered);
+    for (std::vector<std::pair<std::string, Type> >::const_iterator member = structure->members.begin();
+         member != structure->members.end(); ++member) {
+        collectStructs(unit, member->second, structs);
+    }
+}
+
 ShaderModuleIR
 makeShader(const TranslationUnit &unit, const Function &function, ShaderStage stage)
 {
@@ -253,22 +292,7 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
     }
     types.push_back(function.returnType);
     for (std::vector<Type>::const_iterator type = types.begin(); type != types.end(); ++type) {
-        if (type->kind != kTypeStruct || type->members.empty()) {
-            continue;
-        }
-        bool exists = false;
-        for (std::vector<ShaderStructIR>::const_iterator it = shader.structs.begin(); it != shader.structs.end(); ++it) {
-            exists = it->name == type->name;
-            if (exists) {
-                break;
-            }
-        }
-        if (!exists) {
-            ShaderStructIR structure;
-            structure.name = type->name;
-            structure.members = type->members;
-            shader.structs.push_back(structure);
-        }
+        collectStructs(unit, *type, shader.structs);
     }
     for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
         ShaderParameterIR parameter;
@@ -432,6 +456,25 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
                 resource.mipLevels = mipLevels->ival;
             }
             effect.resources.push_back(resource);
+        }
+    }
+    for (std::vector<Variable>::const_iterator variable = unit.variables.begin(); variable != unit.variables.end();
+         ++variable) {
+        if (!variable->type.isSampler() || variable->textureName.empty()) {
+            continue;
+        }
+        bool found = false;
+        for (std::vector<EffectResourceIR>::const_iterator resource = effect.resources.begin();
+             resource != effect.resources.end(); ++resource) {
+            if (resource->name == variable->textureName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            diagnostics.add(kDiagnosticEffect, kDiagnosticError, "FX9T1005", SourceLocation(), variable->name,
+                "sampler texture does not resolve: " + variable->textureName);
+            return false;
         }
     }
     for (std::vector<Technique>::const_iterator technique = unit.techniques.begin(); technique != unit.techniques.end();

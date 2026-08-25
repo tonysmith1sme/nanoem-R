@@ -73,6 +73,30 @@ TEST_CASE("fx9next shader IR preserves reachable struct members")
     REQUIRE(shaders[0].canonicalDump().find("TEXCOORD0") != std::string::npos);
 }
 
+TEST_CASE("fx9next shader IR preserves nested reachable structs")
+{
+    TranslationUnit unit;
+    Parser parser;
+    std::string parseError;
+    DiagnosticSink diagnostics;
+    REQUIRE(parser.parse(
+        "struct Inner { float2 uv : TEXCOORD0; };\n"
+        "struct Outer { float4 position : POSITION; Inner detail; };\n"
+        "Outer vs_main(float4 position : POSITION) { Outer output = (Outer) 0; output.position = position; "
+        "return output; }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); } }\n",
+        "nested-struct.fx", unit, parseError));
+    REQUIRE(parseError.empty());
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    REQUIRE(Lowering().lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 1);
+    REQUIRE(shaders[0].structs.size() == 2);
+    REQUIRE(shaders[0].structs[0].name == "Outer");
+    REQUIRE(shaders[0].structs[1].name == "Inner");
+    REQUIRE(shaders[0].canonicalDump().find("TEXCOORD0") != std::string::npos);
+}
+
 TEST_CASE("fx9next effect IR preserves resource and pass order")
 {
     EffectModuleIR module;
@@ -125,6 +149,7 @@ TEST_CASE("fx9next lowers parsed effect scripts and shader entries")
     REQUIRE(effect.resources[0].format == "A8R8G8B8");
     REQUIRE(effect.bindings.size() == 1);
     REQUIRE(effect.bindings[0].name == "Gbuffer2RT");
+    REQUIRE(effect.bindings[0].textureName.empty());
     REQUIRE(effect.bindings[0].registerSet == kEffectRegisterTexture);
     REQUIRE(effect.bindings[0].registerIndex == 0);
     REQUIRE(effect.techniques.size() == 1);
@@ -137,6 +162,26 @@ TEST_CASE("fx9next lowers parsed effect scripts and shader entries")
     REQUIRE(shaders[0].functions[0].body->children.size() == 1);
     REQUIRE(shaders[0].functions[0].body->children[0]->kind == kShaderStatementReturn);
     REQUIRE(shaders[0].functions[0].body->children[0]->expression->type.toString() == "float4");
+}
+
+TEST_CASE("fx9next rejects unresolved sampler texture relationships")
+{
+    const char *source =
+        "sampler2D diffuseSampler = sampler_state { Texture = <missingTexture>; };\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "missing-texture.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(diagnostics.hasErrors());
+    REQUIRE(diagnostics.diagnostics().size() == 1);
+    REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1005");
 }
 
 TEST_CASE("fx9next resolves typed shader control flow into IR")
