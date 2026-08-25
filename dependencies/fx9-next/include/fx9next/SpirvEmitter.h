@@ -1,0 +1,26 @@
+/*
+   Copyright (c) 2015-2023 hkrn All rights reserved
+
+   This file is licensed under MIT license. for more details, see LICENSE.txt.
+ */
+
+#pragma once
+#ifndef FX9NEXT_SPIRV_EMITTER_H_
+#define FX9NEXT_SPIRV_EMITTER_H_
+
+#include <stdint.h>
+#include <string>
+#include <vector>
+
+#include "fx9next/AST.h"
+
+namespace fx9next {
+
+enum ShaderStage { kStageVertex, kStageFragment };
+
+bool emitFunctionSPIRV(const TranslationUnit &unit, const Function &fn, ShaderStage stage,
+    std::vector<uint32_t> &words, std::string &error);
+
+} /* namespace fx9next */
+
+#endif /* FX9NEXT_SPIRV_EMITTER_H_ */
