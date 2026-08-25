@@ -7,6 +7,7 @@
 #include "fx9next/Pipeline.h"
 
 #include "fx9next/Encoding.h"
+#include "fx9next/Lowering.h"
 #include "fx9next/Parser.h"
 #include "fx9next/ProductWriter.h"
 
@@ -104,6 +105,15 @@ Pipeline::compile(const std::string &source, const char *filename, EffectProduct
     Parser parser;
     if (!parser.parse(prepared, name, unit, error)) {
         effectProduct.sink.info = error;
+        effectProduct.sink.debug = prepared;
+        return false;
+    }
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    Lowering lowering;
+    if (!lowering.lower(unit, shaders, effect, diagnostics)) {
+        effectProduct.sink.info = diagnostics.format();
         effectProduct.sink.debug = prepared;
         return false;
     }

@@ -11,6 +11,17 @@
 namespace fx9next {
 namespace {
 
+std::string
+trim(const std::string &value)
+{
+    const size_t first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return std::string();
+    }
+    const size_t last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
 const Function *
 findFunction(const TranslationUnit &unit, const std::string &name)
 {
@@ -101,8 +112,8 @@ Lowering::lowerScript(const std::string &text, std::vector<EffectScriptCommandIR
         if (equals == std::string::npos) {
             continue;
         }
-        const std::string key = command.substr(0, equals);
-        const std::string value = command.substr(equals + 1);
+        const std::string key = trim(command.substr(0, equals));
+        const std::string value = trim(command.substr(equals + 1));
         EffectScriptCommandIR lowered;
         lowered.name = key;
         lowered.value = value;

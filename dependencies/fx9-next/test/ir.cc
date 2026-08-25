@@ -104,7 +104,7 @@ TEST_CASE("fx9next rejects unknown effect script commands")
     Annotation annotation;
     annotation.name = "Script";
     annotation.kind = Annotation::kAnnString;
-    annotation.sval = "Unsupported=Value;";
+    annotation.sval = "  Unsupported = Value;";
     technique.annotations.push_back(annotation);
     unit.techniques.push_back(technique);
     Lowering lowering;

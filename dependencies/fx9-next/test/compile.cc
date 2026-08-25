@@ -388,3 +388,13 @@ TEST_CASE("fx9next compiles dummy pass")
     REQUIRE(product.numPasses == 2);
     REQUIRE(product.numCompiledPasses == 2);
 }
+
+TEST_CASE("fx9next rejects an effect with an unknown script command")
+{
+    const char *src =
+        "technique invalid < string Script = \"Unsupported=Value;\"; > { pass p { } }\n";
+    Compiler compiler;
+    Compiler::EffectProduct product;
+    REQUIRE_FALSE(compiler.compile(std::string(src), "invalid-script.fx", product));
+    REQUIRE(product.sink.info.find("FX9E1002") != std::string::npos);
+}
