@@ -12,6 +12,7 @@
 #include "fx9next/Lowering.h"
 #include "fx9next/Parser.h"
 #include "fx9next/ShaderIR.h"
+#include "fx9next/SpirvEmitter.h"
 
 using namespace fx9next;
 
@@ -128,6 +129,31 @@ TEST_CASE("fx9next resolves typed shader control flow into IR")
     REQUIRE(body->children[1]->expression->type.toString() == "bool");
     REQUIRE(body->children[2]->kind == kShaderStatementReturn);
     REQUIRE(body->children[2]->expression->type.toString() == "float4");
+}
+
+TEST_CASE("fx9next emits lowered shader IR deterministically")
+{
+    const char *source =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main;\n"
+        "  PixelShader = compile ps_3_0 ps_main;\n"
+        "} }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "ir-emit.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(shaders.size() == 2);
+    std::vector<uint32_t> legacy, lowered;
+    REQUIRE(emitFunctionSPIRV(unit, unit.functions[0], kStageVertex, legacy, error));
+    REQUIRE(emitShaderSPIRV(unit, shaders[0], lowered, error));
+    REQUIRE(lowered == legacy);
 }
 
 TEST_CASE("fx9next rejects unknown effect script commands")

@@ -71,6 +71,17 @@ findFn(const TranslationUnit &unit, const std::string &name)
     return nullptr;
 }
 
+const ShaderModuleIR *
+findShader(const std::vector<ShaderModuleIR> &shaders, const std::string &entryPoint, ShaderStage stage)
+{
+    for (std::vector<ShaderModuleIR>::const_iterator it = shaders.begin(); it != shaders.end(); ++it) {
+        if (it->entryPoint == entryPoint && it->stage == stage) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
 void
 fillAnnotations(Arena &arena, const std::vector<Annotation> &src, Fx9__Effect__Annotation ***dst, size_t *n)
 {
@@ -579,8 +590,8 @@ fillIncludes(Arena &arena, const TranslationUnit &unit, Fx9__Effect__Effect *mes
 } /* namespace anonymous */
 
 bool
-writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std::string &metalEntry,
-    const std::string &metalUbo, int version, bool /*validate*/, EffectProduct &product)
+writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR> &shaders, LanguageType language,
+    const std::string &metalEntry, const std::string &metalUbo, int version, bool /*validate*/, EffectProduct &product)
 {
     Arena arena;
     Fx9__Effect__Effect message = FX9__EFFECT__EFFECT__INIT;
@@ -662,7 +673,9 @@ writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std
             }
             const Function *vs = findFn(unit, pass.vsEntry);
             const Function *ps = findFn(unit, pass.psEntry);
-            if (!vs || !ps) {
+            const ShaderModuleIR *vsIR = findShader(shaders, pass.vsEntry, kShaderStageVertex);
+            const ShaderModuleIR *psIR = findShader(shaders, pass.psEntry, kShaderStagePixel);
+            if (!vs || !ps || !vsIR || !psIR) {
                 std::string names;
                 for (size_t fi = 0; fi < unit.functions.size(); fi++) {
                     if (!names.empty()) {
@@ -677,11 +690,11 @@ writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std
             std::vector<uint32_t> vsWords, psWords;
             std::string err;
             try {
-                if (!emitFunctionSPIRV(unit, *vs, kStageVertex, vsWords, err)) {
+                if (!emitShaderSPIRV(unit, *vsIR, vsWords, err)) {
                     product.sink.builder = err.empty() ? "vertex emit failed" : err;
                     continue;
                 }
-                if (!emitFunctionSPIRV(unit, *ps, kStageFragment, psWords, err)) {
+                if (!emitShaderSPIRV(unit, *psIR, psWords, err)) {
                     product.sink.builder = err.empty() ? "fragment emit failed" : err;
                     continue;
                 }

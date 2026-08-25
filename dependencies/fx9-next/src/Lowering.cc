@@ -221,6 +221,7 @@ makeShader(const TranslationUnit &unit, const Function &function, ShaderStage st
     ShaderFunctionIR declaration;
     declaration.name = function.name;
     declaration.returnType = function.returnType;
+    declaration.returnSemantic = function.returnSemantic;
     for (std::vector<Parameter>::const_iterator it = function.params.begin(); it != function.params.end(); ++it) {
         ShaderParameterIR parameter;
         parameter.name = it->name;

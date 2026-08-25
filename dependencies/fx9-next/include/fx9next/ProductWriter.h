@@ -10,11 +10,12 @@
 
 #include "fx9next/AST.h"
 #include "fx9next/Product.h"
+#include "fx9next/ShaderIR.h"
 
 namespace fx9next {
 
-bool writeEffectProduct(const TranslationUnit &unit, LanguageType language, const std::string &metalEntry,
-    const std::string &metalUbo, int version, bool validate, EffectProduct &product);
+bool writeEffectProduct(const TranslationUnit &unit, const std::vector<ShaderModuleIR> &shaders, LanguageType language,
+    const std::string &metalEntry, const std::string &metalUbo, int version, bool validate, EffectProduct &product);
 
 } /* namespace fx9next */
 

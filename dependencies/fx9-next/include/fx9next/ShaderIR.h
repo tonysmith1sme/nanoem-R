@@ -98,6 +98,7 @@ struct ShaderFunctionIR {
 
     std::string name;
     Type returnType;
+    std::string returnSemantic;
     std::vector<ShaderParameterIR> parameters;
     std::unique_ptr<ShaderStatementIR> body;
 };

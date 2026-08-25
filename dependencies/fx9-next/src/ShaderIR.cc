@@ -187,6 +187,7 @@ ShaderFunctionIR::ShaderFunctionIR()
 ShaderFunctionIR::ShaderFunctionIR(const ShaderFunctionIR &other)
     : name(other.name)
     , returnType(other.returnType)
+    , returnSemantic(other.returnSemantic)
     , parameters(other.parameters)
     , body(cloneStatement(other.body))
 {
@@ -199,6 +200,7 @@ ShaderFunctionIR::operator=(const ShaderFunctionIR &other)
         ShaderFunctionIR copy(other);
         name.swap(copy.name);
         returnType = copy.returnType;
+        returnSemantic.swap(copy.returnSemantic);
         parameters.swap(copy.parameters);
         body.swap(copy.body);
     }

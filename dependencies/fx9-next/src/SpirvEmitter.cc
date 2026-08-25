@@ -523,7 +523,7 @@ findFunction(const TranslationUnit &unit, const std::string &name)
 struct Emitter {
     Builder b;
     const TranslationUnit *unit;
-    ShaderStage stage;
+    SpirvShaderStage stage;
     std::unordered_map<std::string, uint32_t> locals;
     std::unordered_map<std::string, uint32_t> localTypes;
     std::unordered_map<std::string, uint32_t> arrayElems;
@@ -1593,9 +1593,57 @@ Emitter::emitStmt(const Stmt *stmt, uint32_t returnType)
 
 } /* namespace anonymous */
 
+namespace {
+
+std::unique_ptr<Expr>
+makeExpression(const ShaderExpressionIR *source)
+{
+    if (!source) {
+        return std::unique_ptr<Expr>();
+    }
+    std::unique_ptr<Expr> result = Expr::make(static_cast<ExprKind>(source->kind));
+    result->type = source->type;
+    result->name = source->name;
+    result->op = source->operation;
+    result->floatValue = source->floatValue;
+    result->intValue = source->intValue;
+    result->boolValue = source->boolValue;
+    for (std::vector<std::unique_ptr<ShaderExpressionIR> >::const_iterator it = source->children.begin();
+         it != source->children.end(); ++it) {
+        result->kids.push_back(makeExpression(it->get()));
+    }
+    return result;
+}
+
+std::unique_ptr<Stmt>
+makeStatement(const ShaderStatementIR *source)
+{
+    if (!source) {
+        return std::unique_ptr<Stmt>();
+    }
+    std::unique_ptr<Stmt> result(new Stmt());
+    result->kind = static_cast<StmtKind>(source->kind);
+    result->varType = source->variableType;
+    result->name = source->name;
+    result->semantic = source->semantic;
+    result->expr = makeExpression(source->expression.get());
+    result->expr2 = makeExpression(source->condition.get());
+    result->expr3 = makeExpression(source->iteration.get());
+    result->thenStmt = makeStatement(source->thenStatement.get());
+    result->elseStmt = makeStatement(source->elseStatement.get());
+    for (std::vector<std::unique_ptr<ShaderStatementIR> >::const_iterator it = source->children.begin();
+         it != source->children.end(); ++it) {
+        result->kids.push_back(makeStatement(it->get()));
+    }
+    return result;
+}
+
+} /* namespace anonymous */
+
 bool
 emitFunctionSPIRV(
-    const TranslationUnit &unit, const Function &fn, ShaderStage stage, std::vector<uint32_t> &words, std::string &error)
+    const TranslationUnit &unit, const Function &fn, SpirvShaderStage stage, std::vector<uint32_t> &words,
+    std::string &error)
 {
     Emitter e;
     e.unit = &unit;
@@ -1842,6 +1890,30 @@ emitFunctionSPIRV(
         return false;
     }
     return true;
+}
+
+bool
+emitShaderSPIRV(const TranslationUnit &unit, const ShaderModuleIR &shader, std::vector<uint32_t> &words, std::string &error)
+{
+    if (shader.functions.empty()) {
+        error = "shader IR has no entry function";
+        return false;
+    }
+    const ShaderFunctionIR &source = shader.functions[0];
+    Function function;
+    function.name = source.name;
+    function.returnType = source.returnType;
+    function.returnSemantic = source.returnSemantic;
+    for (std::vector<ShaderParameterIR>::const_iterator it = source.parameters.begin(); it != source.parameters.end(); ++it) {
+        Parameter parameter;
+        parameter.name = it->name;
+        parameter.type = it->type;
+        parameter.semantic = it->semantic;
+        parameter.isOut = it->output;
+        function.params.push_back(parameter);
+    }
+    function.body = makeStatement(source.body.get());
+    return emitFunctionSPIRV(unit, function, shader.stage == kShaderStageVertex ? kStageVertex : kStageFragment, words, error);
 }
 
 } /* namespace fx9next */
