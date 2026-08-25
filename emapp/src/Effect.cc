@@ -5211,7 +5211,7 @@ Effect::setImageUniform(const String &name, const effect::Pass *pass, sg_image h
             m_imageSamplers[pass].push_back(ImageSampler(name, SG_SHADERSTAGE_FS, handle, *it));
         }
     }
-    else if (pass->findVertexShaderSamplerRegisterIndex(name, indices)) {
+    if (pass->findVertexShaderSamplerRegisterIndex(name, indices)) {
         for (SamplerRegisterIndex::List::const_iterator it = indices.begin(), end = indices.end(); it != end; ++it) {
             m_imageSamplers[pass].push_back(ImageSampler(name, SG_SHADERSTAGE_VS, handle, *it));
         }

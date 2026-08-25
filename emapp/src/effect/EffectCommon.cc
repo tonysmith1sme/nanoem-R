@@ -188,6 +188,7 @@ PipelineDescriptor::PipelineDescriptor(const PipelineDescriptor &source)
     , m_hasStencilRef(source.m_hasStencilRef)
     , m_hasStencilReadMask(source.m_hasStencilReadMask)
     , m_hasStencilWriteMask(source.m_hasStencilWriteMask)
+    , m_stateVector(source.m_stateVector)
 {
     memcpy(&m_body, &source.m_body, sizeof(m_body));
     memcpy(m_hasColorWriteMask, source.m_hasColorWriteMask, sizeof(m_hasColorWriteMask));

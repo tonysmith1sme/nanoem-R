@@ -51,6 +51,17 @@ TEST_CASE("effect_dx9rt_apply_explicit_states", "[emapp][effect][dx9rt]")
     CHECK(pd.m_alphaTestCompareFunc == SG_COMPAREFUNC_GREATER);
 }
 
+TEST_CASE("effect_dx9rt_copy_preserves_explicit_states", "[emapp][effect][dx9rt]")
+{
+    effect::PipelineDescriptor source;
+    source.m_stateVector.setRenderState(dx9rt::kRenderStateAlphaBlendEnable, 1);
+    source.m_stateVector.setRenderState(dx9rt::kRenderStateZWriteEnable, 0);
+    effect::PipelineDescriptor copy(source);
+    effect::applyDX9StateVector(copy);
+    CHECK(copy.m_body.colors[0].blend.enabled);
+    CHECK_FALSE(copy.m_body.depth.write_enabled);
+}
+
 TEST_CASE("effect_dx9rt_cull_mode_winding", "[emapp][effect][dx9rt]")
 {
     effect::PipelineDescriptor pd;
