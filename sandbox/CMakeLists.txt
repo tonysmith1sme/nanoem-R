@@ -100,16 +100,15 @@ function(nanoem_sandbox_build_applications)
     target_link_libraries(nanoem_sandbox_plugin_motion ${DL_LIBRARY})
     target_link_libraries(nanoem_sandbox_plugin_video ${DL_LIBRARY})
   endif()
-  if(TARGET fx9)
+  if(TARGET fx9next)
     set(_name nanoem_sandbox_effect_corpus)
     add_executable(${_name} ${CMAKE_CURRENT_SOURCE_DIR}/effect_corpus.cc)
     set_property(TARGET ${_name} PROPERTY FOLDER sandbox)
     set_property(TARGET ${_name} PROPERTY CXX_STANDARD 11)
     set_property(TARGET ${_name} APPEND PROPERTY INCLUDE_DIRECTORIES
-      ${PROJECT_SOURCE_DIR}/dependencies/fx9/include
-      ${PROJECT_SOURCE_DIR}/dependencies/glslang
+      ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/include
       ${PROJECT_SOURCE_DIR}/dependencies/protobuf-c)
-    target_link_libraries(${_name} fx9)
+    target_link_libraries(${_name} fx9next)
   endif()
 endfunction()
 
