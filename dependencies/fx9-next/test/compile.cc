@@ -192,8 +192,16 @@ TEST_CASE("fx9next ray-mmd compile progress")
 {
     static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx",
         "ray-mmd-1.5.2/Extension/FXAA/FXAA.fx", "ray-mmd-1.5.2/Materials/Toon/Toon.fx",
-        "ray-mmd-1.5.2/Materials/Transparent/material_glass.fx" };
-    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 5)));
+        "ray-mmd-1.5.2/Materials/Transparent/material_glass.fx",
+        "ray-mmd-1.5.2/Materials/Hair/material_hair.fx",
+        "ray-mmd-1.5.2/Materials/Subsurface/material_jade_white.fx",
+        "ray-mmd-1.5.2/Materials/Video/material_screen.fx",
+        "ray-mmd-1.5.2/Fog/AtmosphericFog/atmospheric_fog.fx",
+        "ray-mmd-1.5.2/Fog/GroundFog/ground_fog.fx",
+        "ray-mmd-1.5.2/Shadow/PSSM1.fx",
+        "ray-mmd-1.5.2/Skybox/Sky Night/Sky with box.fx",
+        "ray-mmd-1.5.2/Extension/ColorGrading/ColorGrading.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 13)));
     const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../../MME/" + name;
     FILE *fp = std::fopen(path.c_str(), "rb");
     if (!fp) {
@@ -284,8 +292,11 @@ TEST_CASE("fx9next generated MSL passes Apple Metal compiler")
 
 TEST_CASE("fx9next compiles ray-mmd to MSL")
 {
-    static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx" };
-    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 2)));
+    static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx",
+        "ray-mmd-1.5.2/Materials/Hair/material_hair.fx",
+        "ray-mmd-1.5.2/Fog/AtmosphericFog/atmospheric_fog.fx",
+        "ray-mmd-1.5.2/Extension/ColorGrading/ColorGrading.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 5)));
     const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../../MME/" + name;
     FILE *fp = std::fopen(path.c_str(), "rb");
     if (!fp) {
