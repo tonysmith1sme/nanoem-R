@@ -471,6 +471,7 @@ if(NOT NANOEM_MINIMAL)
       set_property(TARGET fx9next_test APPEND PROPERTY INCLUDE_DIRECTORIES
         ${PROJECT_SOURCE_DIR}/dependencies/fx9-next/include
         ${PROJECT_SOURCE_DIR}/dependencies/protobuf-c
+        ${PROJECT_SOURCE_DIR}/emapp/src/protoc
         ${PROJECT_SOURCE_DIR}/dependencies/catch2/single_include)
       set_property(TARGET fx9next_test APPEND PROPERTY COMPILE_DEFINITIONS
         FX9NEXT_TEST_EFFECT_FIXTURES_PATH="${PROJECT_SOURCE_DIR}/dependencies/fx9/test/effects")

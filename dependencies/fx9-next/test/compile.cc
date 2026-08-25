@@ -10,6 +10,8 @@
 #include "fx9next/Compiler.h"
 #include "fx9next/Parser.h"
 
+#include "effect.pb-c.h"
+
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -117,6 +119,81 @@ TEST_CASE("fx9next compiles MME filter packs")
         }
     }
     REQUIRE(ok);
+}
+
+TEST_CASE("fx9next ray-mmd compile progress")
+{
+    static const char *kFiles[] = { "ray-mmd-1.5.2/Main/main.fx", "ray-mmd-1.5.2/ray.fx",
+        "ray-mmd-1.5.2/Extension/FXAA/FXAA.fx", "ray-mmd-1.5.2/Materials/Toon/Toon.fx",
+        "ray-mmd-1.5.2/Materials/Transparent/material_glass.fx" };
+    const std::string name = GENERATE(from_range(std::vector<std::string>(kFiles, kFiles + 5)));
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/../../../../MME/" + name;
+    FILE *fp = std::fopen(path.c_str(), "rb");
+    if (!fp) {
+        WARN("missing " + path);
+        return;
+    }
+    std::fclose(fp);
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeGLSL);
+    compiler.setDefineMacro("NANOEM", "1");
+    compiler.setDefineMacro("FOG_ENABLE", "0");
+    Compiler::EffectProduct product;
+    const bool ok = compiler.compile(path.c_str(), product);
+    INFO(path);
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    if (!product.sink.translator.empty()) {
+        for (auto it = product.sink.translator.begin(); it != product.sink.translator.end(); ++it) {
+            INFO(*it);
+        }
+    }
+    CHECK(ok);
+    CHECK(product.numPasses > 0);
+    CHECK(product.numCompiledPasses == product.numPasses);
+    CHECK_FALSE(product.message.empty());
+}
+
+TEST_CASE("fx9next compiles corpus to hlsl and msl")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p {\n"
+        "  VertexShader = compile vs_3_0 vs_main();\n"
+        "  PixelShader = compile ps_3_0 ps_main();\n"
+        "} }\n";
+    const LanguageType language = GENERATE(kLanguageTypeHLSL, kLanguageTypeMSL);
+    Compiler compiler;
+    compiler.setTargetLanguage(language);
+    Compiler::EffectProduct product;
+    const bool ok = compiler.compile(std::string(src), "pass.fx", product);
+    INFO(product.sink.info);
+    INFO(product.sink.builder);
+    REQUIRE(ok);
+    REQUIRE_FALSE(product.message.empty());
+}
+
+TEST_CASE("fx9next packs semantic parameters")
+{
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeGLSL);
+    Compiler::EffectProduct product;
+    const std::string path = std::string(FX9NEXT_TEST_EFFECT_FIXTURES_PATH) + "/corpus/14_matrix_semantics.fx";
+    REQUIRE(compiler.compile(path.c_str(), product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    bool foundWorld = false;
+    for (size_t i = 0; i < effect->n_parameters; i++) {
+        if (effect->parameters[i]->semantic && std::string(effect->parameters[i]->semantic) == "WORLD") {
+            foundWorld = true;
+            REQUIRE(effect->parameters[i]->has_class_common);
+            REQUIRE(effect->parameters[i]->class_common == FX9__EFFECT__PARAMETER__CLASS_COMMON__PC_MATRIX_ROWS);
+        }
+    }
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+    REQUIRE(foundWorld);
 }
 
 TEST_CASE("fx9next compiles dummy pass")
