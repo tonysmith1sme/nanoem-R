@@ -21,7 +21,8 @@ enum EffectScriptCommandType {
     kEffectScriptClear,
     kEffectScriptPass,
     kEffectScriptDraw,
-    kEffectScriptLoop
+    kEffectScriptLoop,
+    kEffectScriptExternal
 };
 
 struct EffectScriptCommandIR {

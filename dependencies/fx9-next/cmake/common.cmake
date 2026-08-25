@@ -76,6 +76,7 @@ set(FX9NEXT_SOURCES
   ${FX9NEXT_PATH}/src/Encoding.cc
   ${FX9NEXT_PATH}/src/EffectIR.cc
   ${FX9NEXT_PATH}/src/Lexer.cc
+  ${FX9NEXT_PATH}/src/Lowering.cc
   ${FX9NEXT_PATH}/src/Parser.cc
   ${FX9NEXT_PATH}/src/Pipeline.cc
   ${FX9NEXT_PATH}/src/Preprocessor.cc
