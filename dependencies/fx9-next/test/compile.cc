@@ -378,6 +378,29 @@ TEST_CASE("fx9next flattens struct entry IO")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next emits nested struct entry IO to MSL")
+{
+    const char *src =
+        "struct Inner { float2 uv : TEXCOORD0; };\n"
+        "struct Outer { float4 position : POSITION; Inner detail; };\n"
+        "Outer vs_main(float4 position : POSITION) { Outer output = (Outer) 0; output.position = position; "
+        "output.detail.uv = float2(0.25, 0.75); "
+        "return output; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return float4(uv, 0, 1); }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
+        "PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "nested-struct.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->vertex_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(effect->techniques[0]->passes[0]->vertex_shader->msl, "nested struct vertex shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next matrix swizzle and mul")
 {
     Compiler compiler;
