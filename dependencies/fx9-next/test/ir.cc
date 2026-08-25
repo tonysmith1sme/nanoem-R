@@ -279,8 +279,21 @@ TEST_CASE("fx9next rejects overlapping DX9 register bindings")
 
 TEST_CASE("fx9next validates SPIR-V instruction boundaries")
 {
+    TranslationUnit unit;
+    std::string parseError;
+    Parser parser;
+    REQUIRE(parser.parse(
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); } }\n",
+        "validation.fx", unit, parseError));
+    std::vector<uint32_t> words;
     std::string error;
-    REQUIRE(validateSPIRV(std::vector<uint32_t>{ 0x07230203, 0x00010000, 0, 1, 0 }, error));
-    REQUIRE_FALSE(validateSPIRV(std::vector<uint32_t>{ 0x07230203, 0x00010000, 0, 1, 0, 0 }, error));
-    REQUIRE(error.find("invalid SPIR-V instruction") != std::string::npos);
+    REQUIRE(emitFunctionSPIRV(unit, unit.functions[0], kStageVertex, words, error));
+    REQUIRE(validateSPIRV(words, error));
+    std::vector<uint32_t> truncated(words.begin(), words.end() - 1);
+    REQUIRE_FALSE(validateSPIRV(truncated, error));
+    REQUIRE(!error.empty());
+    words[5] = (1u << 16) | 999u;
+    REQUIRE_FALSE(validateSPIRV(words, error));
+    REQUIRE(error.find("unknown SPIR-V opcode") != std::string::npos);
 }

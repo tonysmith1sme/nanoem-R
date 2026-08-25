@@ -1934,10 +1934,11 @@ emitFunctionSPIRV(
 bool
 validateSPIRV(const std::vector<uint32_t> &words, std::string &error)
 {
-    if (words.size() < 5 || words[0] != 0x07230203) {
+    if (words.size() < 5 || words[0] != 0x07230203 || words[3] < 1) {
         error = "invalid SPIR-V header";
         return false;
     }
+    bool capability = false, memoryModel = false, entryPoint = false, function = false, functionEnd = false;
     size_t cursor = 5;
     while (cursor < words.size()) {
         const uint32_t wordCount = words[cursor] >> 16;
@@ -1947,9 +1948,115 @@ validateSPIRV(const std::vector<uint32_t> &words, std::string &error)
                 std::to_string(opcode);
             return false;
         }
+        switch (opcode) {
+        case kOpCapability:
+            capability = true;
+            break;
+        case kOpMemoryModel:
+            memoryModel = true;
+            break;
+        case kOpEntryPoint:
+            entryPoint = true;
+            break;
+        case kOpFunction:
+            function = true;
+            break;
+        case kOpFunctionEnd:
+            functionEnd = true;
+            break;
+        case kOpExtInstImport:
+        case kOpExecutionMode:
+        case kOpTypeVoid:
+        case kOpTypeBool:
+        case kOpTypeInt:
+        case kOpTypeFloat:
+        case kOpTypeVector:
+        case kOpTypeMatrix:
+        case kOpTypeImage:
+        case kOpTypeSampler:
+        case kOpTypeSampledImage:
+        case kOpTypeArray:
+        case kOpTypeRuntimeArray:
+        case kOpTypeStruct:
+        case kOpTypePointer:
+        case kOpTypeFunction:
+        case kOpConstantTrue:
+        case kOpConstantFalse:
+        case kOpConstant:
+        case kOpConstantComposite:
+        case kOpVariable:
+        case kOpLoad:
+        case kOpStore:
+        case kOpAccessChain:
+        case kOpDecorate:
+        case kOpMemberDecorate:
+        case kOpVectorExtractDynamic:
+        case kOpVectorShuffle:
+        case kOpCompositeConstruct:
+        case kOpCompositeExtract:
+        case kOpCompositeInsert:
+        case kOpImageSampleImplicitLod:
+        case kOpImageSampleExplicitLod:
+        case kOpConvertFToS:
+        case kOpConvertSToF:
+        case kOpFNegate:
+        case kOpIAdd:
+        case kOpFAdd:
+        case kOpISub:
+        case kOpFSub:
+        case kOpIMul:
+        case kOpFMul:
+        case kOpUDiv:
+        case kOpSDiv:
+        case kOpFDiv:
+        case kOpSMod:
+        case kOpFMod:
+        case kOpVectorTimesScalar:
+        case kOpVectorTimesMatrix:
+        case kOpMatrixTimesVector:
+        case kOpMatrixTimesMatrix:
+        case kOpDot:
+        case kOpSelect:
+        case kOpLogicalNot:
+        case kOpIEqual:
+        case kOpINotEqual:
+        case kOpSGreaterThan:
+        case kOpSGreaterThanEqual:
+        case kOpSLessThan:
+        case kOpSLessThanEqual:
+        case kOpFOrdEqual:
+        case kOpFOrdNotEqual:
+        case kOpFOrdLessThan:
+        case kOpFOrdGreaterThan:
+        case kOpFOrdLessThanEqual:
+        case kOpFOrdGreaterThanEqual:
+        case kOpPhi:
+        case kOpLoopMerge:
+        case kOpSelectionMerge:
+        case kOpLabel:
+        case kOpBranch:
+        case kOpBranchConditional:
+        case kOpReturn:
+        case kOpReturnValue:
+        case kOpUnreachable:
+        case kOpKill:
+        case kOpFunctionParameter:
+            break;
+        default:
+            error = "unknown SPIR-V opcode " + std::to_string(opcode) + " at word " + std::to_string(cursor);
+            return false;
+        }
         cursor += wordCount;
     }
-    return cursor == words.size();
+    if (cursor != words.size()) {
+        error = "SPIR-V trailing words";
+        return false;
+    }
+    if (!capability || !memoryModel || !entryPoint || !function || !functionEnd) {
+        error = "SPIR-V shader module is missing required instructions";
+        return false;
+    }
+    return true;
 }
 
 bool
