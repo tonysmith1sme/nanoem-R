@@ -1162,6 +1162,18 @@ Emitter::narrowUniformValue(const Type &type, uint32_t value)
     if (type.kind == kTypeFloat) {
         return extractComp(value, 0);
     }
+    if (type.kind == kTypeInt || type.kind == kTypeUInt) {
+        const uint32_t component = extractComp(value, 0);
+        const uint32_t result = b.nextId();
+        b.emit3(b.code, kOpConvertFToS, b.typeInt(), result, component);
+        return note(result, b.typeInt());
+    }
+    if (type.kind == kTypeBool) {
+        const uint32_t component = extractComp(value, 0);
+        const uint32_t result = b.nextId();
+        b.emit4(b.code, kOpFOrdNotEqual, b.typeBool(), result, component, b.constF32(0));
+        return note(result, b.typeBool());
+    }
     return value;
 }
 
@@ -2008,8 +2020,7 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         const bool floatArray = gv.type.kind == kTypeArray && gv.type.scalar == kTypeFloat && gv.type.columns == 1;
         if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
             gv.type.kind == kTypeString || gv.type.kind == kTypeVoid ||
-            (gv.type.kind == kTypeArray && !floatArray) || gv.type.kind == kTypeInt || gv.type.kind == kTypeUInt ||
-            gv.type.kind == kTypeBool) {
+            (gv.type.kind == kTypeArray && !floatArray)) {
             continue;
         }
         const EffectBindingIR *binding = findEffectBinding(e.effect, gv.name, kEffectRegisterFloat4);
