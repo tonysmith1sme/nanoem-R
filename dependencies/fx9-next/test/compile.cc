@@ -268,6 +268,30 @@ TEST_CASE("fx9next accepts templated D3D11 texture resources")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next combines D3D11 constants and sampled resources")
+{
+    const char *src =
+        "Texture2D diffuseTexture : register(t0); SamplerState diffuseSampler : register(s0);\n"
+        "cbuffer Constants : register(b0) { float4 tint; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return diffuseTexture.Sample(diffuseSampler, uv) * tint; }\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "d3d11-combined-resources.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
+    REQUIRE(shader->n_uniforms == 1);
+    REQUIRE(shader->n_samplers == 1);
+    REQUIRE(shader->msl != nullptr);
+    REQUIRE(std::strstr(shader->msl, "ps_uniforms_vec4") != nullptr);
+    REQUIRE(compileMetalSource(shader->msl, "combined D3D11 resource shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next binds global uniform arrays")
 {
     const char *src =
