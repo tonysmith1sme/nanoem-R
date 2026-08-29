@@ -441,6 +441,27 @@ TEST_CASE("fx9next SPIR-V passes optional Khronos validation")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next resource SPIR-V passes optional Khronos validation")
+{
+    const char *src =
+        "TextureCube environmentTexture : register(t0); SamplerState environmentSampler : register(s0);\n"
+        "cbuffer Constants : register(b0) { float4 tint; float4 weights[2]; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 { return environmentTexture.SampleLevel(environmentSampler, direction, 1.0) * tint + weights[1]; }\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeSPIRV);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "spirv-resource-validator-gate.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
+    REQUIRE(validateWithSPIRVTools(pass->vertex_shader, "resource SPIR-V vertex shader"));
+    REQUIRE(validateWithSPIRVTools(pass->pixel_shader, "resource SPIR-V pixel shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles fx9 corpus effects")
 {
     static const char *kFiles[] = { "01_tex2D_basic.fx", "02_tex2Dlod_bias_proj.fx", "03_texM3x3.fx",

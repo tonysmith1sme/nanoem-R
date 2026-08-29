@@ -1358,13 +1358,35 @@ Emitter::emitExpr(const Expr *expr)
             b.emit3(b.code, kOpConvertSToF, b.typeFloat(), conv, r);
             r = note(conv, b.typeFloat());
         }
+        uint32_t vectorType = 0;
+        if (isVec(l)) {
+            vectorType = valueTypes[l];
+        }
+        else if (isVec(r)) {
+            vectorType = valueTypes[r];
+        }
+        if (vectorType && (expr->op == "+" || expr->op == "-" || expr->op == "*" || expr->op == "/" || expr->op == "%")) {
+            const uint32_t target = vectorType;
+            if (valueTypes.count(l) && valueTypes[l] == b.typeFloat()) {
+                uint32_t promoted = b.nextId();
+                uint32_t ops[6] = { target, promoted, l, l, l, l };
+                b.emit(b.code, kOpCompositeConstruct, ops, static_cast<uint16_t>(expr->type.rows + 2));
+                l = note(promoted, target);
+            }
+            if (valueTypes.count(r) && valueTypes[r] == b.typeFloat()) {
+                uint32_t promoted = b.nextId();
+                uint32_t ops[6] = { target, promoted, r, r, r, r };
+                b.emit(b.code, kOpCompositeConstruct, ops, static_cast<uint16_t>(expr->type.rows + 2));
+                r = note(promoted, target);
+            }
+        }
         if (expr->op == "+") {
             op = ints ? kOpIAdd : kOpFAdd;
-            ty = ints ? b.typeInt() : b.typeFloat();
+            ty = ints ? b.typeInt() : (vectorType ? vectorType : b.typeFloat());
         }
         else if (expr->op == "-") {
             op = ints ? kOpISub : kOpFSub;
-            ty = ints ? b.typeInt() : b.typeFloat();
+            ty = ints ? b.typeInt() : (vectorType ? vectorType : b.typeFloat());
         }
         else if (expr->op == "*") {
             if (isVec(l) && !isVec(r)) {
@@ -1380,12 +1402,15 @@ Emitter::emitExpr(const Expr *expr)
                 return note(idv, ty);
             }
             op = kOpFMul;
+            ty = vectorType ? vectorType : b.typeFloat();
         }
         else if (expr->op == "/") {
             op = kOpFDiv;
+            ty = vectorType ? vectorType : b.typeFloat();
         }
         else if (expr->op == "%") {
             op = kOpFMod;
+            ty = vectorType ? vectorType : b.typeFloat();
         }
         else if (expr->op == "<") {
             op = ints ? kOpSLessThan : kOpFOrdLessThan;
