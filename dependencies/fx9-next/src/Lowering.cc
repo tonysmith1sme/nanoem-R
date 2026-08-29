@@ -68,7 +68,8 @@ collectSampleRelationships(const Expr *expression, std::unordered_map<std::strin
     if (!expression) {
         return;
     }
-    if (expression->kind == kExprCall && expression->name == "Sample" && expression->kids.size() >= 3 &&
+    if (expression->kind == kExprCall && (expression->name == "Sample" || expression->name == "SampleLevel") &&
+        expression->kids.size() >= 3 &&
         expression->kids[0]->kind == kExprMember && expression->kids[0]->kids.size() == 1 &&
         expression->kids[0]->kids[0]->kind == kExprIdent && expression->kids[1]->kind == kExprIdent) {
         const std::string &samplerName = expression->kids[1]->name;
@@ -109,7 +110,8 @@ collectCalledFunctions(const Expr *expression, std::unordered_set<std::string> &
     if (!expression) {
         return;
     }
-    if (expression->kind == kExprCall && !expression->name.empty() && expression->name != "Sample") {
+    if (expression->kind == kExprCall && !expression->name.empty() && expression->name != "Sample" &&
+        expression->name != "SampleLevel") {
         names.insert(expression->name);
     }
     for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {

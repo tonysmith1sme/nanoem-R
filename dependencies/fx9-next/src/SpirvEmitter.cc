@@ -154,6 +154,8 @@ enum {
     kDimCube = 3
 };
 
+enum { kImageOperandsLod = 2 };
+
 struct Builder {
     std::vector<uint32_t> header;
     std::vector<uint32_t> debug;
@@ -283,6 +285,14 @@ struct Builder {
     {
         uint32_t ops[5] = { a, b, c, d, e };
         emit(dest, op, ops, 5);
+    }
+
+    void
+    emit6(std::vector<uint32_t> &dest, uint16_t op, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e,
+        uint32_t f)
+    {
+        uint32_t ops[6] = { a, b, c, d, e, f };
+        emit(dest, op, ops, 6);
     }
 
     uint32_t
@@ -621,7 +631,7 @@ struct Emitter {
     uint32_t extractComp(uint32_t vec, uint32_t index);
     uint32_t makeVec3(uint32_t x, uint32_t y, uint32_t z);
     uint32_t makeVec2(uint32_t x, uint32_t y);
-    uint32_t sampleTexture(const std::string &sampName, uint32_t uv);
+    uint32_t sampleTexture(const std::string &sampName, uint32_t uv, uint32_t lod = 0);
     uint32_t callUser(const std::string &name, const Expr *expr);
     uint32_t asBool(uint32_t id);
     uint32_t asInt(uint32_t id);
@@ -702,7 +712,7 @@ Emitter::makeVec2(uint32_t x, uint32_t y)
 }
 
 uint32_t
-Emitter::sampleTexture(const std::string &sampName, uint32_t uv)
+Emitter::sampleTexture(const std::string &sampName, uint32_t uv, uint32_t lod)
 {
     auto sit = samplers.find(sampName);
     if (sit == samplers.end()) {
@@ -723,7 +733,12 @@ Emitter::sampleTexture(const std::string &sampName, uint32_t uv)
         coord = makeVec3(extractComp(uv, 0), extractComp(uv, 1), extractComp(uv, 2));
     }
     uint32_t id = b.nextId();
-    b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, loaded, coord);
+    if (lod) {
+        b.emit6(b.code, kOpImageSampleExplicitLod, b.typeVec(4), id, loaded, coord, kImageOperandsLod, lod);
+    }
+    else {
+        b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, loaded, coord);
+    }
     return note(id, b.typeVec(4));
 }
 
@@ -1375,13 +1390,20 @@ Emitter::emitExpr(const Expr *expr)
     case kExprCall: {
         const std::string &name = expr->name;
         if (name == "tex2D" || name == "tex2Dlod" || name == "tex2Dproj" || name == "tex2Dbias" || name == "texCUBE" ||
-            name == "tex3D" || name == "Sample") {
+            name == "tex3D" || name == "Sample" || name == "SampleLevel") {
             std::string sampName;
             if (expr->kids.size() > 1 && expr->kids[1]->kind == kExprIdent) {
                 sampName = expr->kids[1]->name;
             }
             uint32_t uv = expr->kids.size() > 2 ? emitExpr(expr->kids[2].get()) : b.constVec4(0, 0, 0, 0);
-            return sampleTexture(sampName, uv);
+            uint32_t lod = 0;
+            if (name == "SampleLevel" && expr->kids.size() > 3) {
+                lod = emitExpr(expr->kids[3].get());
+            }
+            else if (name == "tex2Dlod" && isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
+                lod = extractComp(uv, 3);
+            }
+            return sampleTexture(sampName, uv, lod);
         }
         if (name.compare(0, 7, "texM3x3") == 0) {
             std::string sampName;

@@ -156,6 +156,32 @@ TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next emits D3D11 explicit texture LOD")
+{
+    const char *src =
+        "Texture2D diffuseTexture : register(t1);\n"
+        "SamplerState diffuseSampler : register(s1);\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+        "  return diffuseTexture.SampleLevel(diffuseSampler, uv, 2.0);\n"
+        "}\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); "
+        "PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "sample-level.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
+    REQUIRE(shader->n_samplers == 1);
+    REQUIRE(std::string(shader->samplers[0]->texture_name) == "diffuseTexture");
+    REQUIRE(shader->msl != nullptr);
+    REQUIRE(compileMetalSource(shader->msl, "explicit texture LOD shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next preserves cube and volume sampler dimensions")
 {
     const char *src =
