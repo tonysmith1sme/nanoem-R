@@ -587,6 +587,8 @@ struct Emitter {
     std::unordered_map<std::string, uint32_t> arrayStorage;
     std::unordered_map<std::string, uint32_t> valueOverlay;
     std::unordered_map<std::string, uint32_t> samplers;
+    std::unordered_map<std::string, uint32_t> samplerTypes;
+    std::unordered_map<std::string, SamplerDim> samplerDims;
     std::unordered_map<std::string, uint32_t> uniformRegisters;
     std::unordered_map<std::string, Type> uniformTypes;
     std::unordered_map<uint32_t, uint32_t> valueTypes;
@@ -619,7 +621,7 @@ struct Emitter {
     uint32_t extractComp(uint32_t vec, uint32_t index);
     uint32_t makeVec3(uint32_t x, uint32_t y, uint32_t z);
     uint32_t makeVec2(uint32_t x, uint32_t y);
-    uint32_t sample2D(const std::string &sampName, uint32_t uv);
+    uint32_t sampleTexture(const std::string &sampName, uint32_t uv);
     uint32_t callUser(const std::string &name, const Expr *expr);
     uint32_t asBool(uint32_t id);
     uint32_t asInt(uint32_t id);
@@ -700,26 +702,25 @@ Emitter::makeVec2(uint32_t x, uint32_t y)
 }
 
 uint32_t
-Emitter::sample2D(const std::string &sampName, uint32_t uv)
+Emitter::sampleTexture(const std::string &sampName, uint32_t uv)
 {
     auto sit = samplers.find(sampName);
     if (sit == samplers.end()) {
         return note(b.constVec4(0, 0, 0, 1), b.typeVec(4));
     }
     uint32_t loaded = b.nextId();
-    uint32_t sampledType = b.nextId();
-    uint32_t imageType = b.nextId();
-    uint32_t floatTy = b.typeFloat();
-    uint32_t imageOps[8] = { imageType, floatTy, kDim2D, 0, 0, 0, 1, 0 };
-    b.emit(b.types, kOpTypeImage, imageOps, 8);
-    b.emit2(b.types, kOpTypeSampledImage, sampledType, imageType);
+    uint32_t sampledType = samplerTypes[sampName];
     b.emit3(b.code, kOpLoad, sampledType, loaded, sit->second);
     uint32_t coord = uv;
-    if (isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
+    const SamplerDim dim = samplerDims[sampName];
+    if (dim == kSampler2D && isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
         coord = makeVec2(extractComp(uv, 0), extractComp(uv, 1));
     }
-    else if (isVec(uv) && valueTypes[uv] == b.typeVec(3)) {
+    else if (dim == kSampler2D && isVec(uv) && valueTypes[uv] == b.typeVec(3)) {
         coord = makeVec2(extractComp(uv, 0), extractComp(uv, 1));
+    }
+    else if ((dim == kSamplerCube || dim == kSampler3D) && isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
+        coord = makeVec3(extractComp(uv, 0), extractComp(uv, 1), extractComp(uv, 2));
     }
     uint32_t id = b.nextId();
     b.emit4(b.code, kOpImageSampleImplicitLod, b.typeVec(4), id, loaded, coord);
@@ -1380,7 +1381,7 @@ Emitter::emitExpr(const Expr *expr)
                 sampName = expr->kids[1]->name;
             }
             uint32_t uv = expr->kids.size() > 2 ? emitExpr(expr->kids[2].get()) : b.constVec4(0, 0, 0, 0);
-            return sample2D(sampName, uv);
+            return sampleTexture(sampName, uv);
         }
         if (name.compare(0, 7, "texM3x3") == 0) {
             std::string sampName;
@@ -1412,7 +1413,7 @@ Emitter::emitExpr(const Expr *expr)
             uint32_t biased = b.nextId();
             b.emit4(b.code, kOpFAdd, b.typeVec(2), biased, scaled, half2);
             note(biased, b.typeVec(2));
-            return sample2D(sampName, biased);
+            return sampleTexture(sampName, biased);
         }
         if (name == "saturate" && b.idGlsl) {
             uint32_t x = emitExpr(expr->kids.size() > 1 ? expr->kids[1].get() : nullptr);
@@ -1947,7 +1948,14 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         }
         uint32_t imageType = e.b.nextId();
         uint32_t sampledType = e.b.nextId();
-        uint32_t ops[8] = { imageType, e.b.typeFloat(), kDim2D, 0, 0, 0, 1, 0 };
+        uint32_t dim = kDim2D;
+        if (unit.variables[i].type.samplerDim == kSamplerCube) {
+            dim = kDimCube;
+        }
+        else if (unit.variables[i].type.samplerDim == kSampler3D) {
+            dim = kDim3D;
+        }
+        uint32_t ops[8] = { imageType, e.b.typeFloat(), dim, 0, 0, 0, 1, 0 };
         e.b.emit(e.b.types, kOpTypeImage, ops, 8);
         e.b.emit2(e.b.types, kOpTypeSampledImage, sampledType, imageType);
         uint32_t ptr = e.b.ptrType(sampledType, kStorageUniformConstant);
@@ -1965,6 +1973,8 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         e.b.decorate(var, kDecorationDescriptorSet, 0, true);
         e.b.decorate(var, kDecorationBinding, static_cast<uint32_t>(binding), true);
         e.samplers[unit.variables[i].name] = var;
+        e.samplerTypes[unit.variables[i].name] = sampledType;
+        e.samplerDims[unit.variables[i].name] = unit.variables[i].type.samplerDim;
         samplerIndex++;
         if (samplerIndex > 32) {
             break;

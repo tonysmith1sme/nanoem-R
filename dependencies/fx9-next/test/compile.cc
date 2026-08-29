@@ -156,6 +156,35 @@ TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next preserves cube and volume sampler dimensions")
+{
+    const char *src =
+        "textureCUBE cubeTexture;\n"
+        "samplerCUBE cubeSampler = sampler_state { Texture = <cubeTexture>; };\n"
+        "texture3D volumeTexture;\n"
+        "sampler3D volumeSampler = sampler_state { Texture = <volumeTexture>; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 {\n"
+        "  return texCUBE(cubeSampler, direction) + tex3D(volumeSampler, direction);\n"
+        "}\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
+        "PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "sampler-dimensions.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
+    REQUIRE(shader->n_samplers == 2);
+    REQUIRE(shader->samplers[0]->type == FX9__EFFECT__SAMPLER__TYPE__SAMPLER_CUBE);
+    REQUIRE(shader->samplers[1]->type == FX9__EFFECT__SAMPLER__TYPE__SAMPLER_VOLUME);
+    REQUIRE(shader->msl != nullptr);
+    REQUIRE(compileMetalSource(shader->msl, "cube and volume sampler shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next lowers D3D11 constant buffer fields")
 {
     const char *src =
