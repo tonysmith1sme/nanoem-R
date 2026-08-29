@@ -1254,6 +1254,15 @@ Emitter::emitExpr(const Expr *expr)
         if (want <= 1 && !comps.empty()) {
             return comps[0];
         }
+        if (expr->type.scalar == kTypeFloat || expr->type.kind == kTypeFloat) {
+            for (size_t i = 0; i < comps.size(); i++) {
+                if (valueTypes.count(comps[i]) && valueTypes[comps[i]] == b.typeInt()) {
+                    uint32_t converted = b.nextId();
+                    b.emit3(b.code, kOpConvertSToF, b.typeFloat(), converted, comps[i]);
+                    comps[i] = note(converted, b.typeFloat());
+                }
+            }
+        }
         while (static_cast<int>(comps.size()) < want) {
             comps.push_back(comps.empty() ? b.constF32(0) : comps.back());
         }

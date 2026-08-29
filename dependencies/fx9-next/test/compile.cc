@@ -64,6 +64,41 @@ compileMetalSource(const char *source, const char *label)
 #endif
 }
 
+bool
+validateWithSPIRVTools(const Fx9__Effect__Shader *shader, const char *label)
+{
+#if defined(__APPLE__)
+    const char *validator = std::getenv("FX9NEXT_SPIRV_VAL");
+    if (!validator || !*validator || !shader || shader->body_case != FX9__EFFECT__SHADER__BODY_SPIRV) {
+        return true;
+    }
+    char input[] = "/tmp/fx9next-spirv-XXXXXX";
+    const int fd = mkstemp(input);
+    if (fd < 0) {
+        return false;
+    }
+    FILE *fp = fdopen(fd, "wb");
+    if (!fp) {
+        close(fd);
+        std::remove(input);
+        return false;
+    }
+    const bool written = std::fwrite(shader->spirv.data, 1, shader->spirv.len, fp) == shader->spirv.len;
+    std::fclose(fp);
+    const std::string command = std::string("\"") + validator + "\" \"" + input + "\" >/dev/null 2>&1";
+    const bool ok = written && std::system(command.c_str()) == 0;
+    if (!ok) {
+        WARN(std::string("SPIRV-Tools rejected ") + label);
+    }
+    std::remove(input);
+    return ok;
+#else
+    (void) shader;
+    (void) label;
+    return true;
+#endif
+}
+
 TEST_CASE("fx9next parses a pass-through effect")
 {
     const char *src =
@@ -385,6 +420,25 @@ TEST_CASE("fx9next compiles pass-through effect to protobuf")
     REQUIRE(product.numPasses == 1);
     REQUIRE(product.numCompiledPasses == 1);
     REQUIRE_FALSE(product.message.empty());
+}
+
+TEST_CASE("fx9next SPIR-V passes optional Khronos validation")
+{
+    const char *src =
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { return float4(1, 1, 1, 1); }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeSPIRV);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "spirv-validator-gate.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
+    REQUIRE(validateWithSPIRVTools(pass->vertex_shader, "optional SPIR-V vertex shader"));
+    REQUIRE(validateWithSPIRVTools(pass->pixel_shader, "optional SPIR-V pixel shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
 TEST_CASE("fx9next compiles fx9 corpus effects")
