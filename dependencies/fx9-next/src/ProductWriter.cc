@@ -154,13 +154,22 @@ fillSamplers(Arena &arena, const TranslationUnit &unit, const EffectModuleIR &ef
         Fx9__Effect__Sampler *s = shader->samplers[i] = arena.alloc<Fx9__Effect__Sampler>();
         fx9__effect__sampler__init(s);
         s->type = FX9__EFFECT__SAMPLER__TYPE__SAMPLER_2D;
-        if (samps[i]->type.samplerDim == kSamplerCube) {
+        SamplerDim samplerDim = samps[i]->type.samplerDim;
+        const EffectBindingIR *binding = findBinding(effect, samps[i]->name, kEffectRegisterSampler);
+        if (binding && !binding->textureName.empty() && samplerDim == kSampler2D) {
+            for (size_t j = 0; j < unit.variables.size(); j++) {
+                if (unit.variables[j].name == binding->textureName && unit.variables[j].type.kind == kTypeTexture) {
+                    samplerDim = unit.variables[j].type.samplerDim;
+                    break;
+                }
+            }
+        }
+        if (samplerDim == kSamplerCube) {
             s->type = FX9__EFFECT__SAMPLER__TYPE__SAMPLER_CUBE;
         }
-        else if (samps[i]->type.samplerDim == kSampler3D) {
+        else if (samplerDim == kSampler3D) {
             s->type = FX9__EFFECT__SAMPLER__TYPE__SAMPLER_VOLUME;
         }
-        const EffectBindingIR *binding = findBinding(effect, samps[i]->name, kEffectRegisterSampler);
         s->index = binding ? static_cast<uint32_t>(binding->registerIndex) : static_cast<uint32_t>(i);
         if (!binding && !samps[i]->registerName.empty() &&
             (samps[i]->registerName[0] == 's' || samps[i]->registerName[0] == 'S')) {

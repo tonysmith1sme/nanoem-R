@@ -2000,10 +2000,20 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         uint32_t imageType = e.b.nextId();
         uint32_t sampledType = e.b.nextId();
         uint32_t dim = kDim2D;
-        if (unit.variables[i].type.samplerDim == kSamplerCube) {
+        SamplerDim samplerDim = unit.variables[i].type.samplerDim;
+        const EffectBindingIR *effectBinding = findEffectBinding(e.effect, unit.variables[i].name, kEffectRegisterSampler);
+        if (effectBinding && !effectBinding->textureName.empty() && samplerDim == kSampler2D) {
+            for (size_t j = 0; j < unit.variables.size(); j++) {
+                if (unit.variables[j].name == effectBinding->textureName && unit.variables[j].type.kind == kTypeTexture) {
+                    samplerDim = unit.variables[j].type.samplerDim;
+                    break;
+                }
+            }
+        }
+        if (samplerDim == kSamplerCube) {
             dim = kDimCube;
         }
-        else if (unit.variables[i].type.samplerDim == kSampler3D) {
+        else if (samplerDim == kSampler3D) {
             dim = kDim3D;
         }
         uint32_t ops[8] = { imageType, e.b.typeFloat(), dim, 0, 0, 0, 1, 0 };
@@ -2013,7 +2023,6 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         uint32_t var = e.b.nextId();
         e.b.emit3(e.b.types, kOpVariable, ptr, var, kStorageUniformConstant);
         int binding = samplerIndex;
-        const EffectBindingIR *effectBinding = findEffectBinding(e.effect, unit.variables[i].name, kEffectRegisterSampler);
         if (effectBinding) {
             binding = effectBinding->registerIndex;
         }

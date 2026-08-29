@@ -226,6 +226,28 @@ TEST_CASE("fx9next preserves cube and volume sampler dimensions")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next infers independent D3D11 sampler dimensions")
+{
+    const char *src =
+        "TextureCube environmentTexture : register(t0); SamplerState environmentSampler : register(s0);\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 { return environmentTexture.Sample(environmentSampler, direction); }\n"
+        "technique t { pass p { VertexShader = compile vs_4_0 vs_main(); PixelShader = compile ps_4_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "d3d11-texture-cube.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Sampler *sampler = effect->techniques[0]->passes[0]->pixel_shader->samplers[0];
+    REQUIRE(sampler->type == FX9__EFFECT__SAMPLER__TYPE__SAMPLER_CUBE);
+    REQUIRE(std::string(sampler->texture_name) == "environmentTexture");
+    REQUIRE(effect->techniques[0]->passes[0]->pixel_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(effect->techniques[0]->passes[0]->pixel_shader->msl, "D3D11 texture cube shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next binds global uniform arrays")
 {
     const char *src =
