@@ -614,6 +614,8 @@ struct Emitter {
     bool emitStmt(const Stmt *stmt, uint32_t returnType);
     uint32_t loadIdent(const std::string &name);
     uint32_t loadUniform(const std::string &name);
+    uint32_t loadUniformElement(const std::string &name, uint32_t index);
+    uint32_t narrowUniformValue(const Type &type, uint32_t value);
     uint32_t extractComp(uint32_t vec, uint32_t index);
     uint32_t makeVec3(uint32_t x, uint32_t y, uint32_t z);
     uint32_t makeVec2(uint32_t x, uint32_t y);
@@ -1102,6 +1104,31 @@ Emitter::loadUniform(const std::string &name)
         b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
         return note(result, resultType);
     }
+    return narrowUniformValue(type, value);
+}
+
+uint32_t
+Emitter::loadUniformElement(const std::string &name, uint32_t index)
+{
+    const Type &arrayType = uniformTypes[name];
+    Type elementType = arrayType;
+    elementType.kind = arrayType.rows > 1 ? kTypeVector : arrayType.scalar;
+    elementType.arraySize = 0;
+    const uint32_t slot = b.nextId();
+    b.emit4(b.code, kOpIAdd, b.typeInt(), slot, b.constI32(static_cast<int>(uniformRegisters[name])), index);
+    note(slot, b.typeInt());
+    const uint32_t vec4 = b.typeVec(4);
+    const uint32_t ptr = b.nextId();
+    b.emit5(b.code, kOpAccessChain, b.ptrType(vec4, kStorageUniform), ptr, uniformBuffer, b.constI32(0), slot);
+    const uint32_t value = b.nextId();
+    b.emit3(b.code, kOpLoad, vec4, value, ptr);
+    note(value, vec4);
+    return narrowUniformValue(elementType, value);
+}
+
+uint32_t
+Emitter::narrowUniformValue(const Type &type, uint32_t value)
+{
     if (type.kind == kTypeVector && type.rows < 4) {
         std::vector<uint32_t> components;
         for (int i = 0; i < type.rows; i++) {
@@ -1116,7 +1143,7 @@ Emitter::loadUniform(const std::string &name)
         b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
         return note(result, resultType);
     }
-    if (type.kind == kTypeFloat || type.kind == kTypeInt || type.kind == kTypeUInt || type.kind == kTypeBool) {
+    if (type.kind == kTypeFloat) {
         return extractComp(value, 0);
     }
     return value;
@@ -1590,6 +1617,11 @@ Emitter::emitExpr(const Expr *expr)
         return x;
     }
     case kExprIndex: {
+        if (!expr->kids.empty() && expr->kids[0]->kind == kExprIdent &&
+            uniformTypes.count(expr->kids[0]->name) && uniformTypes[expr->kids[0]->name].kind == kTypeArray) {
+            uint32_t index = expr->kids.size() > 1 ? asInt(emitExpr(expr->kids[1].get())) : b.constI32(0);
+            return loadUniformElement(expr->kids[0]->name, index);
+        }
         uint32_t elemTy = 0;
         uint32_t ptr = emitIndexPtr(expr, elemTy);
         if (ptr) {
@@ -1938,13 +1970,14 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
             break;
         }
     }
-    const uint32_t uniformCapacity = 128;
-    bool hasUniforms = false;
+    uint32_t uniformCapacity = 0;
     for (size_t i = 0; i < unit.variables.size(); i++) {
         const Variable &gv = unit.variables[i];
+        const bool floatArray = gv.type.kind == kTypeArray && gv.type.scalar == kTypeFloat && gv.type.columns == 1;
         if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
-            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid || gv.type.kind == kTypeArray ||
-            gv.type.kind == kTypeInt || gv.type.kind == kTypeUInt || gv.type.kind == kTypeBool) {
+            gv.type.kind == kTypeString || gv.type.kind == kTypeVoid ||
+            (gv.type.kind == kTypeArray && !floatArray) || gv.type.kind == kTypeInt || gv.type.kind == kTypeUInt ||
+            gv.type.kind == kTypeBool) {
             continue;
         }
         const EffectBindingIR *binding = findEffectBinding(e.effect, gv.name, kEffectRegisterFloat4);
@@ -1953,9 +1986,10 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         }
         e.uniformRegisters[gv.name] = static_cast<uint32_t>(binding->registerIndex);
         e.uniformTypes[gv.name] = gv.type;
-        hasUniforms = true;
+        uniformCapacity = std::max(uniformCapacity,
+            static_cast<uint32_t>(binding->registerIndex + binding->registerCount));
     }
-    if (hasUniforms) {
+    if (uniformCapacity > 0) {
         const uint32_t vec4 = e.b.typeVec(4);
         const uint32_t length = e.b.constU32(uniformCapacity);
         const uint32_t array = e.b.nextId();

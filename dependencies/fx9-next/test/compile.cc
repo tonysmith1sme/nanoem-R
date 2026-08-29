@@ -181,6 +181,31 @@ TEST_CASE("fx9next lowers D3D11 constant buffer fields")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next binds global uniform arrays")
+{
+    const char *src =
+        "cbuffer ArrayConstants : register(b0) { float4 weights[3]; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { int i = uv.x > 0.5 ? 1 : 2; return weights[i]; }\n"
+        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
+        "PixelShader = compile ps_3_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "uniform-array.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
+    REQUIRE(shader->n_uniforms == 1);
+    REQUIRE(shader->uniforms[0]->index == 0);
+    REQUIRE(shader->uniforms[0]->num_elements == 3);
+    REQUIRE(shader->msl != nullptr);
+    REQUIRE(std::strstr(shader->msl, "ps_uniforms_vec4") != nullptr);
+    REQUIRE(compileMetalSource(shader->msl, "uniform array shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles pass-through effect to protobuf")
 {
     const char *src =
