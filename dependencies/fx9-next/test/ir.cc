@@ -290,6 +290,25 @@ TEST_CASE("fx9next preserves sampler dimensions and explicit LOD in SPIR-V")
     REQUIRE(containsSPIRVOpcode(words, 88));
 }
 
+TEST_CASE("fx9next derives D3D11 SampleLevel sampler texture relationships")
+{
+    const char *source =
+        "Texture2D diffuseTexture : register(t1); SamplerState diffuseSampler : register(s1);\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return diffuseTexture.SampleLevel(diffuseSampler, uv, 2.0); }\n"
+        "technique t { pass p { PixelShader = compile ps_5_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "d3d11-sample-level.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(effect.bindings.size() == 2);
+    REQUIRE(effect.bindings[1].textureName == "diffuseTexture");
+}
+
 TEST_CASE("fx9next resolves typed shader control flow into IR")
 {
     const char *source =
