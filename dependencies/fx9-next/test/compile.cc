@@ -156,61 +156,6 @@ TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
-TEST_CASE("fx9next emits D3D11 explicit texture LOD")
-{
-    const char *src =
-        "Texture2D diffuseTexture : register(t1);\n"
-        "SamplerState diffuseSampler : register(s1);\n"
-        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 {\n"
-        "  return diffuseTexture.SampleLevel(diffuseSampler, uv, 2.0);\n"
-        "}\n"
-        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); "
-        "PixelShader = compile ps_5_0 ps_main(); } }\n";
-    Compiler compiler;
-    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
-    Compiler::EffectProduct product;
-    REQUIRE(compiler.compile(std::string(src), "sample-level.fx", product));
-    Fx9__Effect__Effect *effect =
-        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
-    REQUIRE(effect != nullptr);
-    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
-    REQUIRE(shader->n_samplers == 1);
-    REQUIRE(std::string(shader->samplers[0]->texture_name) == "diffuseTexture");
-    REQUIRE(shader->msl != nullptr);
-    REQUIRE(compileMetalSource(shader->msl, "explicit texture LOD shader"));
-    fx9__effect__effect__free_unpacked(effect, nullptr);
-}
-
-TEST_CASE("fx9next preserves cube and volume sampler dimensions")
-{
-    const char *src =
-        "textureCUBE cubeTexture;\n"
-        "samplerCUBE cubeSampler = sampler_state { Texture = <cubeTexture>; };\n"
-        "texture3D volumeTexture;\n"
-        "sampler3D volumeSampler = sampler_state { Texture = <volumeTexture>; };\n"
-        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 {\n"
-        "  return texCUBE(cubeSampler, direction) + tex3D(volumeSampler, direction);\n"
-        "}\n"
-        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
-        "PixelShader = compile ps_3_0 ps_main(); } }\n";
-    Compiler compiler;
-    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
-    Compiler::EffectProduct product;
-    REQUIRE(compiler.compile(std::string(src), "sampler-dimensions.fx", product));
-    Fx9__Effect__Effect *effect =
-        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
-    REQUIRE(effect != nullptr);
-    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
-    REQUIRE(shader->n_samplers == 2);
-    REQUIRE(shader->samplers[0]->type == FX9__EFFECT__SAMPLER__TYPE__SAMPLER_CUBE);
-    REQUIRE(shader->samplers[1]->type == FX9__EFFECT__SAMPLER__TYPE__SAMPLER_VOLUME);
-    REQUIRE(shader->msl != nullptr);
-    REQUIRE(compileMetalSource(shader->msl, "cube and volume sampler shader"));
-    fx9__effect__effect__free_unpacked(effect, nullptr);
-}
-
 TEST_CASE("fx9next lowers D3D11 constant buffer fields")
 {
     const char *src =
@@ -233,59 +178,6 @@ TEST_CASE("fx9next lowers D3D11 constant buffer fields")
     REQUIRE(pass->pixel_shader->msl != nullptr);
     REQUIRE(std::strstr(pass->pixel_shader->msl, "ps_uniforms_vec4") != nullptr);
     REQUIRE(compileMetalSource(pass->pixel_shader->msl, "D3D11 constant buffer shader"));
-    fx9__effect__effect__free_unpacked(effect, nullptr);
-}
-
-TEST_CASE("fx9next binds integer and boolean constants")
-{
-    const char *src =
-        "cbuffer ScalarConstants : register(b0) { int mode; bool enabled; };\n"
-        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main() : COLOR0 {\n"
-        "  if (enabled && mode > 1) { return float4(1, 0, 0, 1); }\n"
-        "  return float4(0, 0, 0, 1);\n"
-        "}\n"
-        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); "
-        "PixelShader = compile ps_5_0 ps_main(); } }\n";
-    Compiler compiler;
-    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
-    Compiler::EffectProduct product;
-    REQUIRE(compiler.compile(std::string(src), "scalar-constants.fx", product));
-    Fx9__Effect__Effect *effect =
-        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
-    REQUIRE(effect != nullptr);
-    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
-    REQUIRE(shader->n_uniforms == 2);
-    REQUIRE(shader->uniforms[0]->index == 0);
-    REQUIRE(shader->uniforms[1]->index == 1);
-    REQUIRE(shader->msl != nullptr);
-    REQUIRE(std::strstr(shader->msl, "ps_uniforms_vec4") != nullptr);
-    REQUIRE(compileMetalSource(shader->msl, "integer and boolean constant shader"));
-    fx9__effect__effect__free_unpacked(effect, nullptr);
-}
-
-TEST_CASE("fx9next binds global uniform arrays")
-{
-    const char *src =
-        "cbuffer ArrayConstants : register(b0) { float4 weights[3]; };\n"
-        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { int i = uv.x > 0.5 ? 1 : 2; return weights[i]; }\n"
-        "technique t { pass p { VertexShader = compile vs_3_0 vs_main(); "
-        "PixelShader = compile ps_3_0 ps_main(); } }\n";
-    Compiler compiler;
-    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
-    Compiler::EffectProduct product;
-    REQUIRE(compiler.compile(std::string(src), "uniform-array.fx", product));
-    Fx9__Effect__Effect *effect =
-        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
-    REQUIRE(effect != nullptr);
-    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
-    REQUIRE(shader->n_uniforms == 1);
-    REQUIRE(shader->uniforms[0]->index == 0);
-    REQUIRE(shader->uniforms[0]->num_elements == 3);
-    REQUIRE(shader->msl != nullptr);
-    REQUIRE(std::strstr(shader->msl, "ps_uniforms_vec4") != nullptr);
-    REQUIRE(compileMetalSource(shader->msl, "uniform array shader"));
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 

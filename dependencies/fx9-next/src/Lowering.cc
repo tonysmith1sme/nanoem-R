@@ -9,7 +9,6 @@
 #include <sstream>
 #include <cctype>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace fx9next {
 namespace {
@@ -62,76 +61,37 @@ lowerStatementKind(StmtKind kind)
 typedef std::unordered_map<std::string, Type> TypeMap;
 
 void
-collectSampleRelationships(const Expr *expression, std::unordered_map<std::string, std::string> &relationships,
-    std::unordered_set<std::string> &ambiguousSamplers)
+collectSampleRelationships(const Expr *expression, std::unordered_map<std::string, std::string> &relationships)
 {
     if (!expression) {
         return;
     }
-    if (expression->kind == kExprCall && (expression->name == "Sample" || expression->name == "SampleLevel") &&
-        expression->kids.size() >= 3 &&
-        expression->kids[0]->kind == kExprMember && expression->kids[0]->kids.size() == 1 &&
-        expression->kids[0]->kids[0]->kind == kExprIdent && expression->kids[1]->kind == kExprIdent) {
-        const std::string &samplerName = expression->kids[1]->name;
-        const std::string &textureName = expression->kids[0]->kids[0]->name;
-        std::unordered_map<std::string, std::string>::const_iterator it = relationships.find(samplerName);
-        if (it != relationships.end() && it->second != textureName) {
-            ambiguousSamplers.insert(samplerName);
-        }
-        else {
-            relationships[samplerName] = textureName;
+    if (expression->kind == kExprCall && expression->name == "Sample" && expression->kids.size() >= 3) {
+        const Expr *method = expression->kids[0].get();
+        const Expr *receiver = method && method->kind == kExprMember && method->kids.size() == 1 ? method->kids[0].get() : nullptr;
+        const Expr *sampler = expression->kids[1].get();
+        if (receiver && receiver->kind == kExprIdent && sampler && sampler->kind == kExprIdent) {
+            relationships[sampler->name] = receiver->name;
         }
     }
     for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {
-        collectSampleRelationships(it->get(), relationships, ambiguousSamplers);
+        collectSampleRelationships(it->get(), relationships);
     }
 }
 
 void
-collectSampleRelationships(const Stmt *statement, std::unordered_map<std::string, std::string> &relationships,
-    std::unordered_set<std::string> &ambiguousSamplers)
+collectSampleRelationships(const Stmt *statement, std::unordered_map<std::string, std::string> &relationships)
 {
     if (!statement) {
         return;
     }
-    collectSampleRelationships(statement->expr.get(), relationships, ambiguousSamplers);
-    collectSampleRelationships(statement->expr2.get(), relationships, ambiguousSamplers);
-    collectSampleRelationships(statement->expr3.get(), relationships, ambiguousSamplers);
-    collectSampleRelationships(statement->thenStmt.get(), relationships, ambiguousSamplers);
-    collectSampleRelationships(statement->elseStmt.get(), relationships, ambiguousSamplers);
+    collectSampleRelationships(statement->expr.get(), relationships);
+    collectSampleRelationships(statement->expr2.get(), relationships);
+    collectSampleRelationships(statement->expr3.get(), relationships);
+    collectSampleRelationships(statement->thenStmt.get(), relationships);
+    collectSampleRelationships(statement->elseStmt.get(), relationships);
     for (std::vector<std::unique_ptr<Stmt> >::const_iterator it = statement->kids.begin(); it != statement->kids.end(); ++it) {
-        collectSampleRelationships(it->get(), relationships, ambiguousSamplers);
-    }
-}
-
-void
-collectCalledFunctions(const Expr *expression, std::unordered_set<std::string> &names)
-{
-    if (!expression) {
-        return;
-    }
-    if (expression->kind == kExprCall && !expression->name.empty() && expression->name != "Sample" &&
-        expression->name != "SampleLevel") {
-        names.insert(expression->name);
-    }
-    for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {
-        collectCalledFunctions(it->get(), names);
-    }
-}
-
-void
-collectCalledFunctions(const Stmt *statement, std::unordered_set<std::string> &names)
-{
-    if (!statement) {
-        return;
-    }
-    collectCalledFunctions(statement->expr.get(), names);
-    collectCalledFunctions(statement->expr2.get(), names);
-    collectCalledFunctions(statement->expr3.get(), names);
-    collectCalledFunctions(statement->thenStmt.get(), names);
-    collectCalledFunctions(statement->elseStmt.get(), names);
-    for (std::vector<std::unique_ptr<Stmt> >::const_iterator it = statement->kids.begin(); it != statement->kids.end(); ++it) {
-        collectCalledFunctions(it->get(), names);
+        collectSampleRelationships(it->get(), relationships);
     }
 }
 
@@ -551,39 +511,8 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
         }
     }
     std::unordered_map<std::string, std::string> sampleRelationships;
-    std::unordered_set<std::string> ambiguousSamplers;
-    std::vector<std::string> pendingFunctions;
-    for (std::vector<Technique>::const_iterator technique = unit.techniques.begin(); technique != unit.techniques.end(); ++technique) {
-        for (std::vector<Pass>::const_iterator pass = technique->passes.begin(); pass != technique->passes.end(); ++pass) {
-            if (!pass->vsEntry.empty()) {
-                pendingFunctions.push_back(pass->vsEntry);
-            }
-            if (!pass->psEntry.empty()) {
-                pendingFunctions.push_back(pass->psEntry);
-            }
-        }
-    }
-    std::unordered_set<std::string> visitedFunctions;
-    while (!pendingFunctions.empty()) {
-        const std::string name = pendingFunctions.back();
-        pendingFunctions.pop_back();
-        if (!visitedFunctions.insert(name).second) {
-            continue;
-        }
-        const Function *function = findFunction(unit, name);
-        if (!function) {
-            continue;
-        }
-        collectSampleRelationships(function->body.get(), sampleRelationships, ambiguousSamplers);
-        std::unordered_set<std::string> calledFunctions;
-        collectCalledFunctions(function->body.get(), calledFunctions);
-        pendingFunctions.insert(pendingFunctions.end(), calledFunctions.begin(), calledFunctions.end());
-    }
-    if (!ambiguousSamplers.empty()) {
-        const std::string &name = *ambiguousSamplers.begin();
-        diagnostics.add(kDiagnosticEffect, kDiagnosticError, "FX9T1006", SourceLocation(), name,
-            "sampler is used with multiple textures: " + name);
-        return false;
+    for (std::vector<Function>::const_iterator function = unit.functions.begin(); function != unit.functions.end(); ++function) {
+        collectSampleRelationships(function->body.get(), sampleRelationships);
     }
     for (std::vector<EffectBindingIR>::iterator binding = effect.bindings.begin(); binding != effect.bindings.end(); ++binding) {
         if (binding->registerSet == kEffectRegisterSampler && binding->textureName.empty()) {
