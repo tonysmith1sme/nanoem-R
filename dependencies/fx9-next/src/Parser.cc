@@ -62,6 +62,20 @@ Parser::parseType(Type &type)
         }
     }
     m_lexer.next();
+    if ((type.kind == kTypeTexture || type.kind == kTypeSampler) && m_lexer.accept("<")) {
+        int depth = 1;
+        while (depth > 0 && m_lexer.peek().kind != kTokEof) {
+            if (m_lexer.accept("<")) {
+                depth++;
+            }
+            else if (m_lexer.accept(">")) {
+                depth--;
+            }
+            else {
+                m_lexer.next();
+            }
+        }
+    }
     return true;
 }
 
