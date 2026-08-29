@@ -250,6 +250,30 @@ TEST_CASE("fx9next binds global uniform arrays")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next binds integer and boolean constants")
+{
+    const char *src =
+        "cbuffer ScalarConstants : register(b0) { int mode; bool enabled; };\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main() : COLOR0 { if (enabled && mode > 1) { return float4(1, 0, 0, 1); } return float4(0, 0, 0, 1); }\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "scalar-constants.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    Fx9__Effect__Shader *shader = effect->techniques[0]->passes[0]->pixel_shader;
+    REQUIRE(shader->n_uniforms == 2);
+    REQUIRE(shader->uniforms[0]->index == 0);
+    REQUIRE(shader->uniforms[1]->index == 1);
+    REQUIRE(shader->msl != nullptr);
+    REQUIRE(std::strstr(shader->msl, "ps_uniforms_vec4") != nullptr);
+    REQUIRE(compileMetalSource(shader->msl, "integer and boolean constant shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next compiles pass-through effect to protobuf")
 {
     const char *src =
