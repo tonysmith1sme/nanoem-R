@@ -69,7 +69,8 @@ collectSampleRelationships(const Expr *expression, std::unordered_map<std::strin
         return;
     }
     if (expression->kind == kExprCall &&
-        (expression->name == "Sample" || expression->name == "SampleLevel") && expression->kids.size() >= 3) {
+        (expression->name == "Sample" || expression->name == "SampleLevel" || expression->name == "SampleBias" ||
+            expression->name == "SampleGrad") && expression->kids.size() >= 3) {
         const Expr *method = expression->kids[0].get();
         const Expr *receiver = method && method->kind == kExprMember && method->kids.size() == 1 ? method->kids[0].get() : nullptr;
         const Expr *sampler = expression->kids[1].get();

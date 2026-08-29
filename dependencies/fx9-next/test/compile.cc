@@ -292,6 +292,27 @@ TEST_CASE("fx9next combines D3D11 constants and sampled resources")
     fx9__effect__effect__free_unpacked(effect, nullptr);
 }
 
+TEST_CASE("fx9next emits D3D11 sample bias and gradients")
+{
+    const char *src =
+        "Texture2D diffuseTexture : register(t0); SamplerState diffuseSampler : register(s0);\n"
+        "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+        "  return diffuseTexture.SampleBias(diffuseSampler, uv, 0.5) + diffuseTexture.SampleGrad(diffuseSampler, uv, float2(0.01, 0), float2(0, 0.01));\n"
+        "}\n"
+        "technique t { pass p { VertexShader = compile vs_5_0 vs_main(); PixelShader = compile ps_5_0 ps_main(); } }\n";
+    Compiler compiler;
+    compiler.setTargetLanguage(Compiler::kLanguageTypeMSL);
+    Compiler::EffectProduct product;
+    REQUIRE(compiler.compile(std::string(src), "d3d11-sample-operands.fx", product));
+    Fx9__Effect__Effect *effect =
+        fx9__effect__effect__unpack(nullptr, product.message.size(), product.message.data());
+    REQUIRE(effect != nullptr);
+    REQUIRE(effect->techniques[0]->passes[0]->pixel_shader->msl != nullptr);
+    REQUIRE(compileMetalSource(effect->techniques[0]->passes[0]->pixel_shader->msl, "D3D11 sample operand shader"));
+    fx9__effect__effect__free_unpacked(effect, nullptr);
+}
+
 TEST_CASE("fx9next binds global uniform arrays")
 {
     const char *src =

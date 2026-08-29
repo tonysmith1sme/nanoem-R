@@ -49,6 +49,27 @@ containsSPIRVOpcode(const std::vector<uint32_t> &words, uint32_t opcode)
     return false;
 }
 
+bool
+containsSPIRVImageOperand(const std::vector<uint32_t> &words, uint32_t operand)
+{
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t count = words[i] >> 16;
+        const uint32_t opcode = words[i] & 0xffffu;
+        if (count == 0 || i + count > words.size()) {
+            return false;
+        }
+        if ((opcode == 87 || opcode == 88) && count >= 6) {
+            for (size_t j = i + 5; j < i + count; j++) {
+                if (words[j] == operand) {
+                    return true;
+                }
+            }
+        }
+        i += count;
+    }
+    return false;
+}
+
 TEST_CASE("fx9next diagnostics preserve stable source context")
 {
     DiagnosticSink sink;
@@ -367,6 +388,27 @@ TEST_CASE("fx9next lowers sampler1D coordinates to the runtime 2D ABI")
     REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
     REQUIRE(containsSPIRVImageDimension(words, 1));
     REQUIRE(validateSPIRV(words, error));
+}
+
+TEST_CASE("fx9next preserves sample bias and gradient operands in SPIR-V")
+{
+    const char *source =
+        "texture2D diffuseTexture; sampler2D diffuseSampler = sampler_state { Texture = <diffuseTexture>; };\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2Dbias(diffuseSampler, float4(uv, 0, 0.5)); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "spv-sample-bias.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(containsSPIRVOpcode(words, 87));
+    REQUIRE(containsSPIRVImageOperand(words, 1));
 }
 
 TEST_CASE("fx9next resolves typed shader control flow into IR")
