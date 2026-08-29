@@ -105,6 +105,37 @@ collectSampleRelationships(const Stmt *statement, std::unordered_map<std::string
     }
 }
 
+void
+collectCalledFunctions(const Expr *expression, std::unordered_set<std::string> &names)
+{
+    if (!expression) {
+        return;
+    }
+    if (expression->kind == kExprCall && !expression->name.empty() && expression->name != "Sample" &&
+        expression->name != "SampleLevel") {
+        names.insert(expression->name);
+    }
+    for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {
+        collectCalledFunctions(it->get(), names);
+    }
+}
+
+void
+collectCalledFunctions(const Stmt *statement, std::unordered_set<std::string> &names)
+{
+    if (!statement) {
+        return;
+    }
+    collectCalledFunctions(statement->expr.get(), names);
+    collectCalledFunctions(statement->expr2.get(), names);
+    collectCalledFunctions(statement->expr3.get(), names);
+    collectCalledFunctions(statement->thenStmt.get(), names);
+    collectCalledFunctions(statement->elseStmt.get(), names);
+    for (std::vector<std::unique_ptr<Stmt> >::const_iterator it = statement->kids.begin(); it != statement->kids.end(); ++it) {
+        collectCalledFunctions(it->get(), names);
+    }
+}
+
 Type
 arrayElementType(const Type &type)
 {
@@ -522,8 +553,32 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
     }
     std::unordered_map<std::string, std::string> sampleRelationships;
     std::unordered_set<std::string> ambiguousSamplers;
-    for (std::vector<Function>::const_iterator function = unit.functions.begin(); function != unit.functions.end(); ++function) {
+    std::vector<std::string> pendingFunctions;
+    for (std::vector<Technique>::const_iterator technique = unit.techniques.begin(); technique != unit.techniques.end(); ++technique) {
+        for (std::vector<Pass>::const_iterator pass = technique->passes.begin(); pass != technique->passes.end(); ++pass) {
+            if (!pass->vsEntry.empty()) {
+                pendingFunctions.push_back(pass->vsEntry);
+            }
+            if (!pass->psEntry.empty()) {
+                pendingFunctions.push_back(pass->psEntry);
+            }
+        }
+    }
+    std::unordered_set<std::string> visitedFunctions;
+    while (!pendingFunctions.empty()) {
+        const std::string name = pendingFunctions.back();
+        pendingFunctions.pop_back();
+        if (!visitedFunctions.insert(name).second) {
+            continue;
+        }
+        const Function *function = findFunction(unit, name);
+        if (!function) {
+            continue;
+        }
         collectSampleRelationships(function->body.get(), sampleRelationships, ambiguousSamplers);
+        std::unordered_set<std::string> calledFunctions;
+        collectCalledFunctions(function->body.get(), calledFunctions);
+        pendingFunctions.insert(pendingFunctions.end(), calledFunctions.begin(), calledFunctions.end());
     }
     if (!ambiguousSamplers.empty()) {
         const std::string &name = *ambiguousSamplers.begin();

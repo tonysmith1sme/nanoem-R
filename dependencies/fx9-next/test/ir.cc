@@ -257,6 +257,25 @@ TEST_CASE("fx9next rejects ambiguous D3D11 sampler texture relationships")
     REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1006");
 }
 
+TEST_CASE("fx9next ignores unreachable D3D11 sampler relationships")
+{
+    const char *source =
+        "Texture2D firstTexture; Texture2D secondTexture; SamplerState sharedSampler;\n"
+        "float4 unused(float2 uv) { return secondTexture.Sample(sharedSampler, uv); }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return firstTexture.Sample(sharedSampler, uv); }\n"
+        "technique t { pass p { PixelShader = compile ps_4_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "unreachable-sample.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(effect.bindings[2].textureName == "firstTexture");
+}
+
 TEST_CASE("fx9next preserves sampler dimensions and explicit LOD in SPIR-V")
 {
     const char *source =
