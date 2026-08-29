@@ -184,6 +184,70 @@ TEST_CASE("fx9next rejects unresolved sampler texture relationships")
     REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1005");
 }
 
+TEST_CASE("fx9next derives D3D11 sampler texture relationships")
+{
+    const char *source =
+        "Texture2D diffuseTexture : register(t3);\n"
+        "SamplerState diffuseSampler : register(s2);\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return diffuseTexture.Sample(diffuseSampler, uv); }\n"
+        "technique t { pass p { PixelShader = compile ps_4_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "d3d11-sample.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE_FALSE(diagnostics.hasErrors());
+    REQUIRE(effect.bindings.size() == 2);
+    REQUIRE(effect.bindings[1].name == "diffuseSampler");
+    REQUIRE(effect.bindings[1].textureName == "diffuseTexture");
+}
+
+TEST_CASE("fx9next rejects ambiguous D3D11 sampler texture relationships")
+{
+    const char *source =
+        "Texture2D firstTexture; Texture2D secondTexture; SamplerState sharedSampler;\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+        "  return firstTexture.Sample(sharedSampler, uv) + secondTexture.Sample(sharedSampler, uv);\n"
+        "}\n"
+        "technique t { pass p { PixelShader = compile ps_4_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "ambiguous-sample.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE(diagnostics.hasErrors());
+    REQUIRE(diagnostics.diagnostics().size() == 1);
+    REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1006");
+}
+
+TEST_CASE("fx9next ignores unreachable D3D11 sampler relationships")
+{
+    const char *source =
+        "Texture2D firstTexture; Texture2D secondTexture; SamplerState sharedSampler;\n"
+        "float4 unused(float2 uv) { return secondTexture.Sample(sharedSampler, uv); }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return firstTexture.Sample(sharedSampler, uv); }\n"
+        "technique t { pass p { PixelShader = compile ps_4_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "unreachable-sample.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    REQUIRE_FALSE(diagnostics.hasErrors());
+    REQUIRE(effect.bindings[2].textureName == "firstTexture");
+}
+
 TEST_CASE("fx9next resolves typed shader control flow into IR")
 {
     const char *source =

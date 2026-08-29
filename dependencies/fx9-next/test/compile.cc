@@ -137,7 +137,7 @@ TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
         "Texture2D diffuseTexture : register(t3);\n"
         "SamplerState diffuseSampler : register(s2);\n"
         "float4 vs_main(float4 position : POSITION) : POSITION { return position; }\n"
-        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(diffuseSampler, uv); }\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return diffuseTexture.Sample(diffuseSampler, uv); }\n"
         "technique t { pass p { VertexShader = compile vs_4_0 vs_main(); "
         "PixelShader = compile ps_4_0 ps_main(); } }\n";
     Compiler compiler;
@@ -150,6 +150,7 @@ TEST_CASE("fx9next accepts D3D11 texture and sampler declarations")
     Fx9__Effect__Pass *pass = effect->techniques[0]->passes[0];
     REQUIRE(pass->pixel_shader->n_samplers == 1);
     REQUIRE(pass->pixel_shader->samplers[0]->index == 2);
+    REQUIRE(std::string(pass->pixel_shader->samplers[0]->texture_name) == "diffuseTexture");
     REQUIRE(pass->pixel_shader->msl != nullptr);
     REQUIRE(compileMetalSource(pass->pixel_shader->msl, "D3D11 sampler shader"));
     fx9__effect__effect__free_unpacked(effect, nullptr);
