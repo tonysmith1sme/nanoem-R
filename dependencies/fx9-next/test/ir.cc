@@ -16,6 +16,39 @@
 
 using namespace fx9next;
 
+bool
+containsSPIRVImageDimension(const std::vector<uint32_t> &words, uint32_t dimension)
+{
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t count = words[i] >> 16;
+        const uint32_t opcode = words[i] & 0xffffu;
+        if (count == 0 || i + count > words.size()) {
+            return false;
+        }
+        if (opcode == 25 && count >= 5 && words[i + 3] == dimension) {
+            return true;
+        }
+        i += count;
+    }
+    return false;
+}
+
+bool
+containsSPIRVOpcode(const std::vector<uint32_t> &words, uint32_t opcode)
+{
+    for (size_t i = 5; i < words.size();) {
+        const uint32_t count = words[i] >> 16;
+        if (count == 0 || i + count > words.size()) {
+            return false;
+        }
+        if ((words[i] & 0xffffu) == opcode) {
+            return true;
+        }
+        i += count;
+    }
+    return false;
+}
+
 TEST_CASE("fx9next diagnostics preserve stable source context")
 {
     DiagnosticSink sink;
@@ -222,6 +255,39 @@ TEST_CASE("fx9next rejects ambiguous D3D11 sampler texture relationships")
     REQUIRE_FALSE(lowering.lower(unit, shaders, effect, diagnostics));
     REQUIRE(diagnostics.hasErrors());
     REQUIRE(diagnostics.diagnostics()[0].code == "FX9T1006");
+}
+
+TEST_CASE("fx9next preserves sampler dimensions and explicit LOD in SPIR-V")
+{
+    const char *source =
+        "textureCUBE cubeTexture; samplerCUBE cubeSampler = sampler_state { Texture = <cubeTexture>; };\n"
+        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 { return texCUBE(cubeSampler, direction); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "spv-dimension.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(containsSPIRVImageDimension(words, 3));
+
+    const char *lodSource =
+        "texture2D diffuseTexture; sampler2D diffuseSampler = sampler_state { Texture = <diffuseTexture>; };\n"
+        "float4 ps_main(float2 uv : TEXCOORD0) : COLOR0 { return tex2Dlod(diffuseSampler, float4(uv, 0, 2)); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    unit = TranslationUnit();
+    REQUIRE(parser.parse(lodSource, "spv-lod.fx", unit, error));
+    shaders.clear();
+    effect = EffectModuleIR();
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    words.clear();
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(containsSPIRVOpcode(words, 88));
 }
 
 TEST_CASE("fx9next resolves typed shader control flow into IR")

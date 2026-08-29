@@ -1120,7 +1120,24 @@ Emitter::loadUniform(const std::string &name)
         b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
         return note(result, resultType);
     }
-    return narrowUniformValue(type, value);
+    if (type.kind == kTypeVector && type.rows < 4) {
+        std::vector<uint32_t> components;
+        for (int i = 0; i < type.rows; i++) {
+            components.push_back(extractComp(value, static_cast<uint32_t>(i)));
+        }
+        const uint32_t resultType = b.typeOf(type);
+        const uint32_t result = b.nextId();
+        std::vector<uint32_t> ops;
+        ops.push_back(resultType);
+        ops.push_back(result);
+        ops.insert(ops.end(), components.begin(), components.end());
+        b.emit(b.code, kOpCompositeConstruct, ops.data(), static_cast<uint16_t>(ops.size()));
+        return note(result, resultType);
+    }
+    if (type.kind == kTypeFloat || type.kind == kTypeInt || type.kind == kTypeUInt || type.kind == kTypeBool) {
+        return extractComp(value, 0);
+    }
+    return value;
 }
 
 uint32_t
@@ -1128,7 +1145,7 @@ Emitter::loadUniformElement(const std::string &name, uint32_t index)
 {
     const Type &arrayType = uniformTypes[name];
     Type elementType = arrayType;
-    elementType.kind = arrayType.rows > 1 ? kTypeVector : arrayType.scalar;
+    elementType.kind = arrayType.rows > 1 ? (arrayType.rows == 4 ? kTypeVector : kTypeVector) : arrayType.scalar;
     elementType.arraySize = 0;
     const uint32_t slot = b.nextId();
     b.emit4(b.code, kOpIAdd, b.typeInt(), slot, b.constI32(static_cast<int>(uniformRegisters[name])), index);
@@ -1161,18 +1178,6 @@ Emitter::narrowUniformValue(const Type &type, uint32_t value)
     }
     if (type.kind == kTypeFloat) {
         return extractComp(value, 0);
-    }
-    if (type.kind == kTypeInt || type.kind == kTypeUInt) {
-        const uint32_t component = extractComp(value, 0);
-        const uint32_t result = b.nextId();
-        b.emit3(b.code, kOpConvertFToS, b.typeInt(), result, component);
-        return note(result, b.typeInt());
-    }
-    if (type.kind == kTypeBool) {
-        const uint32_t component = extractComp(value, 0);
-        const uint32_t result = b.nextId();
-        b.emit4(b.code, kOpFOrdNotEqual, b.typeBool(), result, component, b.constF32(0));
-        return note(result, b.typeBool());
     }
     return value;
 }
@@ -2014,13 +2019,14 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
             break;
         }
     }
-    uint32_t uniformCapacity = 0;
+    const uint32_t uniformCapacity = 128;
+    bool hasUniforms = false;
     for (size_t i = 0; i < unit.variables.size(); i++) {
         const Variable &gv = unit.variables[i];
-        const bool floatArray = gv.type.kind == kTypeArray && gv.type.scalar == kTypeFloat && gv.type.columns == 1;
         if (gv.type.isSampler() || gv.type.kind == kTypeTexture || gv.type.kind == kTypeStruct ||
             gv.type.kind == kTypeString || gv.type.kind == kTypeVoid ||
-            (gv.type.kind == kTypeArray && !floatArray)) {
+            (gv.type.kind == kTypeArray && gv.type.scalar != kTypeFloat) ||
+            gv.type.kind == kTypeInt || gv.type.kind == kTypeUInt || gv.type.kind == kTypeBool) {
             continue;
         }
         const EffectBindingIR *binding = findEffectBinding(e.effect, gv.name, kEffectRegisterFloat4);
@@ -2029,10 +2035,9 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         }
         e.uniformRegisters[gv.name] = static_cast<uint32_t>(binding->registerIndex);
         e.uniformTypes[gv.name] = gv.type;
-        uniformCapacity = std::max(uniformCapacity,
-            static_cast<uint32_t>(binding->registerIndex + binding->registerCount));
+        hasUniforms = true;
     }
-    if (uniformCapacity > 0) {
+    if (hasUniforms) {
         const uint32_t vec4 = e.b.typeVec(4);
         const uint32_t length = e.b.constU32(uniformCapacity);
         const uint32_t array = e.b.nextId();
