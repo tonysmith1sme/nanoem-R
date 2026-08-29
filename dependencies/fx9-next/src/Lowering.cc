@@ -9,6 +9,7 @@
 #include <sstream>
 #include <cctype>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace fx9next {
 namespace {
@@ -61,7 +62,8 @@ lowerStatementKind(StmtKind kind)
 typedef std::unordered_map<std::string, Type> TypeMap;
 
 void
-collectSampleRelationships(const Expr *expression, std::unordered_map<std::string, std::string> &relationships)
+collectSampleRelationships(const Expr *expression, std::unordered_map<std::string, std::string> &relationships,
+    std::unordered_set<std::string> &ambiguous)
 {
     if (!expression) {
         return;
@@ -71,27 +73,34 @@ collectSampleRelationships(const Expr *expression, std::unordered_map<std::strin
         const Expr *receiver = method && method->kind == kExprMember && method->kids.size() == 1 ? method->kids[0].get() : nullptr;
         const Expr *sampler = expression->kids[1].get();
         if (receiver && receiver->kind == kExprIdent && sampler && sampler->kind == kExprIdent) {
-            relationships[sampler->name] = receiver->name;
+            std::unordered_map<std::string, std::string>::const_iterator it = relationships.find(sampler->name);
+            if (it != relationships.end() && it->second != receiver->name) {
+                ambiguous.insert(sampler->name);
+            }
+            else {
+                relationships[sampler->name] = receiver->name;
+            }
         }
     }
     for (std::vector<std::unique_ptr<Expr> >::const_iterator it = expression->kids.begin(); it != expression->kids.end(); ++it) {
-        collectSampleRelationships(it->get(), relationships);
+        collectSampleRelationships(it->get(), relationships, ambiguous);
     }
 }
 
 void
-collectSampleRelationships(const Stmt *statement, std::unordered_map<std::string, std::string> &relationships)
+collectSampleRelationships(const Stmt *statement, std::unordered_map<std::string, std::string> &relationships,
+    std::unordered_set<std::string> &ambiguous)
 {
     if (!statement) {
         return;
     }
-    collectSampleRelationships(statement->expr.get(), relationships);
-    collectSampleRelationships(statement->expr2.get(), relationships);
-    collectSampleRelationships(statement->expr3.get(), relationships);
-    collectSampleRelationships(statement->thenStmt.get(), relationships);
-    collectSampleRelationships(statement->elseStmt.get(), relationships);
+    collectSampleRelationships(statement->expr.get(), relationships, ambiguous);
+    collectSampleRelationships(statement->expr2.get(), relationships, ambiguous);
+    collectSampleRelationships(statement->expr3.get(), relationships, ambiguous);
+    collectSampleRelationships(statement->thenStmt.get(), relationships, ambiguous);
+    collectSampleRelationships(statement->elseStmt.get(), relationships, ambiguous);
     for (std::vector<std::unique_ptr<Stmt> >::const_iterator it = statement->kids.begin(); it != statement->kids.end(); ++it) {
-        collectSampleRelationships(it->get(), relationships);
+        collectSampleRelationships(it->get(), relationships, ambiguous);
     }
 }
 
@@ -511,8 +520,15 @@ Lowering::lower(const TranslationUnit &unit, std::vector<ShaderModuleIR> &shader
         }
     }
     std::unordered_map<std::string, std::string> sampleRelationships;
+    std::unordered_set<std::string> ambiguousSamplers;
     for (std::vector<Function>::const_iterator function = unit.functions.begin(); function != unit.functions.end(); ++function) {
-        collectSampleRelationships(function->body.get(), sampleRelationships);
+        collectSampleRelationships(function->body.get(), sampleRelationships, ambiguousSamplers);
+    }
+    if (!ambiguousSamplers.empty()) {
+        const std::string &name = *ambiguousSamplers.begin();
+        diagnostics.add(kDiagnosticEffect, kDiagnosticError, "FX9T1006", SourceLocation(), name,
+            "sampler is used with multiple textures: " + name);
+        return false;
     }
     for (std::vector<EffectBindingIR>::iterator binding = effect.bindings.begin(); binding != effect.bindings.end(); ++binding) {
         if (binding->registerSet == kEffectRegisterSampler && binding->textureName.empty()) {
