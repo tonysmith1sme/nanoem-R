@@ -348,6 +348,27 @@ TEST_CASE("fx9next emits inferred D3D11 texture dimensions in SPIR-V")
     REQUIRE(containsSPIRVImageDimension(words, 2));
 }
 
+TEST_CASE("fx9next lowers sampler1D coordinates to the runtime 2D ABI")
+{
+    const char *source =
+        "texture1D lookupTexture; sampler1D lookupSampler = sampler_state { Texture = <lookupTexture>; };\n"
+        "float4 ps_main(float u : TEXCOORD0) : COLOR0 { return tex2D(lookupSampler, u); }\n"
+        "technique t { pass p { PixelShader = compile ps_3_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "spv-sampler1d.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(containsSPIRVImageDimension(words, 1));
+    REQUIRE(validateSPIRV(words, error));
+}
+
 TEST_CASE("fx9next resolves typed shader control flow into IR")
 {
     const char *source =

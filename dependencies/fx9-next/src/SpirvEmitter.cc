@@ -723,7 +723,15 @@ Emitter::sampleTexture(const std::string &sampName, uint32_t uv, uint32_t lod)
     b.emit3(b.code, kOpLoad, sampledType, loaded, sit->second);
     uint32_t coord = uv;
     const SamplerDim dim = samplerDims[sampName];
-    if (dim == kSampler2D && isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
+    if (dim == kSampler1D) {
+        if (isVec(uv)) {
+            coord = makeVec2(extractComp(uv, 0), b.constF32(0));
+        }
+        else {
+            coord = makeVec2(uv, b.constF32(0));
+        }
+    }
+    else if (dim == kSampler2D && isVec(uv) && valueTypes[uv] == b.typeVec(4)) {
         coord = makeVec2(extractComp(uv, 0), extractComp(uv, 1));
     }
     else if (dim == kSampler2D && isVec(uv) && valueTypes[uv] == b.typeVec(3)) {

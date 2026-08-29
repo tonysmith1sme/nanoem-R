@@ -30,7 +30,7 @@ const char *kKeywords[] = { "technique", "pass", "struct", "return", "if", "else
     "break", "continue", "true", "false", "compile", "sampler_state", "SamplerState", "register", "typedef", "cbuffer",
     "const", "static", "uniform", "shared", "row_major", "column_major", "in", "out", "inout", "inline", "precise",
     "volatile", "void", "string",
-    "texture", "texture2D", "texture3D", "textureCUBE", "Texture2D", "Texture3D", "TextureCube", "sampler",
+    "texture", "texture1D", "texture2D", "texture3D", "textureCUBE", "Texture1D", "Texture2D", "Texture3D", "TextureCube", "sampler",
     "SamplerState",
     "sampler1D", "sampler2D", "sampler3D", "samplerCUBE", "samplerCube", "samplerVOLUME", nullptr };
 

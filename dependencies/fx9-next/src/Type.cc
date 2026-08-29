@@ -158,6 +158,10 @@ Type::parseBuiltin(const std::string &name, Type &out)
         out = samplerType(kSamplerCube);
         return true;
     }
+    if (name == "texture1D" || name == "Texture1D") {
+        out = textureType(kSampler1D);
+        return true;
+    }
     if (name == "texture" || name == "texture2D" || name == "Texture2D") {
         out = textureType(kSampler2D);
         return true;
