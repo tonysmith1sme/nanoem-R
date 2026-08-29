@@ -328,6 +328,26 @@ TEST_CASE("fx9next derives D3D11 SampleLevel sampler texture relationships")
     REQUIRE(effect.bindings[1].textureName == "diffuseTexture");
 }
 
+TEST_CASE("fx9next emits inferred D3D11 texture dimensions in SPIR-V")
+{
+    const char *source =
+        "Texture3D volumeTexture : register(t0); SamplerState volumeSampler : register(s0);\n"
+        "float4 ps_main(float3 direction : TEXCOORD0) : COLOR0 { return volumeTexture.Sample(volumeSampler, direction); }\n"
+        "technique t { pass p { PixelShader = compile ps_4_0 ps_main(); } }\n";
+    TranslationUnit unit;
+    std::string error;
+    Parser parser;
+    REQUIRE(parser.parse(source, "spv-inferred-dimension.fx", unit, error));
+    Lowering lowering;
+    std::vector<ShaderModuleIR> shaders;
+    EffectModuleIR effect;
+    DiagnosticSink diagnostics;
+    REQUIRE(lowering.lower(unit, shaders, effect, diagnostics));
+    std::vector<uint32_t> words;
+    REQUIRE(emitShaderSPIRV(effect, shaders[0], words, error));
+    REQUIRE(containsSPIRVImageDimension(words, 2));
+}
+
 TEST_CASE("fx9next resolves typed shader control flow into IR")
 {
     const char *source =

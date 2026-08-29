@@ -2034,7 +2034,7 @@ emitFunctionSPIRVWithEffect(const TranslationUnit &unit, const EffectModuleIR *e
         e.b.decorate(var, kDecorationBinding, static_cast<uint32_t>(binding), true);
         e.samplers[unit.variables[i].name] = var;
         e.samplerTypes[unit.variables[i].name] = sampledType;
-        e.samplerDims[unit.variables[i].name] = unit.variables[i].type.samplerDim;
+        e.samplerDims[unit.variables[i].name] = samplerDim;
         samplerIndex++;
         if (samplerIndex > 32) {
             break;
